@@ -19,8 +19,6 @@ jobs:
         include:
           - os: windows-latest
             name: windows-x64
-          - os: ubuntu-latest
-            name: linux-x64
           - os: macos-15-intel
             name: macos-x64
           - os: macos-15
@@ -61,9 +59,6 @@ jobs:
             Windows)
               mv "dist/NoesisPDFReaderLite.exe" "$BASE.exe"
               ;;
-            Linux)
-              mv "dist/NoesisPDFReaderLite" "$BASE"
-              ;;
             macOS)
               # .app is a directory bundle → wrap it in a .dmg
               hdiutil create -volname "NoesisPDFReaderLite" \
@@ -80,9 +75,92 @@ jobs:
           path: NoesisPDFReaderLite-${{ matrix.name }}*
           if-no-files-found: error
 
+  linux-appimage:
+    name: linux-x86_64-appimage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build with PyInstaller
+        shell: bash
+        run: |
+          pyinstaller \
+            --onefile \
+            --windowed \
+            --clean \
+            --noconfirm \
+            --name NoesisPDFReaderLite \
+            --collect-all pymupdf4llm \
+            main.py
+
+      - name: Package AppImage
+        shell: bash
+        run: |
+          set -e
+          APPDIR=AppDir
+          mkdir -p "$APPDIR/usr/bin"
+
+          # self-contained binary
+          cp "dist/NoesisPDFReaderLite" "$APPDIR/usr/bin/NoesisPDFReaderLite"
+          chmod +x "$APPDIR/usr/bin/NoesisPDFReaderLite"
+
+          # icon (256x256 PNG, generated with PyMuPDF)
+          python - <<'PY'
+          import pymupdf
+          pm = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 256, 256))
+          pm.clear_with(255)
+          pm.set_rect(pymupdf.IRect(0, 0, 256, 256), (74, 144, 217))
+          pm.save("AppDir/NoesisPDFReaderLite.png")
+          PY
+
+          # desktop entry
+          cat > "$APPDIR/NoesisPDFReaderLite.desktop" <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=Noesis PDF Reader Lite
+          Exec=NoesisPDFReaderLite
+          Icon=NoesisPDFReaderLite
+          Categories=Office;Viewer;
+          Comment=PDF reader with adaptive layout engine and translation
+          Terminal=false
+          EOF
+
+          # AppRun launcher
+          cat > "$APPDIR/AppRun" <<'EOF'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          exec "${HERE}/usr/bin/NoesisPDFReaderLite" "$@"
+          EOF
+          chmod +x "$APPDIR/AppRun"
+
+          # appimagetool (run without FUSE via --appimage-extract-and-run)
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool.AppImage
+          chmod +x appimagetool.AppImage
+          ./appimagetool.AppImage --appimage-extract-and-run \
+            "$APPDIR" "NoesisPDFReaderLite-x86_64.AppImage"
+          ls -la
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NoesisPDFReaderLite-linux-x86_64-appimage
+          path: NoesisPDFReaderLite-x86_64.AppImage
+          if-no-files-found: error
+
   release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: build
+    needs: [build, linux-appimage]
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts

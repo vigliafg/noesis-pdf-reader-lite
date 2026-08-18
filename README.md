@@ -63,9 +63,9 @@ Il workflow `.github/workflows/release.yml`:
 
 - si avvia manualmente dalla scheda **Actions → build-releases → Run workflow**;
 - oppure automaticamente al push di un tag `v*` (es. `git tag v1.0.0 && git push --tags`),
-  creando una **GitHub Release** con gli artefatti `NoesisPDFReaderLite-*.zip`.
+  creando una **GitHub Release** con gli artefatti.
 
-Gli artefatti sono: `.exe` su Windows, binario nudo su Linux, `.dmg` su macOS.
+Gli artefatti sono: `.exe` su Windows, **AppImage** su Linux, `.dmg` su macOS.
 Gli eseguibili macOS non sono firmati: al primo avvio fare click destro →
 **Apri** per aggirare Gatekeeper.
 
