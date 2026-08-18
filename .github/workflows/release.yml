@@ -48,6 +48,7 @@ jobs:
             --noconfirm \
             --name NoesisPDFReaderLite \
             --collect-all pymupdf4llm \
+            --collect-data pymupdf \
             main.py
 
       - name: Package artifact
@@ -102,6 +103,7 @@ jobs:
             --noconfirm \
             --name NoesisPDFReaderLite \
             --collect-all pymupdf4llm \
+            --collect-data pymupdf \
             main.py
 
       - name: Package AppImage
