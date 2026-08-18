@@ -1,8 +1,9 @@
-"""Tests for the PyMuPDF image extraction helpers (automatic + region).
+"""Tests for the PyMuPDF manual region image extraction.
 
-These exercise the pure module-level helpers ``_page_embedded_images`` and
-``_region_image`` against a small synthetic PDF page with an embedded PNG,
-so no GUI is required.
+These exercise the pure module-level helper ``_region_image`` (used by the
+🖱️ Seleziona zona feature) against a small synthetic PDF page, so no GUI is
+required. A regression test on the real ``porth2014.pdf`` (page 44 holds two
+JPEG2000 figures) is included but skipped when the file is absent.
 """
 
 import os
@@ -15,7 +16,7 @@ if _ROOT not in sys.path:
 
 import pymupdf  # noqa: E402
 
-from main import _page_embedded_images, _region_image  # noqa: E402
+from main import _region_image  # noqa: E402
 
 PNG_SIG = b"\x89PNG"
 
@@ -31,49 +32,63 @@ def _make_doc_with_image():
     return doc, page, png
 
 
-class PageEmbeddedImagesTests(unittest.TestCase):
-    def test_extracts_embedded_image_bytes(self):
-        doc, _page, _png = _make_doc_with_image()
-        try:
-            imgs = _page_embedded_images(doc, 0)
-            self.assertEqual(len(imgs), 1)
-            data, ext = imgs[0]
-            self.assertEqual(ext, "png")
-            self.assertTrue(data.startswith(PNG_SIG))
-        finally:
-            doc.close()
+def _make_doc_with_jpeg_image():
+    """Return (doc, page, jpg_bytes) with one embedded JPEG at (40,40,160,160)."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=200, height=200)
+    pix = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 40, 30))
+    pix.clear_with(120)
+    jpg = pix.tobytes("jpg")
+    page.insert_image(pymupdf.Rect(40, 40, 160, 160), stream=jpg)
+    return doc, page, jpg
 
-    def test_empty_page_returns_no_images(self):
-        doc = pymupdf.open()
-        doc.new_page(width=100, height=100)
-        try:
-            self.assertEqual(_page_embedded_images(doc, 0), [])
-        finally:
-            doc.close()
+
+def _make_doc_with_cmyk_jpeg_image():
+    """Return (doc, page, jpg_bytes) with one embedded CMYK JPEG at (50,50,150,150)."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=200, height=200)
+    pix = pymupdf.Pixmap(pymupdf.csCMYK, pymupdf.IRect(0, 0, 30, 20))
+    pix.clear_with(0)
+    jpg = pix.tobytes("jpg")  # JPEG keeps the CMYK colorspace
+    page.insert_image(pymupdf.Rect(50, 50, 150, 150), stream=jpg)
+    return doc, page, jpg
+
+
+# The real corpus PDFs live in the parent repo (noesis-pdf-reader/); fall back
+# to this project's own directory so the tests still run if copied here.
+_PARENT_REPO = os.path.normpath(os.path.join(_ROOT, "..", "noesis-pdf-reader"))
+
+
+def _corpus_pdf(name: str) -> str:
+    here = os.path.join(_ROOT, name)
+    there = os.path.join(_PARENT_REPO, name)
+    return here if os.path.exists(here) else there
+
+
+PORTH_PDF = _corpus_pdf("porth2014.pdf")
+ANDREW_PDF = _corpus_pdf("andrew2020.pdf")
 
 
 class RegionImageTests(unittest.TestCase):
     def test_full_cover_returns_embedded_bytes(self):
         doc, _page, _png = _make_doc_with_image()
         try:
-            embedded = _page_embedded_images(doc, 0)
-            self.assertEqual(len(embedded), 1)
             out = _region_image(doc, 0, (40, 40, 160, 160), 2.0)
             self.assertIsNotNone(out)
-            self.assertEqual(out, embedded[0])  # original raster, no re-render
+            data, ext = out
+            self.assertEqual(ext, "png")
+            self.assertTrue(data.startswith(PNG_SIG))
         finally:
             doc.close()
 
     def test_subregion_falls_back_to_render(self):
         doc, _page, _png = _make_doc_with_image()
         try:
-            embedded = _page_embedded_images(doc, 0)[0]
             out = _region_image(doc, 0, (60, 60, 80, 80), 2.0)
             self.assertIsNotNone(out)
             data, ext = out
             self.assertEqual(ext, "png")
             self.assertTrue(data.startswith(PNG_SIG))
-            self.assertNotEqual(data, embedded[0])  # re-rendered, not original
         finally:
             doc.close()
 
@@ -83,6 +98,78 @@ class RegionImageTests(unittest.TestCase):
             self.assertIsNone(_region_image(doc, 0, (10, 10, 5, 5), 2.0))
         finally:
             doc.close()
+
+
+class PngNormalizationTests(unittest.TestCase):
+    def test_region_embedded_image_is_normalized_to_png(self):
+        """The embedded path of ``_region_image`` must always return PNG."""
+        doc, _page, _jpg = _make_doc_with_jpeg_image()
+        try:
+            out = _region_image(doc, 0, (40, 40, 160, 160), 2.0)
+            self.assertIsNotNone(out)
+            data, ext = out
+            self.assertEqual(ext, "png")
+            self.assertTrue(data.startswith(PNG_SIG))
+        finally:
+            doc.close()
+
+    def test_cmyk_embedded_image_is_normalized_to_png(self):
+        """CMYK images must be converted to RGB (PNG cannot encode CMYK)."""
+        doc, _page, _jpg = _make_doc_with_cmyk_jpeg_image()
+        try:
+            out = _region_image(doc, 0, (50, 50, 150, 150), 2.0)
+            self.assertIsNotNone(out)
+            data, ext = out
+            self.assertEqual(ext, "png")
+            self.assertTrue(data.startswith(PNG_SIG))
+        finally:
+            doc.close()
+
+
+@unittest.skipUnless(os.path.exists(PORTH_PDF), "porth2014.pdf not present")
+class PorthJpxRegressionTests(unittest.TestCase):
+    """Page 44 holds two JPEG2000 (jpx) figures; manual capture must be PNG."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.doc = pymupdf.open(PORTH_PDF)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.doc.close()
+
+    def test_page_44_regions_are_png(self):
+        # 0-based page 43 = PDF page 44. The two figures are embedded as
+        # JPEG2000 (jpx), which Qt cannot display; _region_image must
+        # normalize them to PNG via the embedded path.
+        for clip in [(49, 59, 287, 356), (140, 543, 282, 726)]:
+            out = _region_image(self.doc, 43, clip, 3.0)
+            self.assertIsNotNone(out)
+            data, ext = out
+            self.assertEqual(ext, "png")
+            self.assertTrue(data.startswith(PNG_SIG))
+
+
+@unittest.skipUnless(os.path.exists(ANDREW_PDF), "andrew2020.pdf not present")
+class AndrewCmykRegressionTests(unittest.TestCase):
+    """Page 20 holds a CMYK JPEG2000 figure; manual capture must be PNG."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.doc = pymupdf.open(ANDREW_PDF)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.doc.close()
+
+    def test_page_20_region_is_png(self):
+        # 0-based page 19 = PDF page 20. The figure is embedded as CMYK
+        # JPEG2000 (jpx), which neither Qt nor PNG can represent directly.
+        out = _region_image(self.doc, 19, (59, 65, 310, 254), 3.0)
+        self.assertIsNotNone(out)
+        data, ext = out
+        self.assertEqual(ext, "png")
+        self.assertTrue(data.startswith(PNG_SIG))
 
 
 if __name__ == "__main__":

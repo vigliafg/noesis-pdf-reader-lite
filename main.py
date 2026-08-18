@@ -83,35 +83,36 @@ def clean_text(text: str) -> str:
     return re.sub(r"(\w)-\s*\n\s*(\w)", r"\1\2", text)
 
 
-def _page_embedded_images(doc, page_num: int) -> list[tuple[bytes, str]]:
-    """Return ``[(raw_bytes, ext), ...]`` for a page's embedded raster images."""
-    out: list[tuple[bytes, str]] = []
-    if not _has_pymupdf:
-        return out
+def _image_as_png(doc, xref: int) -> tuple[bytes, str] | None:
+    """Return an embedded image as ``(png_bytes, "png")`` — always Qt-decodable.
+
+    Raw embedded images may use formats Qt cannot display (JPEG2000/``jpx``,
+    JBIG2/``jb2``, …), which would render as a null pixmap in the gallery.
+    Rendering through a PyMuPDF ``Pixmap`` normalizes any source format to PNG.
+    CMYK images are converted to RGB first (PNG cannot encode CMYK). Falls back
+    to the raw bytes (best effort) if that fails.
+    """
     try:
-        page = doc[page_num]
+        pix = pymupdf.Pixmap(doc, xref)
+        if pix.n == 4 and not pix.alpha:
+            pix = pymupdf.Pixmap(pymupdf.csRGB, pix)  # CMYK → RGB
+        return pix.tobytes("png"), "png"
     except Exception:
-        return out
-    seen: set[int] = set()
-    for img in page.get_images(full=True):
-        xref = img[0]
-        if xref in seen:
-            continue
-        seen.add(xref)
-        try:
-            info = doc.extract_image(xref)
-        except Exception:
-            continue
-        data = info.get("image")
-        if data:
-            out.append((data, (info.get("ext") or "png").lower()))
-    return out
+        pass
+    try:
+        info = doc.extract_image(xref)
+    except Exception:
+        return None
+    data = info.get("image")
+    if not data:
+        return None
+    return data, (info.get("ext") or "png").lower()
 
 
 def _region_image(
     doc, page_num: int, clip, zoom: float
 ) -> tuple[bytes, str] | None:
-    """Extract the image under a PDF-points rect as ``(bytes, ext)``.
+    """Extract the image under a PDF-points rect as ``(png_bytes, "png")``.
 
     Prefers the original embedded raster when one fully covers the selection;
     otherwise renders the region (whole figure, also for composite/vector
@@ -133,10 +134,9 @@ def _region_image(
                     r.x0 >= rect.x0 and r.y0 >= rect.y0
                     and r.x1 <= rect.x1 and r.y1 <= rect.y1
                 ):
-                    info = doc.extract_image(xref)
-                    data = info.get("image")
-                    if data:
-                        return data, (info.get("ext") or "png").lower()
+                    converted = _image_as_png(doc, xref)
+                    if converted is not None:
+                        return converted
 
         # 2) fallback: render the selected region at high resolution
         pix = page.get_pixmap(clip=rect, matrix=pymupdf.Matrix(zoom, zoom))
@@ -1352,7 +1352,7 @@ class TranslatablePanel(QWidget):
         self._render_md: bool = True
         self._page_translation_cache: dict[int, str] = {}
         self._current_page: int = -1
-        self._images: list[str] = []  # file:// URIs of current page figures
+        self._images: list[str] = []  # file:// URIs of manually captured regions
         self._thread: TranslateThread | None = None
         self._generation: int = 0  # monotonically increasing; ignore stale results
 
@@ -1374,7 +1374,7 @@ class TranslatablePanel(QWidget):
         """Display text and prepare translation.
 
         If ``page_num`` is provided, the translation is cached per page.
-        ``images`` are the file:// URIs of the figures extracted for the page.
+        ``images`` are the file:// URIs of the regions captured for the page.
         """
         self._render_md = as_markdown
         self._original_text = text
@@ -1445,7 +1445,7 @@ class TranslatablePanel(QWidget):
         self._lbl_spinner.setText("")
 
     def show_images(self, images: list[str]):
-        """Set the current page's figures and activate the gallery tab."""
+        """Set the current page's captured regions and activate the gallery tab."""
         self._images = list(images or [])
         self._rebuild_images_panel()
         self._on_show_images()
@@ -1461,7 +1461,8 @@ class TranslatablePanel(QWidget):
 
         if not self._images:
             hint = QLabel(
-                "Nessuna immagine estratta per questa pagina."
+                "Nessuna zona catturata per questa pagina.\n\n"
+                "Usa 🖱️ Seleziona zona per ritagliare una figura dalla pagina."
             )
             hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
             hint.setWordWrap(True)
@@ -1715,8 +1716,7 @@ class MainWindow(QMainWindow):
         self._page_count: int = 0
         self._mupdf_doc = None       # pymupdf Document (render + layout + images)
         self._images_dir: Path | None = None  # dir for extracted figures
-        self._mupdf_image_uris: dict[int, list[str]] = {}  # page -> auto-extracted
-        self._current_images: list[str] = []  # figures for the current page
+        self._current_images: list[str] = []  # manual region captures (current page)
         self._render_scale: float = 3.0
         self._render_md: bool = True  # toggle Markdown rendering
 
@@ -1947,7 +1947,7 @@ class MainWindow(QMainWindow):
         """Extract text with PyMuPDF4LLM + adaptive engine (always on)."""
         t0 = time.perf_counter()
         text = self._extract_pymupdf4llm(page_num)
-        self._current_images = self._get_mupdf_images(page_num)
+        self._current_images = []  # manual region captures only (reset per page)
         text = self._apply_engine(text, page_num)
         elapsed = time.perf_counter() - t0
         return text, elapsed
@@ -1964,35 +1964,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             return f"(errore pymupdf4llm: {e})"
 
-    # ── image extraction (PyMuPDF) ──────────────────────────────────────
-
-    def _get_mupdf_images(self, page_num: int) -> list[str]:
-        """Auto-extract (cached) the embedded images of a page via PyMuPDF."""
-        if page_num in self._mupdf_image_uris:
-            return self._mupdf_image_uris[page_num]
-        uris = self._extract_embedded_images(page_num)
-        self._mupdf_image_uris[page_num] = uris
-        return uris
-
-    def _extract_embedded_images(self, page_num: int) -> list[str]:
-        """Extract the page's embedded raster images into the figures dir."""
-        doc = self._get_mupdf_doc()
-        if doc is None:
-            return []
-        images_dir = self._get_images_dir()
-        prefix = f"page_{page_num + 1:04d}_auto_"
-        for old in images_dir.glob(prefix + "*"):
-            old.unlink(missing_ok=True)
-
-        uris: list[str] = []
-        for data, ext in _page_embedded_images(doc, page_num):
-            path = images_dir / f"{prefix}{len(uris)}.{ext}"
-            try:
-                path.write_bytes(data)
-            except Exception:
-                continue
-            uris.append(path.resolve().as_uri())
-        return uris
+    # ── image extraction (manual region, PyMuPDF) ───────────────────────
 
     def _extract_image_region(self, page_num: int, clip) -> str | None:
         """Extract the image in a PDF-points rect and save it (file:// URI)."""
@@ -2027,8 +1999,7 @@ class MainWindow(QMainWindow):
                 "Nessuna immagine estraibile dalla zona selezionata"
             )
             return
-        if uri not in self._current_images:
-            self._current_images.append(uri)
+        self._current_images = [uri]  # a manual capture replaces the previous one
         self.text_panel.show_images(self._current_images)
         name = Path(QUrl(uri).toLocalFile()).name
         self.status_bar.showMessage(f"Immagine estratta dalla zona: {name}")
@@ -2213,7 +2184,6 @@ class MainWindow(QMainWindow):
             self._page_count = len(self._mupdf_doc)
 
             self._images_dir = None
-            self._mupdf_image_uris.clear()
             self._current_images = []
             self.text_panel.invalidate_cache()
 

@@ -14,8 +14,8 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   per ogni pagina.
 - Navigazione (prec/succ, spin, zoom), indice (TOC), toggle Markdown.
 - Traduzione automatica (Originale / 🇮🇹 Italiano).
-- Estrazione immagini: automatica (figure embedded) + selezione a mouse di una
-  zona (🖱️ Seleziona zona).
+- Estrazione immagini: selezione a mouse di una zona (🖱️ Seleziona zona) che
+  salva la figura ritagliata nella tab 🖼️ Immagini.
 
 ## Installazione (venv dedicato)
 
