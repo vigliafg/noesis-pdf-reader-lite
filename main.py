@@ -1815,10 +1815,8 @@ class MainWindow(QMainWindow):
             QStatusBar { background: #333; color: #aaa; }
         """)
 
-        # Auto-open harrison2025.pdf if present
-        default_pdf = Path("harrison2025.pdf")
-        if default_pdf.exists():
-            QTimer.singleShot(100, lambda: self._open_pdf(default_pdf))
+        # L'apertura del PDF è gestita in main(): argomento da riga di comando
+        # oppure harrison2025.pdf nella directory corrente.
 
     # ── toolbar ───────────────────────────────────────────────────────────
 
@@ -2256,6 +2254,17 @@ def main():
     app.setApplicationName("noesis-pdf-reader-lite")
     window = MainWindow()
     window.show()
+
+    # Apri un PDF passato da riga di comando (percorso assoluto o relativo);
+    # in mancanza, fallback su harrison2025.pdf nella directory corrente.
+    if len(sys.argv) > 1:
+        pdf = Path(sys.argv[1])
+    else:
+        default = Path("harrison2025.pdf")
+        pdf = default if default.exists() else None
+    if pdf is not None:
+        QTimer.singleShot(100, lambda: window._open_pdf(pdf))
+
     sys.exit(app.exec())
 
 

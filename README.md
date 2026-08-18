@@ -25,6 +25,13 @@ python3 -m venv .venv
 .venv/bin/python main.py            # oppure: ./run.sh
 ```
 
+### Avvio
+
+```bash
+./run.sh                           # apre la GUI (o harrison2025.pdf se presente)
+./run.sh /percorso/file.pdf        # apre direttamente un PDF
+```
+
 ## Test
 
 ```bash
