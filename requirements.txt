@@ -1,0 +1,11 @@
+# Core GUI framework
+PyQt6>=6.6
+
+# PDF rendering + layout analysis + image extraction (single engine)
+pymupdf>=1.24
+
+# Text extraction (single backend)
+pymupdf4llm>=0.0.9
+
+# Markdown rendering
+markdown>=3.5
