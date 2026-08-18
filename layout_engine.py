@@ -50,26 +50,29 @@ class LayoutProfile:
     body_blocks: int                  # blocchi di testo fuori dalle tabelle
 
 
-def _data_tables(page) -> list:
-    """Data tables come le vedono i fix (esclude i blocchi titolo 1x1/1x2)."""
+def _data_tables(page, exclude: Sequence[tuple] = ()) -> list:
+    """Data tables come le vedono i fix (esclude i blocchi titolo 1x1/1x2 e le zone escluse)."""
     try:
         tabs = page.find_tables()
     except Exception:
         return []
+    from main import _is_excluded  # lazy: evita import circolare
     out = []
     for t in tabs.tables:
         if t.row_count <= 1 and t.col_count <= 2:
+            continue
+        if _is_excluded(tuple(t.bbox), exclude):
             continue
         out.append(t)
     return out
 
 
-def _body_blocks(page) -> tuple[list[tuple], list[dict]]:
+def _body_blocks(page, exclude: Sequence[tuple] = ()) -> tuple[list[tuple], list[dict]]:
     """Return (table_regions, body_blocks) come in ``_column_aware_markdown``."""
     from main import _collect_blocks  # lazy: evita import circolare
 
     table_regions: list[tuple] = []
-    for t in _data_tables(page):
+    for t in _data_tables(page, exclude):
         table_regions.append(tuple(t.bbox))
 
     def _inside(b: dict, r: tuple) -> bool:
@@ -79,7 +82,7 @@ def _body_blocks(page) -> tuple[list[tuple], list[dict]]:
         )
 
     pw = page.rect.width
-    blocks = [b for b in _collect_blocks(page) if b["max_size"] >= 6.5]
+    blocks = [b for b in _collect_blocks(page, exclude) if b["max_size"] >= 6.5]
     body = [
         b for b in blocks
         if not any(_inside(b, r) for r in table_regions)
@@ -98,13 +101,17 @@ def _block_text(b: dict) -> str:
 _INDEX_ENTRY_RE = re.compile(r",\s*\d{1,4}(?:[–\-]\d{1,4})?[a-z]?\b")
 
 
-def profile_page(page) -> LayoutProfile:
-    """Misura il layout della pagina UNA volta (puro, deterministico)."""
+def profile_page(page, exclude: Sequence[tuple] = ()) -> LayoutProfile:
+    """Misura il layout della pagina UNA volta (puro, deterministico).
+
+    ``exclude``: zone escluse a mano (rettangoli in punti PDF) che il profiler
+    ignora, così colonne/tabelle vengono misurate sulla sorgente "pulita".
+    """
     from main import _detect_column_splits, _strip_margin_blocks  # lazy
 
     pw = page.rect.width
     ph = page.rect.height
-    _table_regions, body = _body_blocks(page)
+    _table_regions, body = _body_blocks(page, exclude)
     # Headers/footers/watermarks non devono fare da "ponte" tra due colonne:
     # escluderli prima di calcolare i confini colonna.
     splits = tuple(_detect_column_splits(_strip_margin_blocks(body, ph), pw))
@@ -126,7 +133,7 @@ def profile_page(page) -> LayoutProfile:
                 for lb in first for rb in last
             )
 
-    tables = _data_tables(page)
+    tables = _data_tables(page, exclude)
     has_tables = bool(tables)
     full_width_tables = sum(
         1 for t in tables if (t.bbox[2] - t.bbox[0]) >= 0.6 * pw
@@ -177,27 +184,27 @@ class Fix:
 
 
 # I fix incapsulano le funzioni già esistenti in main.py (import lazy).
-def _apply_dehyphenate(md: str, page, profile: LayoutProfile) -> str:
+def _apply_dehyphenate(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
     from main import clean_text
     return clean_text(md)
 
 
-def _apply_split_glued(md: str, page, profile: LayoutProfile) -> str:
+def _apply_split_glued(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
     from main import _split_cross_column_paragraphs
     return _split_cross_column_paragraphs(md, page)
 
 
-def _apply_reorder_columns(md: str, page, profile: LayoutProfile) -> str:
+def _apply_reorder_columns(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
     from main import _column_aware_markdown
-    return _column_aware_markdown(page, move_title=False) or md
+    return _column_aware_markdown(page, move_title=False, exclude=exclude) or md
 
 
-def _apply_reorder_columns_title(md: str, page, profile: LayoutProfile) -> str:
+def _apply_reorder_columns_title(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
     from main import _column_aware_markdown
-    return _column_aware_markdown(page, move_title=True) or md
+    return _column_aware_markdown(page, move_title=True, exclude=exclude) or md
 
 
-def _apply_spacing(md: str, page, profile: LayoutProfile) -> str:
+def _apply_spacing(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
     from main import _spacing_fixes
     return _spacing_fixes(md)
 
@@ -367,11 +374,12 @@ def apply_plan(
     page,
     profile: LayoutProfile,
     plan: Sequence[Fix],
+    exclude: Sequence[tuple] = (),
 ) -> str:
-    """Applica i fix in ordine: md = fix.apply(md, page, profile)."""
+    """Applica i fix in ordine: md = fix.apply(md, page, profile, exclude)."""
     for fix in plan:
         try:
-            out = fix.apply(md, page, profile)
+            out = fix.apply(md, page, profile, exclude)
         except Exception:
             continue  # un fix che fallisce non blocca i successivi
         if out:

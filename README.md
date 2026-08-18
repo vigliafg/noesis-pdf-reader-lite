@@ -13,9 +13,14 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   de-duplicazione titoli, spaziature) — il piano viene scelto automaticamente
   per ogni pagina.
 - Navigazione (prec/succ, spin, zoom), indice (TOC), toggle Markdown.
-- Traduzione automatica (Originale / 🇮🇹 Italiano).
+- Tab testo: Originale / 🇮🇹 Italiano / 🖼️ Immagini. Nell'Originale i bottoni
+  "↺ Reset" e "🚫 Applica esclusioni" mostrano la versione automatica oppure
+  quella ripulita; "Italiano" traduce la versione mostrata. Cache su disco.
 - Estrazione immagini: selezione a mouse di una zona (🖱️ Seleziona zona) che
   salva la figura ritagliata nella tab 🖼️ Immagini.
+- Esclusione manuale di zone (🚫 Escludi zona): header, footer, immagini,
+  didascalie… il motore adattativo riordina il testo rimanente. È aggiuntiva
+  al sistema automatico (che resta il default).
 
 ## Installazione (venv dedicato)
 
