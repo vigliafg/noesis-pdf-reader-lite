@@ -6,6 +6,7 @@ estrazione (PyMuPDF4LLM) e l'engine adattativo dei fix di layout sempre attivo.
 Traduzione e gallery delle figure incluse; nessun dropdown a runtime.
 """
 
+import concurrent.futures
 import json
 import os
 import re
@@ -910,16 +911,60 @@ _MD_TABLE_RE = re.compile(
 _SEP_CELL_RE = re.compile(r":?-{3,}:?")
 
 
+_MAX_WORKERS = 8  # concurrent translation requests (I/O-bound)
+
+
+def _translate_cell(cell: str, source: str, target: str) -> str:
+    """Translate one table cell, falling back to the original on failure."""
+    try:
+        return _gt_translate_one(cell, source, target).strip()
+    except Exception:
+        return cell
+
+
 def _translate_table(table: str, source: str, target: str) -> str:
-    """Translate the cell contents of a markdown table, keeping its structure."""
+    """Translate the cell contents of a markdown table, keeping its structure.
+
+    All distinct translatable cells are fetched concurrently (one request per
+    cell), then placed back in their original positions.
+    """
     lines = [ln.strip() for ln in table.strip().splitlines()]
     out: list[str] = []
+
+    def _cells(ln: str) -> list[str]:
+        return [c.strip() for c in ln.strip().strip("|").split("|")]
+
+    # Collect the distinct cells that actually need translation.
+    unique: list[str] = []
+    seen: set[str] = set()
+    for ln in lines:
+        if not ln.startswith("|"):
+            continue
+        cells = _cells(ln)
+        if all(_SEP_CELL_RE.fullmatch(c) for c in cells):
+            continue  # separator row kept verbatim
+        for c in cells:
+            if c and re.search(r"[A-Za-z]", c) and c not in seen:
+                seen.add(c)
+                unique.append(c)
+
     cache: dict[str, str] = {}
+    if unique:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=min(_MAX_WORKERS, len(unique))
+        ) as pool:
+            futures = {
+                pool.submit(_translate_cell, c, source, target): c
+                for c in unique
+            }
+            for fut in concurrent.futures.as_completed(futures):
+                cache[futures[fut]] = fut.result()
+
     for ln in lines:
         if not ln.startswith("|"):
             out.append(ln)
             continue
-        cells = [c.strip() for c in ln.strip().strip("|").split("|")]
+        cells = _cells(ln)
         if all(_SEP_CELL_RE.fullmatch(c) for c in cells):
             out.append(ln)  # separator row kept verbatim
             continue
@@ -928,16 +973,8 @@ def _translate_table(table: str, source: str, target: str) -> str:
             # Numbers/symbol-only cells are left untouched (faster, safer).
             if not c or not re.search(r"[A-Za-z]", c):
                 translated.append(c)
-                continue
-            if c in cache:
-                translated.append(cache[c])
-                continue
-            try:
-                res = _gt_translate_one(c, source, target).strip()
-            except Exception:
-                res = c
-            cache[c] = res
-            translated.append(res)
+            else:
+                translated.append(cache.get(c, c))
         out.append("| " + " | ".join(translated) + " |")
     return "\n".join(out)
 
@@ -1006,23 +1043,41 @@ def translate_text_google(
     """Translate text using Google Translate's public API.
 
     Translates **each paragraph independently** (split on ``\n\n``) so
-    paragraph breaks never pass through the API.  Markdown tables and image
-    links are protected so Google doesn't mangle their syntax; table cell
-    contents are translated individually.
+    paragraph breaks never pass through the API, and fetches those paragraphs
+    **concurrently** so a short page doesn't wait on many sequential
+    round-trips.  Markdown tables and image links are protected so Google
+    doesn't mangle their syntax; table cell contents are translated
+    individually (also concurrently).
     """
     if not text or not text.strip():
         return text
 
     paragraphs = text.split("\n\n")
-    translated_paras: list[str] = []
-    for para in paragraphs:
-        if not para.strip():
-            translated_paras.append(para)
-            continue
-        translated_paras.append(
-            _translate_paragraph(para, source, target, chunk_size)
-        )
-    return "\n\n".join(translated_paras)
+    results: list[str] = [""] * len(paragraphs)
+    tasks = [(i, p) for i, p in enumerate(paragraphs) if p.strip()]
+    if not tasks:
+        return text
+
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=min(_MAX_WORKERS, len(tasks))
+    ) as pool:
+        futures = {
+            pool.submit(_translate_paragraph, p, source, target, chunk_size): i
+            for i, p in tasks
+        }
+        for fut in concurrent.futures.as_completed(futures):
+            i = futures[fut]
+            try:
+                results[i] = fut.result()
+            except Exception:
+                results[i] = paragraphs[i]
+
+    # Restore blank paragraphs (the ``\n\n`` separators) in their positions.
+    for i, p in enumerate(paragraphs):
+        if not p.strip():
+            results[i] = p
+
+    return "\n\n".join(results)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1277,6 +1332,9 @@ class TranslateThread(QThread):
 class TranslatablePanel(QWidget):
     """Wraps TextPanel with a tab bar to switch between original and Italian."""
 
+    # Emitted when the user removes a captured image from the gallery.
+    image_removed = pyqtSignal(str)  # file:// URI
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -1355,6 +1413,8 @@ class TranslatablePanel(QWidget):
         self._images: list[str] = []  # file:// URIs of manually captured regions
         self._thread: TranslateThread | None = None
         self._generation: int = 0  # monotonically increasing; ignore stale results
+        self._cache_file: Path | None = None  # on-disk translation cache file
+        self._doc_fingerprint: str = ""  # invalidates the cache if the PDF changes
 
         # ── Connections ────────────────────────────────────────────────
         self._btn_original.clicked.connect(self._on_show_original)
@@ -1461,7 +1521,7 @@ class TranslatablePanel(QWidget):
 
         if not self._images:
             hint = QLabel(
-                "Nessuna zona catturata per questa pagina.\n\n"
+                "Nessuna zona catturata.\n\n"
                 "Usa 🖱️ Seleziona zona per ritagliare una figura dalla pagina."
             )
             hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1520,6 +1580,15 @@ class TranslatablePanel(QWidget):
             b.setStyleSheet(btn_style)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             row.addWidget(b)
+        btn_remove = QPushButton("🗑️ Rimuovi")
+        btn_remove.clicked.connect(lambda _=False, u=uri: self._remove_image(u))
+        btn_remove.setStyleSheet(
+            "QPushButton { background: #d9534f; color: #fff; border: none;"
+            " border-radius: 4px; padding: 6px 12px; font-size: 12px; }"
+            "QPushButton:hover { background: #c9302c; }"
+        )
+        btn_remove.setCursor(Qt.CursorShape.PointingHandCursor)
+        row.addWidget(btn_remove)
         v.addLayout(row)
         return card
 
@@ -1556,6 +1625,10 @@ class TranslatablePanel(QWidget):
             shutil.copyfile(src, dest)
             self._lbl_spinner.setText("✅ Salvata")
 
+    def _remove_image(self, uri: str):
+        """Ask the main window to drop a captured image from the gallery."""
+        self.image_removed.emit(uri)
+
     def _start_translation(self, text: str):
         """Fire background translation thread with generation tracking."""
         self._lbl_spinner.setText("⏳ Traducendo...")
@@ -1585,6 +1658,7 @@ class TranslatablePanel(QWidget):
         # Cache per page
         if self._current_page >= 0:
             self._page_translation_cache[self._current_page] = translated
+            self._save_disk_cache()
 
         # Show if translated tab still active
         if self._btn_translated.isChecked():
@@ -1596,6 +1670,65 @@ class TranslatablePanel(QWidget):
         """Forward to inner TextPanel."""
         self.text_panel.setHtml(self.text_panel._HTML_CSS + html_body)
 
+    # ── persistent translation cache ───────────────────────────────────
+
+    def set_document(self, path: Path | None):
+        """Point the translation cache at this PDF and load saved translations."""
+        self._page_translation_cache.clear()
+        self._cache_file = None
+        self._doc_fingerprint = ""
+        if path is None:
+            return
+        try:
+            st = path.stat()
+            self._doc_fingerprint = f"{st.st_size}-{st.st_mtime_ns}"
+        except Exception:
+            return
+        base = QStandardPaths.writableLocation(
+            QStandardPaths.StandardLocation.AppDataLocation
+        )
+        if not base:
+            base = str(Path.home() / ".noesis-pdf-reader")
+        cache_dir = Path(base) / "translation"
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            return
+        self._cache_file = cache_dir / f"{path.stem}.json"
+        self._load_disk_cache()
+
+    def _load_disk_cache(self):
+        """Load saved translations when they match the current PDF fingerprint."""
+        if self._cache_file is None or not self._cache_file.exists():
+            return
+        try:
+            data = json.loads(self._cache_file.read_text(encoding="utf-8"))
+        except Exception:
+            return
+        if data.get("fingerprint") != self._doc_fingerprint:
+            return
+        pages = data.get("pages") or {}
+        for key, value in pages.items():
+            try:
+                self._page_translation_cache[int(key)] = value
+            except (TypeError, ValueError):
+                continue
+
+    def _save_disk_cache(self):
+        """Persist the in-memory translation cache to disk."""
+        if self._cache_file is None:
+            return
+        payload = {
+            "fingerprint": self._doc_fingerprint,
+            "pages": {str(k): v for k, v in self._page_translation_cache.items()},
+        }
+        try:
+            self._cache_file.write_text(
+                json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+            )
+        except Exception:
+            pass
+
     def invalidate_cache(self):
         """Clear per-page translation cache."""
         self._page_translation_cache.clear()
@@ -1606,6 +1739,7 @@ class TranslatablePanel(QWidget):
             if self._thread.isRunning():
                 self._thread.wait(5000)
             self._thread = None
+        self._save_disk_cache()
 
 
 class TocPanel(QWidget):
@@ -1716,7 +1850,7 @@ class MainWindow(QMainWindow):
         self._page_count: int = 0
         self._mupdf_doc = None       # pymupdf Document (render + layout + images)
         self._images_dir: Path | None = None  # dir for extracted figures
-        self._current_images: list[str] = []  # manual region captures (current page)
+        self._current_images: list[str] = []  # captured regions, kept until the book closes
         self._render_scale: float = 3.0
         self._render_md: bool = True  # toggle Markdown rendering
 
@@ -1763,6 +1897,7 @@ class MainWindow(QMainWindow):
 
         # Right — text panel with translation tabs
         self.text_panel = TranslatablePanel()
+        self.text_panel.image_removed.connect(self._on_image_removed)
 
         self.splitter.addWidget(left_panel)
         self.splitter.addWidget(self.text_panel)
@@ -1947,7 +2082,6 @@ class MainWindow(QMainWindow):
         """Extract text with PyMuPDF4LLM + adaptive engine (always on)."""
         t0 = time.perf_counter()
         text = self._extract_pymupdf4llm(page_num)
-        self._current_images = []  # manual region captures only (reset per page)
         text = self._apply_engine(text, page_num)
         elapsed = time.perf_counter() - t0
         return text, elapsed
@@ -1979,9 +2113,14 @@ class MainWindow(QMainWindow):
         data, ext = result
         images_dir = self._get_images_dir()
         prefix = f"page_{page_num + 1:04d}_region_"
+        # Unique name: append after the regions already captured for this page.
+        index = 0
         for old in images_dir.glob(prefix + "*"):
-            old.unlink(missing_ok=True)
-        path = images_dir / f"{prefix}0.{ext}"
+            try:
+                index = max(index, int(old.stem.rsplit("_", 1)[-1]) + 1)
+            except ValueError:
+                index += 1
+        path = images_dir / f"{prefix}{index}.{ext}"
         try:
             path.write_bytes(data)
         except Exception:
@@ -1999,10 +2138,20 @@ class MainWindow(QMainWindow):
                 "Nessuna immagine estraibile dalla zona selezionata"
             )
             return
-        self._current_images = [uri]  # a manual capture replaces the previous one
+        self._current_images.append(uri)  # new captures accumulate in the gallery
         self.text_panel.show_images(self._current_images)
         name = Path(QUrl(uri).toLocalFile()).name
         self.status_bar.showMessage(f"Immagine estratta dalla zona: {name}")
+
+    def _on_image_removed(self, uri: str):
+        """Drop a captured image from the gallery and delete its file."""
+        if uri in self._current_images:
+            self._current_images.remove(uri)
+        try:
+            Path(QUrl(uri).toLocalFile()).unlink(missing_ok=True)
+        except Exception:
+            pass
+        self.text_panel.show_images(self._current_images)
 
     def _on_select_region_toggled(self, checked: bool):
         """Enable/disable rubber-band selection on the left panel."""
@@ -2185,7 +2334,7 @@ class MainWindow(QMainWindow):
 
             self._images_dir = None
             self._current_images = []
-            self.text_panel.invalidate_cache()
+            self.text_panel.set_document(path)
 
             self.page_spin.setEnabled(True)
             self.page_spin.setMaximum(max(self._page_count, 1))
