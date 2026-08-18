@@ -46,3 +46,33 @@ python3 -m venv .venv
 > I test di regressione sui PDF reali puntano al repo padre
 > (`../noesis-pdf-reader/`); vengono saltati automaticamente se i file non
 > sono presenti.
+
+## Build delle release (GitHub Actions)
+
+Le release standalone sono compilate con **PyInstaller** su quattro runner
+nativi (PyInstaller non fa cross-compile):
+
+| Target            | Runner            |
+| ----------------- | ----------------- |
+| Windows x64       | `windows-latest`  |
+| Linux x64         | `ubuntu-latest`   |
+| macOS x86_64      | `macos-15-intel`  |
+| macOS Apple Silicon (arm64) | `macos-15` |
+
+Il workflow `.github/workflows/release.yml`:
+
+- si avvia manualmente dalla scheda **Actions → build-releases → Run workflow**;
+- oppure automaticamente al push di un tag `v*` (es. `git tag v1.0.0 && git push --tags`),
+  creando una **GitHub Release** con gli artefatti `NoesisPDFReaderLite-*.zip`.
+
+Gli artefatti sono zip che contengono l'eseguibile (`.exe` su Windows, binario
+su Linux, `.app` su macOS). Gli eseguibili macOS non sono firmati: al primo
+avvio fare click destro → **Apri** per aggirare Gatekeeper.
+
+### Build locale (opzionale)
+
+```bash
+.venv/bin/pip install pyinstaller
+.venv/bin/pyinstaller --onefile --windowed --name NoesisPDFReaderLite main.py
+```
+
