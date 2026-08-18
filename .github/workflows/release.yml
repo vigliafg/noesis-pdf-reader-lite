@@ -54,15 +54,30 @@ jobs:
 
       - name: Package artifact
         shell: bash
+        env:
+          BASE: NoesisPDFReaderLite-${{ matrix.name }}
         run: |
-          python -c "import shutil; shutil.make_archive('NoesisPDFReaderLite-${{ matrix.name }}', 'zip', root_dir='dist')"
+          case "$RUNNER_OS" in
+            Windows)
+              mv "dist/NoesisPDFReaderLite.exe" "$BASE.exe"
+              ;;
+            Linux)
+              mv "dist/NoesisPDFReaderLite" "$BASE"
+              ;;
+            macOS)
+              # .app is a directory bundle → wrap it in a .dmg
+              hdiutil create -volname "NoesisPDFReaderLite" \
+                -srcfolder "dist/NoesisPDFReaderLite.app" \
+                -ov -format UDZO "$BASE.dmg"
+              ;;
+          esac
           ls -la
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: NoesisPDFReaderLite-${{ matrix.name }}
-          path: NoesisPDFReaderLite-${{ matrix.name }}.zip
+          path: NoesisPDFReaderLite-${{ matrix.name }}*
           if-no-files-found: error
 
   release:
