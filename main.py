@@ -70,6 +70,7 @@ from PyQt6.QtWidgets import (
     QGraphicsScene,
     QGraphicsPixmapItem,
     QGraphicsRectItem,
+    QGraphicsEllipseItem,
     QGraphicsTextItem,
     QFrame,
 )
@@ -768,6 +769,98 @@ def _column_aware_markdown(page, move_title: bool = False, exclude: tuple = ()) 
     return "\n\n".join(out)
 
 
+def _collect_lines(page) -> list[dict]:
+    """Text LINES with bbox + per-span formatting, in document order.
+
+    Unlike ``_collect_blocks`` (which keeps whole paragraphs), this keeps the
+    line granularity with each line's bbox and source-block index, so a small
+    inclusion zone can capture just a few lines of a larger paragraph.
+    """
+    lines: list[dict] = []
+    for bi, blk in enumerate(page.get_text("dict")["blocks"]):
+        if blk.get("type") != 0:
+            continue
+        for line in blk["lines"]:
+            spans: list[dict] = []
+            size = 0.0
+            for s in line["spans"]:
+                t = s["text"]
+                if not t.strip():
+                    continue
+                spans.append(
+                    {
+                        "text": t,
+                        "size": s["size"],
+                        "bold": bool(s["flags"] & 16),
+                        "italic": bool(s["flags"] & 2),
+                    }
+                )
+                size = max(size, s["size"])
+            if not spans:
+                continue
+            x0, y0, x1, y1 = line["bbox"]
+            lines.append(
+                {
+                    "x0": x0, "y0": y0, "x1": x1, "y1": y1,
+                    "max_size": size, "spans": spans, "blk": bi,
+                }
+            )
+    return lines
+
+
+def _lines_to_block(lns: list[dict]) -> dict:
+    """Reassemble a group of lines into a block dict for ``_block_to_md``."""
+    return {
+        "x0": min(l["x0"] for l in lns), "y0": min(l["y0"] for l in lns),
+        "x1": max(l["x1"] for l in lns), "y1": max(l["y1"] for l in lns),
+        "max_size": max(l["max_size"] for l in lns),
+        "lines": [[dict(s) for s in l["spans"]] for l in lns],
+    }
+
+
+def _line_rect(ln: dict) -> tuple:
+    return (ln["x0"], ln["y0"], ln["x1"], ln["y1"])
+
+
+def _inclusion_order_markdown(page, zones, exclude: tuple = ()) -> str:
+    """Emit text following the numbered inclusion zones (whitelist + order).
+
+    ``zones`` are (x0, y0, x1, y1) PDF rects in reading order: index 0 is box
+    1, index 1 is box 2, etc. Works at LINE level: every line whose area is
+    >=50% inside a zone is kept (so a small zone over two/three lines works
+    even when the rest of the paragraph is outside). Lines are emitted zone by
+    zone, top-to-bottom (then left-to-right) within each zone; consecutive
+    lines of the same paragraph stay joined. ``exclude`` zones are dropped
+    first (red wins), so the two manual tools compose: red removes noise,
+    green sets the order.
+    """
+    lines = _collect_lines(page)
+    if exclude:
+        lines = [ln for ln in lines if not _is_excluded(_line_rect(ln), exclude)]
+
+    emitted: set[int] = set()
+    out: list[str] = []
+    for zone in zones:
+        inside = [
+            (i, ln) for i, ln in enumerate(lines)
+            if i not in emitted and _is_excluded(_line_rect(ln), (zone,))
+        ]
+        inside.sort(key=lambda il: (il[1]["y0"], il[1]["x0"]))
+        # Raggruppa righe consecutive dello stesso blocco in un paragrafo.
+        groups: list[tuple[int, list[int]]] = []
+        for i, ln in inside:
+            if groups and groups[-1][0] == ln["blk"]:
+                groups[-1][1].append(i)
+            else:
+                groups.append((ln["blk"], [i]))
+        for _blk, idxs in groups:
+            emitted.update(idxs)
+            md = _block_to_md(_lines_to_block([lines[i] for i in idxs]), as_column=True)
+            if md:
+                out.append(md)
+    return "\n\n".join(out)
+
+
 def _page_needs_column_reorder(page) -> bool:
     """Heuristic: does this page need the two-column reorder fix?
 
@@ -1138,6 +1231,7 @@ class PdfPageView(QGraphicsView):
     # x0, y0, x1, y1 in scene (full-res pixmap) coordinates
     region_selected = pyqtSignal(float, float, float, float)
     region_excluded = pyqtSignal(float, float, float, float)
+    region_included = pyqtSignal(float, float, float, float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1158,13 +1252,17 @@ class PdfPageView(QGraphicsView):
 
         self._select_mode = False
         self._exclude_mode = False
+        self._include_mode = False
         self._exclusion_items: list[QGraphicsRectItem] = []
+        self._inclusion_items: list[QGraphicsRectItem] = []
         self._rubber_item: QGraphicsRectItem | None = None
         self._rubber_origin = None
         self._band_pen = QPen(QColor(74, 144, 217), 2, Qt.PenStyle.DashLine)
         self._band_brush = QBrush(QColor(74, 144, 217, 70))
         self._exclude_pen = QPen(QColor(217, 83, 79), 2, Qt.PenStyle.DashLine)
         self._exclude_brush = QBrush(QColor(217, 83, 79, 70))
+        self._include_pen = QPen(QColor(92, 184, 92), 2, Qt.PenStyle.DashLine)
+        self._include_brush = QBrush(QColor(92, 184, 92, 70))
 
         self._show_message_text("Apri un PDF per iniziare")
 
@@ -1177,6 +1275,7 @@ class PdfPageView(QGraphicsView):
         self._rubber_item = None
         self._rubber_origin = None
         self._exclusion_items = []
+        self._inclusion_items = []
 
     def _show_message_text(self, text: str):
         self._clear_scene()
@@ -1231,12 +1330,24 @@ class PdfPageView(QGraphicsView):
         else:
             self.unsetCursor()
 
+    def set_include_mode(self, enabled: bool):
+        """Enable/disable rubber-band zone inclusion (numbered reading order)."""
+        self._include_mode = enabled
+        self._clear_rubber()
+        if enabled:
+            self.setCursor(Qt.CursorShape.CrossCursor)
+            self.setDragMode(QGraphicsView.DragMode.NoDrag)
+        else:
+            self.unsetCursor()
+
     def _interactive(self) -> bool:
-        return self._select_mode or self._exclude_mode
+        return self._select_mode or self._exclude_mode or self._include_mode
 
     def _rubber_style(self) -> tuple[QPen, QBrush]:
         if self._exclude_mode:
             return self._exclude_pen, self._exclude_brush
+        if self._include_mode:
+            return self._include_pen, self._include_brush
         return self._band_pen, self._band_brush
 
     def _clear_exclusion_overlay(self):
@@ -1256,6 +1367,42 @@ class PdfPageView(QGraphicsView):
             item.setZValue(10)
             self._scene.addItem(item)
             self._exclusion_items.append(item)
+
+    def _clear_inclusion_overlay(self):
+        for item in self._inclusion_items:
+            self._scene.removeItem(item)
+        self._inclusion_items = []
+
+    def show_inclusion_zones(self, zones):
+        """Draw the numbered inclusion zones (scene coords) as green overlays."""
+        self._clear_inclusion_overlay()
+        pen = QPen(QColor(92, 184, 92), 2, Qt.PenStyle.SolidLine)
+        brush = QBrush(QColor(92, 184, 92, 60))
+        for idx, (x0, y0, x1, y1) in enumerate(zones):
+            item = QGraphicsRectItem(QRectF(x0, y0, x1 - x0, y1 - y0))
+            item.setPen(pen)
+            item.setBrush(brush)
+            item.setZValue(10)
+            self._scene.addItem(item)
+            self._inclusion_items.append(item)
+            # Badge circolare verde scuro con il numero, ben visibile su
+            # qualunque sfondo (il verde traslucido del box non basta).
+            cx = x0 + (x1 - x0) / 2
+            cy = y0 + (y1 - y0) / 2
+            badge = QGraphicsEllipseItem(QRectF(cx - 34, cy - 34, 68, 68))
+            badge.setBrush(QBrush(QColor(46, 125, 50)))
+            badge.setPen(QPen(QColor(255, 255, 255), 2))
+            badge.setZValue(11)
+            self._scene.addItem(badge)
+            self._inclusion_items.append(badge)
+            label = QGraphicsTextItem(str(idx + 1))
+            label.setDefaultTextColor(QColor(255, 255, 255))
+            label.setFont(QFont("Segoe UI", 48, QFont.Weight.Bold))
+            r = label.boundingRect()
+            label.setPos(cx - r.width() / 2, cy - r.height() / 2)
+            label.setZValue(12)
+            self._scene.addItem(label)
+            self._inclusion_items.append(label)
 
     def _clear_rubber(self):
         if self._rubber_item is not None:
@@ -1330,6 +1477,10 @@ class PdfPageView(QGraphicsView):
                 if rect.width() >= 4.0 and rect.height() >= 4.0:
                     if self._exclude_mode:
                         self.region_excluded.emit(
+                            rect.left(), rect.top(), rect.right(), rect.bottom()
+                        )
+                    elif self._include_mode:
+                        self.region_included.emit(
                             rect.left(), rect.top(), rect.right(), rect.bottom()
                         )
                     else:
@@ -1481,37 +1632,10 @@ class TranslatablePanel(QWidget):
         tab_layout.addStretch()
         self._btn_original.setChecked(True)
 
-        # ── Original-tab toolbar: apply/reset the manual exclusions ────
-        self._origin_toolbar = QWidget()
-        ot = QHBoxLayout(self._origin_toolbar)
-        ot.setContentsMargins(6, 4, 6, 4)
-        ot.setSpacing(6)
-        self._btn_apply_exclusions = QPushButton("🚫 Applica esclusioni")
-        self._btn_apply_exclusions.setCheckable(True)
-        self._btn_apply_exclusions.setToolTip(
-            "Mostra nell'Originale la versione 'cleaned' (zone escluse applicate)"
-        )
-        self._btn_reset = QPushButton("↺ Reset")
-        self._btn_reset.setToolTip(
-            "Torna alla versione automatica dell'Originale"
-        )
-        tool_style = (
-            "QPushButton { background: #444; color: #ddd; border: 1px solid #555;"
-            " border-radius: 4px; padding: 3px 10px; font-size: 12px; }"
-            "QPushButton:hover { background: #555; }"
-            "QPushButton:checked { background: #c0392b; color: #fff; }"
-        )
-        for b in (self._btn_apply_exclusions, self._btn_reset):
-            b.setStyleSheet(tool_style)
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            ot.addWidget(b)
-        ot.addStretch()
-
         # ── Text panel ─────────────────────────────────────────────────
         self.text_panel = TextPanel()
 
         layout.addWidget(self._tab_bar)
-        layout.addWidget(self._origin_toolbar)
         layout.addWidget(self.text_panel)
 
         # ── Images panel (gallery of extracted figures) ────────────────
@@ -1524,120 +1648,104 @@ class TranslatablePanel(QWidget):
         layout.addWidget(self.images_panel)
 
         # ── State ──────────────────────────────────────────────────────
-        self._original_text: str = ""
-        self._cleaned_text: str = ""
-        self._showing_cleaned: bool = False  # Originale shows the cleaned version?
-        self._translated: dict[str, str] = {"origin": "", "cleaned": ""}
+        self._page_text: str = ""          # the single text shown (auto or manual)
+        self._translated_text: str = ""
         self._render_md: bool = True
-        self._page_translation_cache: dict[int, dict[str, str]] = {}
+        self._page_translation_cache: dict[int, str] = {}
         self._current_page: int = -1
         self._images: list[str] = []  # file:// URIs of manually captured regions
-        self._threads: dict[str, TranslateThread] = {}
-        self._generations: dict[str, int] = {"origin": 0, "cleaned": 0}
+        self._thread: TranslateThread | None = None
+        self._generation: int = 0
         self._cache_file: Path | None = None  # on-disk translation cache file
         self._doc_fingerprint: str = ""  # invalidates the cache if the PDF changes
+        # Deferral ibrido: traduzione ri-lanciata solo dopo una pausa di 600 ms.
+        self._pending_translation: bool = False
+        self._translate_timer = QTimer(self)
+        self._translate_timer.setSingleShot(True)
+        self._translate_timer.setInterval(600)
+        self._translate_timer.timeout.connect(self._flush_translation)
 
         # ── Connections ────────────────────────────────────────────────
         self._btn_original.clicked.connect(self._on_show_original)
         self._btn_translated.clicked.connect(self._on_show_translated)
         self._btn_images.clicked.connect(self._on_show_images)
-        self._btn_apply_exclusions.clicked.connect(self._on_apply_exclusions_toggled)
-        self._btn_reset.clicked.connect(self._on_reset_original)
 
         self._rebuild_images_panel()
 
     def show_text(
         self,
         text: str,
-        cleaned_text: str | None = None,
         as_markdown: bool = True,
         page_num: int = -1,
         images: list[str] | None = None,
-        apply_exclusions: bool | None = None,
     ):
-        """Display the original (and, if given, the cleaned) text.
+        """Display the page text (already the auto-or-manual result).
 
-        If ``page_num`` is provided, translations are cached per page.
-        ``images`` are the file:// URIs of the regions captured for the page.
-        ``apply_exclusions``: True → show the cleaned version now (e.g. after
-        drawing a zone); False → revert to the automatic version; None → keep
-        the current choice.
+        ``page_num`` keys the per-page translation cache; ``images`` are the
+        file:// URIs of the regions captured for the page.
         """
         self._render_md = as_markdown
-        self._original_text = text
-        self._cleaned_text = cleaned_text if cleaned_text is not None else text
+        self._page_text = text
         self._current_page = page_num
         self._images = list(images or [])
         self._rebuild_images_panel()
-
-        if apply_exclusions is not None:
-            self._showing_cleaned = apply_exclusions
-            self._btn_apply_exclusions.setChecked(apply_exclusions)
 
         if self._btn_images.isChecked():
             return  # images tab active — gallery already rebuilt above
 
         if self._btn_translated.isChecked():
-            self._maybe_show_translation(self._current_kind())
+            self._maybe_show_translation()
             return
 
         # Original tab is active (default)
         self._set_active_tab(self._btn_original)
-        self.text_panel.show_text(self._current_source(), as_markdown=as_markdown)
+        self.text_panel.show_text(self._page_text, as_markdown=as_markdown)
         self._lbl_spinner.setText("")
-
-    def _current_kind(self) -> str:
-        return "cleaned" if self._showing_cleaned else "origin"
-
-    def _current_source(self) -> str:
-        return self._cleaned_text if self._showing_cleaned else self._original_text
 
     def _set_active_tab(self, active):
         for btn in (self._btn_original, self._btn_translated, self._btn_images):
             btn.setChecked(btn is active)
         if active is self._btn_images:
-            self._origin_toolbar.hide()
             self.text_panel.hide()
             self.images_panel.show()
             self._rebuild_images_panel()
         else:
             self.images_panel.hide()
             self.text_panel.show()
-            self._origin_toolbar.setVisible(active is self._btn_original)
 
     def _on_show_original(self):
         self._set_active_tab(self._btn_original)
-        self.text_panel.show_text(self._current_source(), as_markdown=self._render_md)
+        self.text_panel.show_text(self._page_text, as_markdown=self._render_md)
         self._lbl_spinner.setText("")
-
-    def _on_apply_exclusions_toggled(self, checked: bool):
-        self._showing_cleaned = checked
-        if self._btn_original.isChecked():
-            self.text_panel.show_text(self._current_source(), as_markdown=self._render_md)
-
-    def _on_reset_original(self):
-        self._showing_cleaned = False
-        self._btn_apply_exclusions.setChecked(False)
-        if self._btn_original.isChecked():
-            self.text_panel.show_text(self._original_text, as_markdown=self._render_md)
 
     def _on_show_translated(self):
         self._set_active_tab(self._btn_translated)
-        self._maybe_show_translation(self._current_kind())
+        self._maybe_show_translation()
 
     def _on_show_images(self):
         self._set_active_tab(self._btn_images)
         self._lbl_spinner.setText("")
 
-    def _maybe_show_translation(self, kind: str):
-        """Show the cached translation for ``kind`` or start a new one."""
-        cached = self._page_translation_cache.get(self._current_page, {})
-        if self._current_page >= 0 and kind in cached:
-            self._translated[kind] = cached[kind]
-            self.text_panel.show_text(cached[kind], as_markdown=self._render_md)
+    def _maybe_show_translation(self):
+        """Show the cached translation for the page, or schedule a new one."""
+        cached = self._page_translation_cache.get(self._current_page)
+        if self._current_page >= 0 and cached is not None:
+            self._translated_text = cached
+            self.text_panel.show_text(cached, as_markdown=self._render_md)
             self._lbl_spinner.setText("")
         else:
-            self._start_translation(kind)
+            self._schedule_translation()
+
+    def _schedule_translation(self):
+        """Debounce: re-translate only after the user pauses drawing."""
+        self._lbl_spinner.setText("⏳ Traducendo...")
+        self._pending_translation = True
+        self._translate_timer.start()
+
+    def _flush_translation(self):
+        self._pending_translation = False
+        if self._btn_translated.isChecked():
+            self._start_translation()
 
     def show_images(self, images: list[str]):
         """Set the current page's captured regions and activate the gallery tab."""
@@ -1764,13 +1872,13 @@ class TranslatablePanel(QWidget):
         """Ask the main window to drop a captured image from the gallery."""
         self.image_removed.emit(uri)
 
-    def _start_translation(self, kind: str):
-        """Fire a background translation for ``kind`` ('origin' or 'cleaned')."""
-        text = self._original_text if kind == "origin" else self._cleaned_text
+    def _start_translation(self):
+        """Fire a background translation for the current page text."""
+        text = self._page_text
         self._lbl_spinner.setText("⏳ Traducendo...")
-        self._generations[kind] += 1
+        self._generation += 1
 
-        old = self._threads.get(kind)
+        old = self._thread
         if old is not None:
             try:
                 old.result_ready.disconnect()
@@ -1778,28 +1886,28 @@ class TranslatablePanel(QWidget):
                 pass  # already disconnected
 
         thread = TranslateThread(
-            text, generation=self._generations[kind], kind=kind,
+            text, generation=self._generation, kind="page",
             source="en", target="it",
         )
         thread.result_ready.connect(self._on_translation_done)
-        self._threads[kind] = thread
+        self._thread = thread
         thread.start()
 
     def _on_translation_done(self, generation: int, kind: str, translated: str):
         """Slot: background translation finished."""
         # Ignore stale results from superseded requests
-        if generation != self._generations.get(kind):
+        if generation != self._generation:
             return
 
-        self._translated[kind] = translated
+        self._translated_text = translated
 
         # Cache per page
         if self._current_page >= 0:
-            self._page_translation_cache.setdefault(self._current_page, {})[kind] = translated
+            self._page_translation_cache[self._current_page] = translated
             self._save_disk_cache()
 
-        # Show if the Italiano tab is active and this is the current source
-        if self._btn_translated.isChecked() and kind == self._current_kind():
+        # Show if the Italiano tab is active
+        if self._btn_translated.isChecked():
             self.text_panel.show_text(translated, as_markdown=self._render_md)
 
         self._lbl_spinner.setText("✅")
@@ -1852,15 +1960,13 @@ class TranslatablePanel(QWidget):
             except (TypeError, ValueError):
                 continue
             if isinstance(value, str):
-                # backward-compatible: old cache stored only the origin text
-                self._page_translation_cache.setdefault(page, {})["origin"] = value
+                self._page_translation_cache[page] = value
             elif isinstance(value, dict):
-                entry: dict[str, str] = {}
-                for kind in ("origin", "cleaned"):
-                    if isinstance(value.get(kind), str):
-                        entry[kind] = value[kind]
-                if entry:
-                    self._page_translation_cache[page] = entry
+                # migrazione dal vecchio formato {origin, cleaned}: il testo
+                # manuale ("cleaned") è la vista unica più fedele.
+                migrated = value.get("cleaned") or value.get("origin")
+                if isinstance(migrated, str):
+                    self._page_translation_cache[page] = migrated
 
     def _save_disk_cache(self):
         """Persist the in-memory translation cache to disk."""
@@ -1868,7 +1974,7 @@ class TranslatablePanel(QWidget):
             return
         payload = {
             "fingerprint": self._doc_fingerprint,
-            "pages": {str(k): dict(v) for k, v in self._page_translation_cache.items()},
+            "pages": {str(k): v for k, v in self._page_translation_cache.items()},
         }
         try:
             self._cache_file.write_text(
@@ -1888,10 +1994,9 @@ class TranslatablePanel(QWidget):
 
     def shutdown(self):
         """Wait for any in-flight translation before the app closes."""
-        for thread in self._threads.values():
-            if thread is not None and thread.isRunning():
-                thread.wait(5000)
-        self._threads.clear()
+        self._translate_timer.stop()
+        if self._thread is not None and self._thread.isRunning():
+            self._thread.wait(5000)
         self._save_disk_cache()
 
 
@@ -2005,6 +2110,7 @@ class MainWindow(QMainWindow):
         self._images_dir: Path | None = None  # dir for extracted figures
         self._current_images: list[str] = []  # captured regions, kept until the book closes
         self._excluded_zones: dict[int, list[tuple]] = {}  # page → excluded PDF rects
+        self._inclusion_zones: dict[int, list[tuple]] = {}  # page → numbered inclusion rects
         self._render_scale: float = 3.0
         self._render_md: bool = True  # toggle Markdown rendering
 
@@ -2041,6 +2147,7 @@ class MainWindow(QMainWindow):
         self.pdf_view = PdfPageView()
         self.pdf_view.region_selected.connect(self._on_region_selected)
         self.pdf_view.region_excluded.connect(self._on_region_excluded)
+        self.pdf_view.region_included.connect(self._on_region_included)
         self.scroll_area.setWidget(self.pdf_view)
 
         left_panel = QWidget()
@@ -2218,12 +2325,23 @@ class MainWindow(QMainWindow):
         self.btn_exclude.clicked.connect(self._on_exclude_toggled)
         bar.addWidget(self.btn_exclude)
 
-        self.btn_reset_exclusions = QPushButton("🧹 Reset esclusioni")
-        self.btn_reset_exclusions.setToolTip(
-            "Rimuove tutte le zone escluse dalla pagina corrente"
+        # Zone inclusion (green): numbered reading-order boxes
+        self.btn_include = QPushButton("🟩 Includi zona")
+        self.btn_include.setCheckable(True)
+        self.btn_include.setToolTip(
+            "Trascina col mouse i box verdi nell'ordine di lettura che vuoi:\n"
+            "il testo verrà ricostruito seguendo la numerazione (1, 2, 3…).\n"
+            "Un box verde = una colonna/regione di lettura."
         )
-        self.btn_reset_exclusions.clicked.connect(self._on_reset_exclusions)
-        bar.addWidget(self.btn_reset_exclusions)
+        self.btn_include.clicked.connect(self._on_include_toggled)
+        bar.addWidget(self.btn_include)
+
+        self.btn_reset_zones = QPushButton("🧹 Reset zone")
+        self.btn_reset_zones.setToolTip(
+            "Rimuove tutte le zone (rosse e verdi) dalla pagina corrente"
+        )
+        self.btn_reset_zones.clicked.connect(self._on_reset_zones)
+        bar.addWidget(self.btn_reset_zones)
         return bar
 
     def _display_text(
@@ -2231,27 +2349,22 @@ class MainWindow(QMainWindow):
         text: str,
         page_num: int = -1,
         images: list[str] | None = None,
-        cleaned_text: str | None = None,
-        apply_exclusions: bool | None = None,
     ):
-        """Display the original text (and, if given, the cleaned text)."""
+        """Display the page text (already the auto-or-manual result)."""
         if images is None:
             images = self._current_images
         self.text_panel.show_text(
-            text, cleaned_text=cleaned_text, as_markdown=self._render_md,
-            page_num=page_num, images=images, apply_exclusions=apply_exclusions,
+            text, as_markdown=self._render_md, page_num=page_num, images=images,
         )
 
-    def _extract_and_display(self, page_num: int, apply_exclusions: bool | None = None) -> float:
-        """Extract origin + cleaned texts and display them; returns elapsed ms."""
+    def _extract_and_display(self, page_num: int) -> float:
+        """Extract and display the page's text; returns elapsed ms."""
         if not self._pdf_path:
             return 0.0
-        origin, cleaned, elapsed = self._extract_text(page_num)
+        text, label, elapsed = self._extract_text(page_num)
         self._display_text(
-            self._extraction_header(origin, elapsed, "Engine adattativo") + origin,
+            self._extraction_header(text, elapsed, label) + text,
             page_num=page_num,
-            cleaned_text=self._extraction_header(cleaned, elapsed, "Pulito manualmente") + cleaned,
-            apply_exclusions=apply_exclusions,
         )
         return elapsed
 
@@ -2269,22 +2382,24 @@ class MainWindow(QMainWindow):
     # ── text extraction backends ──────────────────────────────────────────
 
     def _extract_text(self, page_num: int) -> tuple[str, str, float]:
-        """Extract text with PyMuPDF4LLM + adaptive engine (always on).
+        """Extract the page text and return ``(text, label, elapsed)``.
 
-        Returns ``(origin, cleaned, elapsed)``: ``origin`` is the automatic
-        engine output; ``cleaned`` is the same page rebuilt after the manually
-        excluded zones (identical to ``origin`` when nothing is excluded).
+        No zones → the adaptive engine output (auto). Any red/green zone →
+        the manual override: red zones drop noise, green zones set the
+        reading order. Returns the single text the right panel shows.
         """
         t0 = time.perf_counter()
         raw = self._extract_pymupdf4llm(page_num)
         exclude = tuple(self._excluded_zones.get(page_num, ()))
-        origin = self._apply_engine(raw, page_num)
-        cleaned = (
-            self._apply_engine(raw, page_num, exclude=exclude)
-            if exclude else origin
-        )
+        include = tuple(self._inclusion_zones.get(page_num, ()))
+        if include or exclude:
+            text = self._apply_engine(raw, page_num, exclude=exclude, include=include)
+            label = "Zone manuali"
+        else:
+            text = self._apply_engine(raw, page_num)
+            label = "Engine adattativo"
         elapsed = time.perf_counter() - t0
-        return origin, cleaned, elapsed
+        return text, label, elapsed
 
     # ── Nuovi backend Markdown ────────────────────────────────────────
 
@@ -2361,24 +2476,42 @@ class MainWindow(QMainWindow):
         self._set_select_mode(checked)
 
     def _set_select_mode(self, enabled: bool):
-        """Update the select-zone toggle (and turn off exclude mode)."""
+        """Update the select-zone toggle (and turn off the other modes)."""
         self.btn_select_region.setChecked(enabled)
         self.pdf_view.set_select_mode(enabled)
         if enabled:
             self.btn_exclude.setChecked(False)
             self.pdf_view.set_exclude_mode(False)
+            self.btn_include.setChecked(False)
+            self.pdf_view.set_include_mode(False)
 
     def _on_exclude_toggled(self, checked: bool):
         """Enable/disable rubber-band zone exclusion."""
         self._set_exclude_mode(checked)
 
     def _set_exclude_mode(self, enabled: bool):
-        """Update the exclude-zone toggle (and turn off select mode)."""
+        """Update the exclude-zone toggle (and turn off the other modes)."""
         self.btn_exclude.setChecked(enabled)
         self.pdf_view.set_exclude_mode(enabled)
         if enabled:
             self.btn_select_region.setChecked(False)
             self.pdf_view.set_select_mode(False)
+            self.btn_include.setChecked(False)
+            self.pdf_view.set_include_mode(False)
+
+    def _on_include_toggled(self, checked: bool):
+        """Enable/disable rubber-band zone inclusion."""
+        self._set_include_mode(checked)
+
+    def _set_include_mode(self, enabled: bool):
+        """Update the include-zone toggle (and turn off the other modes)."""
+        self.btn_include.setChecked(enabled)
+        self.pdf_view.set_include_mode(enabled)
+        if enabled:
+            self.btn_select_region.setChecked(False)
+            self.pdf_view.set_select_mode(False)
+            self.btn_exclude.setChecked(False)
+            self.pdf_view.set_exclude_mode(False)
 
     def _on_region_excluded(self, x0: float, y0: float, x1: float, y1: float):
         """Store an excluded zone and re-extract the cleaned page.
@@ -2401,7 +2534,7 @@ class MainWindow(QMainWindow):
         zones.append(rect)
         self.pdf_view.show_excluded_zones(self._scene_exclusions(self._current_page))
         self.text_panel.invalidate_page(self._current_page)
-        self._refresh_current_page_text(apply_exclusions=True)
+        self._refresh_current_page_text()
 
         msg = (
             f"Zona esclusa ({len(zones)} sulla pagina) — trascina altre zone "
@@ -2418,13 +2551,39 @@ class MainWindow(QMainWindow):
             )
         self.status_bar.showMessage(msg)
 
-    def _on_reset_exclusions(self):
-        """Remove all excluded zones for the current page."""
-        self._excluded_zones.pop(self._current_page, None)
-        self.pdf_view.show_excluded_zones([])
+    def _on_region_included(self, x0: float, y0: float, x1: float, y1: float):
+        """Store a numbered inclusion zone and re-extract in reading order.
+
+        The include mode stays active so the user can draw the whole reading
+        sequence; click 🟩 Includi zona again to leave the mode. The zone
+        number is its position in the drawn sequence (shown on the box).
+        """
+        scale = self._render_scale or 1.0
+        rect = (
+            min(x0, x1) / scale, min(y0, y1) / scale,
+            max(x0, x1) / scale, max(y0, y1) / scale,
+        )
+        if (rect[2] - rect[0]) < 1.0 or (rect[3] - rect[1]) < 1.0:
+            return
+        zones = self._inclusion_zones.setdefault(self._current_page, [])
+        zones.append(rect)
+        self.pdf_view.show_inclusion_zones(self._scene_inclusions(self._current_page))
         self.text_panel.invalidate_page(self._current_page)
-        self._refresh_current_page_text(apply_exclusions=False)
-        self.status_bar.showMessage("Esclusioni rimosse per questa pagina")
+        self._refresh_current_page_text()
+        self.status_bar.showMessage(
+            f"Zona inclusa (n. {len(zones)}) — trascina il prossimo box "
+            "nell'ordine di lettura o premi 🟩 Includi zona per terminare"
+        )
+
+    def _on_reset_zones(self):
+        """Remove all zones (exclusions + inclusions) for the current page."""
+        self._excluded_zones.pop(self._current_page, None)
+        self._inclusion_zones.pop(self._current_page, None)
+        self.pdf_view.show_excluded_zones([])
+        self.pdf_view.show_inclusion_zones([])
+        self.text_panel.invalidate_page(self._current_page)
+        self._refresh_current_page_text()
+        self.status_bar.showMessage("Zone rimosse per questa pagina")
 
     def _scene_exclusions(self, page_num: int) -> list[tuple]:
         """Convert the page's excluded zones (PDF points) to scene pixels."""
@@ -2434,11 +2593,19 @@ class MainWindow(QMainWindow):
             for r in self._excluded_zones.get(page_num, [])
         ]
 
-    def _refresh_current_page_text(self, apply_exclusions: bool | None = None):
+    def _scene_inclusions(self, page_num: int) -> list[tuple]:
+        """Convert the page's inclusion zones (PDF points) to scene pixels."""
+        scale = self._render_scale or 1.0
+        return [
+            tuple(v * scale for v in r)
+            for r in self._inclusion_zones.get(page_num, [])
+        ]
+
+    def _refresh_current_page_text(self):
         """Re-extract and re-display the current page's text."""
         if not self._pdf_path or self._mupdf_doc is None or self._page_count == 0:
             return
-        self._extract_and_display(self._current_page, apply_exclusions=apply_exclusions)
+        self._extract_and_display(self._current_page)
 
     def _get_images_dir(self) -> Path:
         """Return (creating on first use) the per-document figures directory."""
@@ -2467,7 +2634,7 @@ class MainWindow(QMainWindow):
         # Extract text right
         elapsed = 0.0
         if self._pdf_path:
-            elapsed = self._extract_and_display(page_num, apply_exclusions=False)
+            elapsed = self._extract_and_display(page_num)
 
         # Update toolbar
         self.page_spin.blockSignals(True)
@@ -2504,18 +2671,24 @@ class MainWindow(QMainWindow):
             f"  │  Fix: {label} ──\n\n"
         )
 
-    def _apply_engine(self, text: str, page_num: int, exclude: tuple = ()) -> str:
-        """Apply the adaptive fix engine (layout_engine.py) to the page.
+    def _apply_engine(
+        self, text: str, page_num: int, exclude: tuple = (), include: tuple = ()
+    ) -> str:
+        """Apply the adaptive fix engine to the page.
 
-        Profilo → Piano → Pipeline. When ``exclude`` is non-empty, the page is
-        rebuilt skipping those zones (manual cleaning) before the cosmetic
-        fixes; otherwise the automatic plan is applied unchanged.
+        ``include`` (numbered inclusion zones, reading order) takes
+        precedence: it rebuilds the text as a whitelist ordered by zone
+        number. Otherwise the v1 pipeline applies: with ``exclude`` non-empty
+        the page is rebuilt skipping those zones (manual cleaning) before the
+        cosmetic fixes; with neither, the automatic plan is applied unchanged.
         """
         doc = self._get_mupdf_doc()
         if doc is None:
             return text
         try:
             page = doc[page_num]
+            if include:
+                return _inclusion_order_markdown(page, include, exclude=exclude) or text
             profile = layout_engine.profile_page(page, exclude=exclude)
             plan = layout_engine.plan_fixes(profile, "PyMuPDF4LLM ⚡", mode="auto")
             if exclude:
@@ -2583,6 +2756,7 @@ class MainWindow(QMainWindow):
         if pix is not None:
             self.pdf_view.show_page(pix)
             self.pdf_view.show_excluded_zones(self._scene_exclusions(page_num))
+            self.pdf_view.show_inclusion_zones(self._scene_inclusions(page_num))
             return
         if not _has_pymupdf:
             self.pdf_view.show_message("(pymupdf non installato)")
@@ -2615,6 +2789,7 @@ class MainWindow(QMainWindow):
             self._images_dir = None
             self._current_images = []
             self._excluded_zones = {}
+            self._inclusion_zones = {}
             self.text_panel.set_document(path)
 
             self.page_spin.setEnabled(True)

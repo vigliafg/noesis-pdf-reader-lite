@@ -31,6 +31,7 @@ from main import (  # noqa: E402
     _column_aware_markdown,
     _detect_column_split,
     _detect_column_splits,
+    _inclusion_order_markdown,
     _page_needs_column_reorder,
     _spacing_fixes,
     _split_cross_column_paragraphs,
@@ -254,6 +255,58 @@ class PageNeedsColumnReorderTests(unittest.TestCase):
         page.insert_textbox(pymupdf.Rect(320, 120, 520, 200), "Right one.", fontsize=10)
         page.insert_textbox(pymupdf.Rect(320, 220, 520, 300), "Right two.", fontsize=10)
         self.assertTrue(_page_needs_column_reorder(page))
+        doc.close()
+
+
+class InclusionOrderMarkdownTests(unittest.TestCase):
+    def test_zones_emitted_in_numbered_order(self):
+        doc, page = _new_page()
+        # "Bottom" è più in basso ma nel box 1; "Top" è più in alto ma nel
+        # box 2: è il NUMERO del box a dettare l'ordine, non la posizione.
+        page.insert_textbox(pymupdf.Rect(50, 500, 250, 580), "Bottom text.", fontsize=10)
+        page.insert_textbox(pymupdf.Rect(50, 120, 250, 200), "Top text.", fontsize=10)
+        zone_bottom = (40, 450, 260, 620)   # box 1
+        zone_top = (40, 80, 260, 260)       # box 2
+        out12 = _inclusion_order_markdown(page, (zone_bottom, zone_top))
+        out21 = _inclusion_order_markdown(page, (zone_top, zone_bottom))
+        self.assertLess(out12.index("Bottom"), out12.index("Top"))
+        self.assertLess(out21.index("Top"), out21.index("Bottom"))
+        doc.close()
+
+    def test_whitelist_drops_text_outside_zones(self):
+        doc, page = _new_page()
+        page.insert_textbox(pymupdf.Rect(50, 120, 250, 200), "Keep me.", fontsize=10)
+        page.insert_textbox(pymupdf.Rect(320, 400, 520, 480), "Drop me.", fontsize=10)
+        out = _inclusion_order_markdown(page, ((40, 100, 260, 260),))
+        self.assertIn("Keep me.", out)
+        self.assertNotIn("Drop me.", out)
+        doc.close()
+
+    def test_exclusion_wins_over_inclusion(self):
+        doc, page = _new_page()
+        page.insert_textbox(pymupdf.Rect(50, 120, 250, 200), "Noise.", fontsize=10)
+        page.insert_textbox(pymupdf.Rect(50, 240, 250, 320), "Content.", fontsize=10)
+        out = _inclusion_order_markdown(
+            page, ((40, 100, 260, 360),), exclude=((40, 100, 260, 220),)
+        )
+        self.assertNotIn("Noise.", out)
+        self.assertIn("Content.", out)
+        doc.close()
+
+    def test_small_zone_captures_only_its_lines(self):
+        # Un box piccolo (2-3 righe) dentro un paragrafo più grande deve
+        # includere SOLO quelle righe, non l'intero paragrafo.
+        doc, page = _new_page()
+        para = (
+            "Prima frase. Seconda frase. Terza frase. Quarta frase. Quinta "
+            "frase. Sesta frase. Settima frase. Ottava frase. Nona frase. "
+            "Decima frase. Undicesima frase. Dodicesima frase. Tredicesima "
+            "frase. Quattordicesima frase."
+        )
+        page.insert_textbox(pymupdf.Rect(50, 100, 300, 400), para, fontsize=11)
+        out = _inclusion_order_markdown(page, ((40, 95, 320, 132),))
+        self.assertIn("Prima frase", out)
+        self.assertNotIn("Quattordicesima", out)  # righe fuori dal box escluse
         doc.close()
 
 

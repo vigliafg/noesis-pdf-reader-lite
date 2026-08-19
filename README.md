@@ -13,9 +13,11 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   de-duplicazione titoli, spaziature) — il piano viene scelto automaticamente
   per ogni pagina.
 - Navigazione (prec/succ, spin, zoom), indice (TOC), toggle Markdown.
-- Tab testo: Originale / 🇮🇹 Italiano / 🖼️ Immagini. Nell'Originale i bottoni
-  "↺ Reset" e "🚫 Applica esclusioni" mostrano la versione automatica oppure
-  quella ripulita; "Italiano" traduce la versione mostrata. Cache su disco.
+- Tab testo: Originale / 🇮🇹 Italiano / 🖼️ Immagini. L'Originale mostra un
+  unico testo: l'output del motore adattativo (auto) oppure, quando ci sono
+  zone manuali, il risultato ricostruito da esse; "Italiano" traduce la
+  versione mostrata (traduzione rinviata a dopo una pausa di 600 ms durante
+  il disegno delle zone). Cache su disco.
 - Estrazione immagini: selezione a mouse di una zona (🖱️ Seleziona zona) che
   salva la figura ritagliata nella tab 🖼️ Immagini.
 - Esclusione manuale di zone (🚫 Escludi zona): header, footer, immagini,
@@ -23,6 +25,12 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   al sistema automatico (che resta il default). Se la zona disegnata contiene
   un'immagine, la stessa trascinata la estrae anche nella tab 🖼️ Immagini
   (escludi + estrai in un solo gesto).
+- Inclusione manuale di zone (🟩 Includi zona): i box verdi numerati (1, 2,
+  3…) definiscono l'ordine di lettura. Il testo viene ricostruito seguendo
+  la numerazione; ciò che è fuori dai box verdi viene scartato (whitelist).
+  Un box verde = una colonna/regione. Rosso e verde compongono: il rosso
+  toglie il rumore, il verde ordina; dove si sovrappongono vince il rosso.
+- 🧹 Reset zone: rimuove tutte le zone (rosse e verdi) della pagina corrente.
 
 ## Installazione (venv dedicato)
 
