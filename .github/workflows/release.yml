@@ -41,12 +41,18 @@ jobs:
       - name: Build with PyInstaller
         shell: bash
         run: |
+          ICON=""
+          case "$RUNNER_OS" in
+            Windows) ICON="--icon assets/noesispdf.ico" ;;
+            macOS)   ICON="--icon assets/noesispdf.icns" ;;
+          esac
           pyinstaller \
             --onefile \
             --windowed \
             --clean \
             --noconfirm \
             --name NoesisPDFReaderLite \
+            $ICON \
             --collect-all pymupdf4llm \
             --collect-data pymupdf \
             main.py
@@ -117,14 +123,8 @@ jobs:
           cp "dist/NoesisPDFReaderLite" "$APPDIR/usr/bin/NoesisPDFReaderLite"
           chmod +x "$APPDIR/usr/bin/NoesisPDFReaderLite"
 
-          # icon (256x256 PNG, generated with PyMuPDF)
-          python - <<'PY'
-          import pymupdf
-          pm = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 256, 256))
-          pm.clear_with(255)
-          pm.set_rect(pymupdf.IRect(0, 0, 256, 256), (74, 144, 217))
-          pm.save("AppDir/NoesisPDFReaderLite.png")
-          PY
+          # icon (256x256 PNG, icona reale dell'app)
+          cp assets/noesispdf-256.png "$APPDIR/NoesisPDFReaderLite.png"
 
           # desktop entry
           cat > "$APPDIR/NoesisPDFReaderLite.desktop" <<'EOF'
