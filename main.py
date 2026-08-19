@@ -111,13 +111,18 @@ def _image_as_png(doc, xref: int) -> tuple[bytes, str] | None:
 
 
 def _region_image(
-    doc, page_num: int, clip, zoom: float
+    doc, page_num: int, clip, zoom: float, embedded_only: bool = False
 ) -> tuple[bytes, str] | None:
     """Extract the image under a PDF-points rect as ``(png_bytes, "png")``.
 
-    Prefers the original embedded raster when one fully covers the selection;
-    otherwise renders the region (whole figure, also for composite/vector
-    figures). Returns None when nothing can be extracted.
+    Prefers the original embedded raster; otherwise renders the region (whole
+    figure, also for composite/vector figures). Returns None when nothing can
+    be extracted.
+
+    When ``embedded_only`` is True the render fallback is skipped and only an
+    embedded raster whose placement is (mostly) inside the selection is
+    returned. Used by the exclude-zone gesture so that excluding a text zone
+    (header/footer/caption) never dumps a rendered PNG into the gallery.
     """
     if not _has_pymupdf:
         return None
@@ -127,17 +132,28 @@ def _region_image(
         if rect.width < 1.0 or rect.height < 1.0:
             return None
 
-        # 1) embedded image whose placement is fully inside the selection
+        # 1) embedded image whose placement is (fully, or in embedded_only
+        #    mode at least half) inside the selection
         for img in page.get_images(full=True):
             xref = img[0]
             for r in page.get_image_rects(xref):
-                if (
+                if embedded_only:
+                    # Sloppy selection around a figure (e.g. figure + caption)
+                    # is fine: accept an image at least half inside the zone.
+                    area = r.get_area()
+                    if area <= 0 or (r & rect).get_area() / area < 0.5:
+                        continue
+                elif not (
                     r.x0 >= rect.x0 and r.y0 >= rect.y0
                     and r.x1 <= rect.x1 and r.y1 <= rect.y1
                 ):
-                    converted = _image_as_png(doc, xref)
-                    if converted is not None:
-                        return converted
+                    continue
+                converted = _image_as_png(doc, xref)
+                if converted is not None:
+                    return converted
+
+        if embedded_only:
+            return None  # no render fallback in embedded-only mode
 
         # 2) fallback: render the selected region at high resolution
         pix = page.get_pixmap(clip=rect, matrix=pymupdf.Matrix(zoom, zoom))
@@ -2195,7 +2211,9 @@ class MainWindow(QMainWindow):
         self.btn_exclude.setToolTip(
             "Trascina col mouse una zona (header, footer, immagine,\n"
             "didascalia…) per escluderla: il motore adattativo riordina\n"
-            "il testo rimanente. È aggiuntivo al sistema automatico."
+            "il testo rimanente. È aggiuntivo al sistema automatico.\n\n"
+            "Se la zona contiene un'immagine, viene estratta anche nella\n"
+            "tab 🖼️ Immagini (escludi + estrai in un solo gesto)."
         )
         self.btn_exclude.clicked.connect(self._on_exclude_toggled)
         bar.addWidget(self.btn_exclude)
@@ -2282,13 +2300,16 @@ class MainWindow(QMainWindow):
 
     # ── image extraction (manual region, PyMuPDF) ───────────────────────
 
-    def _extract_image_region(self, page_num: int, clip) -> str | None:
+    def _extract_image_region(
+        self, page_num: int, clip, embedded_only: bool = False
+    ) -> str | None:
         """Extract the image in a PDF-points rect and save it (file:// URI)."""
         doc = self._get_mupdf_doc()
         if doc is None or not _has_pymupdf:
             return None
         result = _region_image(
-            doc, page_num, clip, max(self._render_scale, 4.0)
+            doc, page_num, clip, max(self._render_scale, 4.0),
+            embedded_only=embedded_only,
         )
         if result is None:
             return None
@@ -2364,6 +2385,10 @@ class MainWindow(QMainWindow):
 
         The exclude mode stays active so the user can draw as many zones as
         needed; click 🚫 Escludi zona again to leave the mode.
+
+        If the drawn zone contains an embedded image, the same gesture also
+        captures it into the 🖼️ Immagini gallery (embedded rasters only, no
+        render fallback), so excluding a figure and keeping it are one action.
         """
         scale = self._render_scale or 1.0
         rect = (
@@ -2377,10 +2402,21 @@ class MainWindow(QMainWindow):
         self.pdf_view.show_excluded_zones(self._scene_exclusions(self._current_page))
         self.text_panel.invalidate_page(self._current_page)
         self._refresh_current_page_text(apply_exclusions=True)
-        self.status_bar.showMessage(
+
+        msg = (
             f"Zona esclusa ({len(zones)} sulla pagina) — trascina altre zone "
             "o premi 🚫 Escludi zona per terminare"
         )
+        uri = self._extract_image_region(self._current_page, rect, embedded_only=True)
+        if uri is not None:
+            self._current_images.append(uri)
+            self.text_panel.show_images(self._current_images)
+            name = Path(QUrl(uri).toLocalFile()).name
+            msg = (
+                f"Zona esclusa e immagine estratta ({name}) — trascina altre "
+                "zone o premi 🚫 Escludi zona per terminare"
+            )
+        self.status_bar.showMessage(msg)
 
     def _on_reset_exclusions(self):
         """Remove all excluded zones for the current page."""

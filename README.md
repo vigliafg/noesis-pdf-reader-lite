@@ -20,7 +20,9 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   salva la figura ritagliata nella tab 🖼️ Immagini.
 - Esclusione manuale di zone (🚫 Escludi zona): header, footer, immagini,
   didascalie… il motore adattativo riordina il testo rimanente. È aggiuntiva
-  al sistema automatico (che resta il default).
+  al sistema automatico (che resta il default). Se la zona disegnata contiene
+  un'immagine, la stessa trascinata la estrae anche nella tab 🖼️ Immagini
+  (escludi + estrai in un solo gesto).
 
 ## Installazione (venv dedicato)
 

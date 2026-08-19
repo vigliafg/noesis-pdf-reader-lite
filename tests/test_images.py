@@ -100,6 +100,53 @@ class RegionImageTests(unittest.TestCase):
             doc.close()
 
 
+class EmbeddedOnlyTests(unittest.TestCase):
+    """The exclude-zone gesture extracts embedded rasters only (no render
+    fallback), so excluding a text zone never adds a rendered PNG."""
+
+    def test_full_cover_returns_embedded(self):
+        doc, _page, _png = _make_doc_with_image()
+        try:
+            out = _region_image(doc, 0, (40, 40, 160, 160), 2.0, embedded_only=True)
+            self.assertIsNotNone(out)
+            data, ext = out
+            self.assertEqual(ext, "png")
+            self.assertTrue(data.startswith(PNG_SIG))
+        finally:
+            doc.close()
+
+    def test_partial_overlap_returns_embedded(self):
+        """A sloppy selection covering ≥50% of the image still captures it."""
+        doc, _page, _png = _make_doc_with_image()
+        try:
+            out = _region_image(doc, 0, (40, 40, 120, 160), 2.0, embedded_only=True)
+            self.assertIsNotNone(out)
+            data, ext = out
+            self.assertEqual(ext, "png")
+            self.assertTrue(data.startswith(PNG_SIG))
+        finally:
+            doc.close()
+
+    def test_text_zone_skips_render_fallback(self):
+        """A zone with no embedded image returns None in embedded_only mode,
+        even though the render fallback would produce a PNG."""
+        doc, _page, _png = _make_doc_with_image()
+        try:
+            # Empty corner of the page: render fallback would succeed,
+            # embedded-only must return None.
+            self.assertIsNone(
+                _region_image(doc, 0, (10, 10, 30, 30), 2.0, embedded_only=True)
+            )
+            # Sanity check: the same zone without embedded_only renders a PNG.
+            out = _region_image(doc, 0, (10, 10, 30, 30), 2.0)
+            self.assertIsNotNone(out)
+            data, ext = out
+            self.assertEqual(ext, "png")
+            self.assertTrue(data.startswith(PNG_SIG))
+        finally:
+            doc.close()
+
+
 class PngNormalizationTests(unittest.TestCase):
     def test_region_embedded_image_is_normalized_to_png(self):
         """The embedded path of ``_region_image`` must always return PNG."""
