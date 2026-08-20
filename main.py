@@ -23,6 +23,17 @@ import markdown as _md_lib
 # pipeline. Importa lazy alcuni helper puri da questo modulo.
 import layout_engine
 
+# Internazionalizzazione della sola interfaccia (dict T(), nessuna dipendenza
+# Qt): le stringhe del chrome UI passano da qui, la lingua si cambia al volo
+# e il config (lingue + preferenze) è gestito da questo modulo.
+from i18n import (
+    LANGUAGES, TRANSLATION_LANGUAGES, DEFAULTS, T,
+    get_language, set_language, get_source_lang, set_source_lang,
+    get_target_lang, set_target_lang,
+    flag_endonym, get_config, get_setting, set_setting,
+    init_config, save_config,
+)
+
 _MD_EXTENSIONS = ["tables", "fenced_code", "codehilite"]
 
 try:
@@ -40,7 +51,7 @@ except ImportError:
     _has_pymupdf = False
 
 from PyQt6.QtCore import (
-    Qt, QThread, QTimer, pyqtSignal, QUrl, QStandardPaths, QRectF,
+    Qt, QThread, QTimer, pyqtSignal, QUrl, QStandardPaths, QRectF, QLocale,
 )
 from PyQt6.QtGui import (
     QImage, QPixmap, QFont, QKeySequence, QShortcut,
@@ -48,6 +59,8 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QApplication,
+    QComboBox,
+    QSizePolicy,
     QHBoxLayout,
     QMainWindow,
     QSplitter,
@@ -57,12 +70,16 @@ from PyQt6.QtWidgets import (
     QToolBar,
     QFileDialog,
     QSpinBox,
+    QDoubleSpinBox,
     QPushButton,
+    QCheckBox,
     QDialog,
     QMessageBox,
     QStatusBar,
     QWidget,
     QVBoxLayout,
+    QFormLayout,
+    QGroupBox,
     QDockWidget,
     QTreeWidget,
     QTreeWidgetItem,
@@ -1216,6 +1233,36 @@ def translate_text_google(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  app data / i18n bootstrap (Qt helpers)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _app_data_base() -> Path:
+    """User-writable app-data dir (version-independent, survives updates)."""
+    base = QStandardPaths.writableLocation(
+        QStandardPaths.StandardLocation.AppDataLocation
+    )
+    if not base:
+        base = str(Path.home() / ".noesis-pdf-reader")
+    return Path(base)
+
+
+def _config_file_path() -> Path:
+    """Path of the UI-language config file (persists across versions)."""
+    return _app_data_base() / "config.json"
+
+
+def _detect_os_lang() -> str:
+    """Best-matching UI language for the OS locale, or 'it'."""
+    try:
+        name = QLocale.system().name()  # e.g. "fr_FR", "en-US", "C"
+    except Exception:
+        return "it"
+    code = name.split("_")[0].split("-")[0].lower()
+    return code if code in LANGUAGES else "it"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  widgets
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1264,7 +1311,8 @@ class PdfPageView(QGraphicsView):
         self._include_pen = QPen(QColor(92, 184, 92), 2, Qt.PenStyle.DashLine)
         self._include_brush = QBrush(QColor(92, 184, 92, 70))
 
-        self._show_message_text("Apri un PDF per iniziare")
+        self._start_hint = True  # retranslate() re-shows it only while idle
+        self._show_message_text(T("view.start_hint"))
 
     # ── scene management ──────────────────────────────────────────────
 
@@ -1295,8 +1343,10 @@ class PdfPageView(QGraphicsView):
         """Store the full-resolution pixmap and scale it to fit the view."""
         if pixmap is None:
             self._full_pixmap = None
-            self._show_message_text("(pagina non disponibile)")
+            self._start_hint = False
+            self._show_message_text(T("view.page_unavailable"))
             return
+        self._start_hint = False
         self._full_pixmap = pixmap
         self._clear_scene()
         self._pix_item = self._scene.addPixmap(pixmap)
@@ -1306,7 +1356,13 @@ class PdfPageView(QGraphicsView):
     def show_message(self, text: str):
         """Show a plain status message instead of a page (e.g. while loading)."""
         self._full_pixmap = None
+        self._start_hint = False
         self._show_message_text(text)
+
+    def retranslate(self):
+        """Re-apply UI strings after a language switch."""
+        if self._full_pixmap is None and self._start_hint:
+            self._show_message_text(T("view.start_hint"))
 
     # ── selection mode ───────────────────────────────────────────────────
 
@@ -1497,9 +1553,9 @@ class PdfPageView(QGraphicsView):
 class TextPanel(QTextEdit):
     """Right panel — shows extracted text, optionally rendered as Markdown/HTML."""
 
-    _HTML_CSS = """
+    _CSS_TEMPLATE = """
     <style>
-      body { font-family: 'Segoe UI', sans-serif; font-size: 13px;
+      body { font-family: 'Segoe UI', sans-serif; font-size: {size}px;
              color: #1a1a1a; line-height: 1.7; margin: 0; }
       h1 { font-size: 1.5em; border-bottom: 2px solid #4a90d9; padding-bottom: 4px; }
       h2 { font-size: 1.3em; color: #2c5f8a; margin-top: 1em; }
@@ -1526,23 +1582,37 @@ class TextPanel(QTextEdit):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._font_size = 12
         self.setReadOnly(True)
-        self.setFont(QFont("Segoe UI", 12))
+        self.setFont(QFont("Segoe UI", self._font_size))
         self.setStyleSheet(
             "QTextEdit { background: #ffffff; color: #1a1a1a; padding: 12px; }"
         )
+
+    def css(self) -> str:
+        """Current HTML stylesheet (font size interpolated).
+
+        ``replace`` instead of ``format``: the CSS itself contains braces.
+        """
+        return self._CSS_TEMPLATE.replace("{size}", str(self._font_size))
+
+    def set_font_size(self, px: int) -> None:
+        """Apply a font size (clamped 10–16 pt) to plain text and HTML."""
+        px = max(10, min(16, int(px)))
+        self._font_size = px
+        self.setFont(QFont("Segoe UI", px))
 
     def show_text(self, text: str, as_markdown: bool = True):
         """Display text, optionally rendering as Markdown → HTML."""
         if as_markdown:
             html_body = _md_lib.markdown(text, extensions=_MD_EXTENSIONS)
-            self.setHtml(self._HTML_CSS + html_body)
+            self.setHtml(self.css() + html_body)
         else:
             self.setPlainText(text)
 
     def show_html(self, html_body: str):
         """Display raw HTML with CSS styling."""
-        self.setHtml(self._HTML_CSS + html_body)
+        self.setHtml(self.css() + html_body)
 
 
 class TranslateThread(QThread):
@@ -1600,9 +1670,13 @@ class TranslatablePanel(QWidget):
         tab_layout.setContentsMargins(4, 2, 4, 2)
         tab_layout.setSpacing(2)
 
-        self._btn_original = QPushButton("📄 Originale")
-        self._btn_translated = QPushButton("🇮🇹 Italiano")
-        self._btn_images = QPushButton("🖼️ Immagini")
+        self._btn_original = QPushButton(T("tab.original"))
+        # La tab di traduzione mostra bandiera + nome della lingua di
+        # destinazione scelta (endonimo): es. "🇫🇷 Français", "🇩🇪 Deutsch".
+        self._target_lang: str = get_target_lang()
+        self._source_lang: str = get_source_lang()
+        self._btn_translated = QPushButton(flag_endonym(self._target_lang))
+        self._btn_images = QPushButton(T("tab.images"))
 
         tab_style = """
             QPushButton {
@@ -1630,10 +1704,10 @@ class TranslatablePanel(QWidget):
         tab_layout.addWidget(self._lbl_spinner)
 
         tab_layout.addStretch()
-        self._btn_original.setChecked(True)
 
         # ── Text panel ─────────────────────────────────────────────────
         self.text_panel = TextPanel()
+        self.text_panel.set_font_size(get_setting("font_size", 12))
 
         layout.addWidget(self._tab_bar)
         layout.addWidget(self.text_panel)
@@ -1651,10 +1725,15 @@ class TranslatablePanel(QWidget):
         self._page_text: str = ""          # the single text shown (auto or manual)
         self._translated_text: str = ""
         self._render_md: bool = True
-        self._page_translation_cache: dict[int, str] = {}
+        # Cache per (pagina, destinazione): cambiare la lingua di destinazione
+        # fa cache-miss naturale, senza invalidare nulla.
+        self._page_translation_cache: dict[tuple[int, str], str] = {}
         self._current_page: int = -1
         self._images: list[str] = []  # file:// URIs of manually captured regions
         self._thread: TranslateThread | None = None
+        # Thread sostituiti mentre erano ancora attivi: tenuti vivi finché non
+        # terminano (i loro risultati sono scartati dal guard di generazione).
+        self._retired_threads: list[TranslateThread] = []
         self._generation: int = 0
         self._cache_file: Path | None = None  # on-disk translation cache file
         self._doc_fingerprint: str = ""  # invalidates the cache if the PDF changes
@@ -1670,7 +1749,44 @@ class TranslatablePanel(QWidget):
         self._btn_translated.clicked.connect(self._on_show_translated)
         self._btn_images.clicked.connect(self._on_show_images)
 
+        # Riapri sull'ultima tab usata (se abilitato) — dopo che tutto lo
+        # stato e i pannelli esistono.
+        self._restore_initial_tab()
         self._rebuild_images_panel()
+
+    def _restore_initial_tab(self):
+        """Open the panel on the remembered tab (if enabled), else Originale."""
+        if get_setting("remember_tab", True):
+            last = get_setting("last_tab", "original")
+            if last == "translated":
+                self._set_active_tab(self._btn_translated)
+            elif last == "images":
+                self._set_active_tab(self._btn_images)
+            else:
+                self._set_active_tab(self._btn_original)
+        else:
+            self._set_active_tab(self._btn_original)
+
+    def retranslate(self):
+        """Re-apply tab labels after a language switch."""
+        self._btn_original.setText(T("tab.original"))
+        self._btn_translated.setText(flag_endonym(self._target_lang))
+        self._btn_images.setText(T("tab.images"))
+
+    def set_font_size(self, px: int) -> None:
+        """Forward the text font size to the inner panel."""
+        self.text_panel.set_font_size(px)
+
+    def set_translation_languages(self, src: str, dst: str) -> None:
+        """Apply new source/target languages; re-translate if the tab is active."""
+        src = src or "auto"
+        dst = dst or "it"
+        changed = src != self._source_lang or dst != self._target_lang
+        self._source_lang = src
+        self._target_lang = dst
+        self._btn_translated.setText(flag_endonym(self._target_lang))
+        if changed and self._btn_translated.isChecked():
+            self._schedule_translation()
 
     def show_text(
         self,
@@ -1712,6 +1828,16 @@ class TranslatablePanel(QWidget):
         else:
             self.images_panel.hide()
             self.text_panel.show()
+        if get_setting("remember_tab", True):
+            if active is self._btn_translated:
+                tab_id = "translated"
+            elif active is self._btn_images:
+                tab_id = "images"
+            else:
+                tab_id = "original"
+            if get_setting("last_tab", "") != tab_id:
+                set_setting("last_tab", tab_id)
+                save_config()
 
     def _on_show_original(self):
         self._set_active_tab(self._btn_original)
@@ -1728,7 +1854,8 @@ class TranslatablePanel(QWidget):
 
     def _maybe_show_translation(self):
         """Show the cached translation for the page, or schedule a new one."""
-        cached = self._page_translation_cache.get(self._current_page)
+        key = (self._current_page, self._target_lang)
+        cached = self._page_translation_cache.get(key)
         if self._current_page >= 0 and cached is not None:
             self._translated_text = cached
             self.text_panel.show_text(cached, as_markdown=self._render_md)
@@ -1738,14 +1865,25 @@ class TranslatablePanel(QWidget):
 
     def _schedule_translation(self):
         """Debounce: re-translate only after the user pauses drawing."""
-        self._lbl_spinner.setText("⏳ Traducendo...")
+        self._lbl_spinner.setText(T("status.translating"))
         self._pending_translation = True
         self._translate_timer.start()
 
     def _flush_translation(self):
         self._pending_translation = False
-        if self._btn_translated.isChecked():
-            self._start_translation()
+        if not self._btn_translated.isChecked():
+            return
+        key = (self._current_page, self._target_lang)
+        if self._current_page >= 0 and key in self._page_translation_cache:
+            # Debounce obsoleto: la pagina corrente è già tradotta per questa
+            # destinazione (es. sbirciata avanti e ritorno) → mostra la cache
+            # invece di ritradurre inutilmente.
+            self.text_panel.show_text(
+                self._page_translation_cache[key], as_markdown=self._render_md
+            )
+            self._lbl_spinner.setText("")
+            return
+        self._start_translation()
 
     def show_images(self, images: list[str]):
         """Set the current page's captured regions and activate the gallery tab."""
@@ -1763,10 +1901,7 @@ class TranslatablePanel(QWidget):
         lay.setSpacing(8)
 
         if not self._images:
-            hint = QLabel(
-                "Nessuna zona catturata.\n\n"
-                "Usa 🖱️ Seleziona zona per ritagliare una figura dalla pagina."
-            )
+            hint = QLabel(T("gallery.empty"))
             hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
             hint.setWordWrap(True)
             hint.setStyleSheet("color: #888; font-size: 14px; padding: 24px;")
@@ -1800,7 +1935,7 @@ class TranslatablePanel(QWidget):
         )
         thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
         thumb.setCursor(Qt.CursorShape.PointingHandCursor)
-        thumb.setToolTip("Clicca per ingrandire")
+        thumb.setToolTip(T("gallery.zoom_tip"))
         thumb.mousePressEvent = lambda _e, u=uri: self._show_image_full(u)
         v.addWidget(thumb)
 
@@ -1815,15 +1950,15 @@ class TranslatablePanel(QWidget):
             " border-radius: 4px; padding: 6px 12px; font-size: 12px; }"
             "QPushButton:hover { background: #3a7ab5; }"
         )
-        btn_save = QPushButton("💾 Salva")
+        btn_save = QPushButton(T("gallery.save"))
         btn_save.clicked.connect(lambda _=False, u=uri: self._save_image(u))
-        btn_copy = QPushButton("📋 Copia")
+        btn_copy = QPushButton(T("gallery.copy"))
         btn_copy.clicked.connect(lambda _=False, u=uri: self._copy_image(u))
         for b in (btn_save, btn_copy):
             b.setStyleSheet(btn_style)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             row.addWidget(b)
-        btn_remove = QPushButton("🗑️ Rimuovi")
+        btn_remove = QPushButton(T("gallery.remove"))
         btn_remove.clicked.connect(lambda _=False, u=uri: self._remove_image(u))
         btn_remove.setStyleSheet(
             "QPushButton { background: #d9534f; color: #fff; border: none;"
@@ -1854,19 +1989,19 @@ class TranslatablePanel(QWidget):
         img = QImage(QUrl(uri).toLocalFile())
         if not img.isNull():
             QApplication.clipboard().setImage(img)
-            self._lbl_spinner.setText("✅ Copiata")
+            self._lbl_spinner.setText(T("status.copied"))
 
     def _save_image(self, uri: str):
         src = str(QUrl(uri).toLocalFile())
         dest, _ = QFileDialog.getSaveFileName(
             self,
-            "Salva immagine",
+            T("gallery.save_dialog"),
             Path(src).name,
-            "PNG (*.png);;JPEG (*.jpg);;Tutti i file (*)",
+            T("gallery.save_filter"),
         )
         if dest:
             shutil.copyfile(src, dest)
-            self._lbl_spinner.setText("✅ Salvata")
+            self._lbl_spinner.setText(T("status.saved"))
 
     def _remove_image(self, uri: str):
         """Ask the main window to drop a captured image from the gallery."""
@@ -1875,7 +2010,7 @@ class TranslatablePanel(QWidget):
     def _start_translation(self):
         """Fire a background translation for the current page text."""
         text = self._page_text
-        self._lbl_spinner.setText("⏳ Traducendo...")
+        self._lbl_spinner.setText(T("status.translating"))
         self._generation += 1
 
         old = self._thread
@@ -1884,14 +2019,25 @@ class TranslatablePanel(QWidget):
                 old.result_ready.disconnect()
             except TypeError:
                 pass  # already disconnected
+            if old.isRunning():
+                # Non distruggere un thread ancora attivo: lo si ritira e si
+                # pulisce quando termina da solo.
+                self._retired_threads.append(old)
+                old.finished.connect(self._forget_retired_thread)
 
         thread = TranslateThread(
             text, generation=self._generation, kind="page",
-            source="en", target="it",
+            source=self._source_lang, target=self._target_lang,
         )
         thread.result_ready.connect(self._on_translation_done)
         self._thread = thread
         thread.start()
+
+    def _forget_retired_thread(self):
+        """Drop a retired thread from the keep-alive list once it finishes."""
+        thread = self.sender()
+        if thread in self._retired_threads:
+            self._retired_threads.remove(thread)
 
     def _on_translation_done(self, generation: int, kind: str, translated: str):
         """Slot: background translation finished."""
@@ -1901,9 +2047,9 @@ class TranslatablePanel(QWidget):
 
         self._translated_text = translated
 
-        # Cache per page
+        # Cache per (pagina, destinazione)
         if self._current_page >= 0:
-            self._page_translation_cache[self._current_page] = translated
+            self._page_translation_cache[(self._current_page, self._target_lang)] = translated
             self._save_disk_cache()
 
         # Show if the Italiano tab is active
@@ -1914,7 +2060,7 @@ class TranslatablePanel(QWidget):
 
     def show_html(self, html_body: str):
         """Forward to inner TextPanel."""
-        self.text_panel.setHtml(self.text_panel._HTML_CSS + html_body)
+        self.text_panel.setHtml(self.text_panel.css() + html_body)
 
     # ── persistent translation cache ───────────────────────────────────
 
@@ -1930,12 +2076,7 @@ class TranslatablePanel(QWidget):
             self._doc_fingerprint = f"{st.st_size}-{st.st_mtime_ns}"
         except Exception:
             return
-        base = QStandardPaths.writableLocation(
-            QStandardPaths.StandardLocation.AppDataLocation
-        )
-        if not base:
-            base = str(Path.home() / ".noesis-pdf-reader")
-        cache_dir = Path(base) / "translation"
+        cache_dir = _app_data_base() / "translation"
         try:
             cache_dir.mkdir(parents=True, exist_ok=True)
         except Exception:
@@ -1960,21 +2101,34 @@ class TranslatablePanel(QWidget):
             except (TypeError, ValueError):
                 continue
             if isinstance(value, str):
-                self._page_translation_cache[page] = value
+                # vecchio formato {page: testo}: la destinazione era sempre it
+                self._page_translation_cache[(page, "it")] = value
             elif isinstance(value, dict):
-                # migrazione dal vecchio formato {origin, cleaned}: il testo
-                # manuale ("cleaned") è la vista unica più fedele.
-                migrated = value.get("cleaned") or value.get("origin")
-                if isinstance(migrated, str):
-                    self._page_translation_cache[page] = migrated
+                if "origin" in value or "cleaned" in value:
+                    # formato pre-v2 {origin, cleaned} → migra a destinazione it
+                    migrated = value.get("cleaned") or value.get("origin")
+                    if isinstance(migrated, str):
+                        self._page_translation_cache[(page, "it")] = migrated
+                else:
+                    # formato v2 {page: {target: testo}}
+                    for tgt, txt in value.items():
+                        if (
+                            isinstance(txt, str)
+                            and tgt in TRANSLATION_LANGUAGES
+                            and tgt != "auto"
+                        ):
+                            self._page_translation_cache[(page, tgt)] = txt
 
     def _save_disk_cache(self):
         """Persist the in-memory translation cache to disk."""
         if self._cache_file is None:
             return
+        pages: dict[str, dict[str, str]] = {}
+        for (page, tgt), txt in self._page_translation_cache.items():
+            pages.setdefault(str(page), {})[tgt] = txt
         payload = {
             "fingerprint": self._doc_fingerprint,
-            "pages": {str(k): v for k, v in self._page_translation_cache.items()},
+            "pages": pages,
         }
         try:
             self._cache_file.write_text(
@@ -1988,13 +2142,18 @@ class TranslatablePanel(QWidget):
         self._page_translation_cache.clear()
 
     def invalidate_page(self, page_num: int):
-        """Drop the cached translation for one page (its content changed)."""
-        self._page_translation_cache.pop(page_num, None)
+        """Drop the cached translations for one page (its content changed)."""
+        for k in [k for k in self._page_translation_cache if k[0] == page_num]:
+            del self._page_translation_cache[k]
         self._save_disk_cache()
 
     def shutdown(self):
         """Wait for any in-flight translation before the app closes."""
         self._translate_timer.stop()
+        for t in self._retired_threads:
+            if t.isRunning():
+                t.wait(3000)
+        self._retired_threads.clear()
         if self._thread is not None and self._thread.isRunning():
             self._thread.wait(5000)
         self._save_disk_cache()
@@ -2043,8 +2202,10 @@ class TocPanel(QWidget):
             page_idx = page - 1  # pymupdf is 1-based
             if page_idx < 0:
                 continue
-            title = (title or "").strip() or "(senza titolo)"
-            item = QTreeWidgetItem([f"{title}  ·  p. {page_idx + 1}"])
+            title = (title or "").strip() or T("toc.no_title")
+            item = QTreeWidgetItem(
+                [T("toc.page_fmt", title=title, page=page_idx + 1)]
+            )
             item.setData(0, Qt.ItemDataRole.UserRole, page_idx)
 
             level = max(0, int(level))
@@ -2088,6 +2249,189 @@ class TocPanel(QWidget):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  settings dialog
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+_SETTINGS_QSS = """
+QDialog { background: #2b2b2b; }
+QGroupBox { color: #eee; border: 1px solid #555; border-radius: 6px;
+            margin-top: 10px; padding-top: 8px; font-size: 13px; }
+QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }
+QLabel { color: #ccc; font-size: 13px; }
+QComboBox, QSpinBox, QDoubleSpinBox {
+    background: #444; color: #eee; border: 1px solid #555;
+    border-radius: 4px; padding: 4px 8px; font-size: 13px;
+    min-width: 220px;
+}
+QComboBox QAbstractItemView { background: #444; color: #eee;
+    selection-background-color: #3a6bc5; selection-color: #fff; }
+QCheckBox { color: #ddd; font-size: 13px; spacing: 8px; }
+QPushButton {
+    background: #444; color: #eee; border: 1px solid #555;
+    border-radius: 4px; padding: 6px 18px; font-size: 13px;
+}
+QPushButton:hover { background: #555; }
+QPushButton:pressed { background: #666; }
+"""
+
+
+class SettingsDialog(QDialog):
+    """Menu di configurazione: lingua UI, lingue traduzione, preferenze.
+
+    Ogni stringa visibile passa da T(), quindi il dialogo è mostrato nella
+    lingua UI corrente. Cambiare la lingua UI dentro il dialogo fa un'anteprima
+    dal vivo (ri-traduce solo le label del dialogo); Annulla ripristina la
+    lingua originale senza toccare il MainWindow.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._orig_ui_lang = get_language()
+        self._cfg = get_config()
+
+        self.setWindowTitle(T("settings.title"))
+        self.setMinimumWidth(480)
+        self.setStyleSheet(_SETTINGS_QSS)
+
+        root = QVBoxLayout(self)
+        root.setSpacing(10)
+
+        # ── Lingua ──────────────────────────────────────────────────────
+        self._box_lang = QGroupBox(T("settings.group.lang"))
+        lang_form = QFormLayout(self._box_lang)
+        self._lbl_ui = QLabel(T("settings.lang.ui"))
+        self._ui_combo = QComboBox()
+        for code, name in LANGUAGES.items():
+            self._ui_combo.addItem(name, code)
+        lang_form.addRow(self._lbl_ui, self._ui_combo)
+        self._lbl_src = QLabel(T("settings.lang.source"))
+        self._src_combo = QComboBox()
+        for code, (flag, name) in TRANSLATION_LANGUAGES.items():
+            self._src_combo.addItem(f"{flag} {name}", code)
+        lang_form.addRow(self._lbl_src, self._src_combo)
+        self._lbl_dst = QLabel(T("settings.lang.target"))
+        self._dst_combo = QComboBox()
+        for code, (flag, name) in TRANSLATION_LANGUAGES.items():
+            if code == "auto":
+                continue
+            self._dst_combo.addItem(f"{flag} {name}", code)
+        lang_form.addRow(self._lbl_dst, self._dst_combo)
+        root.addWidget(self._box_lang)
+
+        # ── Testo ───────────────────────────────────────────────────────
+        self._box_text = QGroupBox(T("settings.group.text"))
+        text_form = QFormLayout(self._box_text)
+        self._lbl_font = QLabel(T("settings.text.font"))
+        self._font_spin = QSpinBox()
+        self._font_spin.setRange(10, 16)
+        text_form.addRow(self._lbl_font, self._font_spin)
+        self._md_check = QCheckBox(T("settings.text.md"))
+        text_form.addRow(self._md_check)
+        self._header_check = QCheckBox(T("settings.text.header"))
+        text_form.addRow(self._header_check)
+        root.addWidget(self._box_text)
+
+        # ── Visualizzazione ─────────────────────────────────────────────
+        self._box_view = QGroupBox(T("settings.group.view"))
+        view_form = QFormLayout(self._box_view)
+        self._lbl_zoom = QLabel(T("settings.view.zoom"))
+        self._zoom_spin = QDoubleSpinBox()
+        self._zoom_spin.setRange(0.5, 4.0)
+        self._zoom_spin.setSingleStep(0.25)
+        self._zoom_spin.setDecimals(2)
+        view_form.addRow(self._lbl_zoom, self._zoom_spin)
+        root.addWidget(self._box_view)
+
+        # ── Comportamento ───────────────────────────────────────────────
+        self._box_beh = QGroupBox(T("settings.group.behavior"))
+        beh_form = QFormLayout(self._box_beh)
+        self._resume_check = QCheckBox(T("settings.behavior.resume"))
+        beh_form.addRow(self._resume_check)
+        self._tab_check = QCheckBox(T("settings.behavior.tab"))
+        beh_form.addRow(self._tab_check)
+        root.addWidget(self._box_beh)
+
+        # ── Pulsanti ────────────────────────────────────────────────────
+        btns = QHBoxLayout()
+        btns.addStretch(1)
+        self._btn_ok = QPushButton(T("settings.ok"))
+        self._btn_ok.clicked.connect(self.accept)
+        self._btn_cancel = QPushButton(T("settings.cancel"))
+        self._btn_cancel.clicked.connect(self.reject)
+        for b in (self._btn_ok, self._btn_cancel):
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            btns.addWidget(b)
+        root.addLayout(btns)
+
+        self._load_values()
+
+        # Anteprima lingua dal vivo: ri-traduce SOLO le label del dialogo.
+        self._ui_combo.currentIndexChanged.connect(self._on_ui_preview)
+
+    def _load_values(self):
+        """Populate the widgets from the current config (bozza)."""
+        cfg = self._cfg
+        idx = self._ui_combo.findData(cfg.get("lang", "it"))
+        self._ui_combo.setCurrentIndex(max(0, idx))
+        idx = self._src_combo.findData(cfg.get("src_lang", "auto"))
+        self._src_combo.setCurrentIndex(max(0, idx))
+        idx = self._dst_combo.findData(cfg.get("dst_lang", "it"))
+        self._dst_combo.setCurrentIndex(max(0, idx))
+        self._font_spin.setValue(int(cfg.get("font_size", 12)))
+        self._md_check.setChecked(bool(cfg.get("render_md", True)))
+        self._header_check.setChecked(bool(cfg.get("show_header", True)))
+        self._zoom_spin.setValue(float(cfg.get("zoom", 3.0)))
+        self._resume_check.setChecked(bool(cfg.get("resume_last_page", True)))
+        self._tab_check.setChecked(bool(cfg.get("remember_tab", True)))
+
+    def _on_ui_preview(self, index: int):
+        """Live preview: re-label the dialog when the UI language changes."""
+        code = self._ui_combo.itemData(index)
+        if code and code != get_language():
+            set_language(code)
+            self.retranslate()
+
+    def retranslate(self):
+        """Re-apply the dialog's own labels (names in combos are endonyms)."""
+        self.setWindowTitle(T("settings.title"))
+        self._box_lang.setTitle(T("settings.group.lang"))
+        self._box_text.setTitle(T("settings.group.text"))
+        self._box_view.setTitle(T("settings.group.view"))
+        self._box_beh.setTitle(T("settings.group.behavior"))
+        self._lbl_ui.setText(T("settings.lang.ui"))
+        self._lbl_src.setText(T("settings.lang.source"))
+        self._lbl_dst.setText(T("settings.lang.target"))
+        self._lbl_font.setText(T("settings.text.font"))
+        self._md_check.setText(T("settings.text.md"))
+        self._header_check.setText(T("settings.text.header"))
+        self._lbl_zoom.setText(T("settings.view.zoom"))
+        self._resume_check.setText(T("settings.behavior.resume"))
+        self._tab_check.setText(T("settings.behavior.tab"))
+        self._btn_ok.setText(T("settings.ok"))
+        self._btn_cancel.setText(T("settings.cancel"))
+
+    def reject(self):
+        """Cancel: restore the original UI language (main window untouched)."""
+        set_language(self._orig_ui_lang)
+        super().reject()
+
+    def values(self) -> dict:
+        """Return the dialog choices (applied by MainWindow on OK)."""
+        return {
+            "lang": self._ui_combo.currentData() or get_language(),
+            "src_lang": self._src_combo.currentData() or "auto",
+            "dst_lang": self._dst_combo.currentData() or "it",
+            "zoom": float(self._zoom_spin.value()),
+            "font_size": int(self._font_spin.value()),
+            "render_md": bool(self._md_check.isChecked()),
+            "show_header": bool(self._header_check.isChecked()),
+            "resume_last_page": bool(self._resume_check.isChecked()),
+            "remember_tab": bool(self._tab_check.isChecked()),
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  main window
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -2102,6 +2446,24 @@ class MainWindow(QMainWindow):
         self.resize(1400, 900)
         self.setMinimumSize(800, 600)
 
+        # Preferenze dal config (inizializzato in main() prima della UI).
+        self._render_scale: float = float(get_setting("zoom", 3.0))
+        self._render_md: bool = bool(get_setting("render_md", True))
+        self._show_header: bool = bool(get_setting("show_header", True))
+        self._remember_tab: bool = bool(get_setting("remember_tab", True))
+        self._resume_last_page: bool = bool(get_setting("resume_last_page", True))
+        self._last_result: tuple[str, str, float] | None = None  # (text, label, elapsed)
+        self._last_elapsed: float = 0.0
+        # Lingua con cui le stringhe dei widget sono state applicate: serve a
+        # capire se serve una ri-traduzione dopo l'OK delle Impostazioni (la
+        # anteprima del dialogo può aver già cambiato la lingua globale).
+        self._ui_lang_applied: str = get_language()
+        # Persistenza dell'ultima pagina con debounce (2 s dopo l'ultimo cambio).
+        self._last_page_timer = QTimer(self)
+        self._last_page_timer.setSingleShot(True)
+        self._last_page_timer.setInterval(2000)
+        self._last_page_timer.timeout.connect(save_config)
+
         # State
         self._pdf_path: Path | None = None
         self._current_page: int = 0
@@ -2111,8 +2473,6 @@ class MainWindow(QMainWindow):
         self._current_images: list[str] = []  # captured regions, kept until the book closes
         self._excluded_zones: dict[int, list[tuple]] = {}  # page → excluded PDF rects
         self._inclusion_zones: dict[int, list[tuple]] = {}  # page → numbered inclusion rects
-        self._render_scale: float = 3.0
-        self._render_md: bool = True  # toggle Markdown rendering
 
         # Central widget
         central = QWidget()
@@ -2127,7 +2487,7 @@ class MainWindow(QMainWindow):
         # TOC dock (left, dockable)
         self.toc_panel = TocPanel()
         self.toc_panel.page_selected.connect(self._goto_toc_page)
-        self.toc_dock = QDockWidget("Indice", self)
+        self.toc_dock = QDockWidget(T("dock.toc"), self)
         self.toc_dock.setObjectName("tocDock")
         self.toc_dock.setAllowedAreas(
             Qt.DockWidgetArea.LeftDockWidgetArea
@@ -2170,10 +2530,7 @@ class MainWindow(QMainWindow):
         # Status bar
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage(
-            "Pronto — apri un file PDF con 📂 Apri PDF  |  "
-            "Backend testo: PyMuPDF4LLM ⚡"
-        )
+        self.status_bar.showMessage(T("status.ready"))
 
         # Shortcuts
         QShortcut(QKeySequence(Qt.Key.Key_Right), self, self._next_page)
@@ -2218,20 +2575,20 @@ class MainWindow(QMainWindow):
     # ── toolbar ───────────────────────────────────────────────────────────
 
     def _build_toolbar(self, parent_layout: QVBoxLayout):
-        bar = QToolBar("Navigazione")
+        bar = QToolBar(T("toolbar.nav"))
         bar.setMovable(False)
         parent_layout.addWidget(bar)
 
         # Apri
-        btn_open = QPushButton("📂 Apri PDF")
-        btn_open.clicked.connect(self._on_open)
-        bar.addWidget(btn_open)
+        self.btn_open = QPushButton(T("toolbar.open"))
+        self.btn_open.clicked.connect(self._on_open)
+        bar.addWidget(self.btn_open)
 
         # TOC toggle
-        self.btn_toc = QPushButton("📑 Indice")
+        self.btn_toc = QPushButton(T("toolbar.toc"))
         self.btn_toc.setCheckable(True)
         self.btn_toc.setChecked(True)
-        self.btn_toc.setToolTip("Mostra/nascondi l'indice (TOC) del PDF")
+        self.btn_toc.setToolTip(T("toolbar.toc.tip"))
         self.btn_toc.clicked.connect(
             lambda checked: self.toc_dock.setVisible(checked)
         )
@@ -2240,7 +2597,7 @@ class MainWindow(QMainWindow):
         bar.addSeparator()
 
         # Prev
-        self.btn_prev = QPushButton("◀ Prec.")
+        self.btn_prev = QPushButton(T("toolbar.prev"))
         self.btn_prev.clicked.connect(self._prev_page)
         bar.addWidget(self.btn_prev)
 
@@ -2257,12 +2614,13 @@ class MainWindow(QMainWindow):
         self.page_spin.setEnabled(False)
         bar.addWidget(self.page_spin)
 
-        bar.addWidget(QLabel("di"))
+        self.lbl_of = QLabel(T("toolbar.of"))
+        bar.addWidget(self.lbl_of)
         self.lbl_total = QLabel("0")
         bar.addWidget(self.lbl_total)
 
         # Next
-        self.btn_next = QPushButton("Succ. ▶")
+        self.btn_next = QPushButton(T("toolbar.next"))
         self.btn_next.clicked.connect(self._next_page)
         bar.addWidget(self.btn_next)
 
@@ -2270,15 +2628,15 @@ class MainWindow(QMainWindow):
 
         # Zoom
         self.btn_zoom_out = QPushButton("🔍−")
-        self.btn_zoom_out.setToolTip("Riduci zoom (Ctrl+-)")
+        self.btn_zoom_out.setToolTip(T("toolbar.zoom_out.tip"))
         self.btn_zoom_out.clicked.connect(self._zoom_out)
         bar.addWidget(self.btn_zoom_out)
 
-        self.zoom_label = QLabel("Scala: 3.0x")
+        self.zoom_label = QLabel(T("toolbar.zoom.scale", x="3.0"))
         bar.addWidget(self.zoom_label)
 
         self.btn_zoom_in = QPushButton("🔍+")
-        self.btn_zoom_in.setToolTip("Aumenta zoom (Ctrl++)")
+        self.btn_zoom_in.setToolTip(T("toolbar.zoom_in.tip"))
         self.btn_zoom_in.clicked.connect(self._zoom_in)
         bar.addWidget(self.btn_zoom_in)
 
@@ -2287,59 +2645,55 @@ class MainWindow(QMainWindow):
         bar.addSeparator()
 
         # Markdown rendering toggle
-        self.btn_md_toggle = QPushButton("📝 MD ✓")
-        self.btn_md_toggle.setToolTip(
-            "Attiva/disattiva rendering Markdown → HTML\n"
-            "(Ctrl+M per toggle)"
-        )
+        self.btn_md_toggle = QPushButton(T("toolbar.md.on"))
+        self.btn_md_toggle.setToolTip(T("toolbar.md.tip"))
         self.btn_md_toggle.setCheckable(True)
-        self.btn_md_toggle.setChecked(True)
+        self.btn_md_toggle.setChecked(self._render_md)
         self.btn_md_toggle.clicked.connect(self._toggle_markdown)
         bar.addWidget(self.btn_md_toggle)
 
+        bar.addSeparator()
+
+        # Impostazioni (lingua UI, lingue traduzione, preferenze) — spinto a
+        # destra da uno spacer espanso. Il cambio lingua UI avviene SOLO qui.
+        _spacer = QWidget()
+        _spacer.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+        )
+        bar.addWidget(_spacer)
+        self.btn_settings = QPushButton(T("settings.button"))
+        self.btn_settings.setToolTip(T("settings.button.tip"))
+        self.btn_settings.clicked.connect(self._on_open_settings)
+        bar.addWidget(self.btn_settings)
+
     def _build_page_toolbar(self):
         """Mini toolbar shown above the PDF page viewer (left panel)."""
-        bar = QToolBar("Pagina")
+        bar = QToolBar(T("page_toolbar.title"))
         bar.setMovable(False)
 
         # Region selection (extract the image under a mouse-drawn rectangle)
-        self.btn_select_region = QPushButton("🖱️ Seleziona zona")
+        self.btn_select_region = QPushButton(T("page_toolbar.select"))
         self.btn_select_region.setCheckable(True)
-        self.btn_select_region.setToolTip(
-            "Trascina col mouse una zona della pagina\n"
-            "per estrarne l'immagine nella tab 🖼️ Immagini"
-        )
+        self.btn_select_region.setToolTip(T("page_toolbar.select.tip"))
         self.btn_select_region.clicked.connect(self._on_select_region_toggled)
         bar.addWidget(self.btn_select_region)
 
         # Zone exclusion (manual cleaning fed to the adaptive engine)
-        self.btn_exclude = QPushButton("🚫 Escludi zona")
+        self.btn_exclude = QPushButton(T("page_toolbar.exclude"))
         self.btn_exclude.setCheckable(True)
-        self.btn_exclude.setToolTip(
-            "Trascina col mouse una zona (header, footer, immagine,\n"
-            "didascalia…) per escluderla: il motore adattativo riordina\n"
-            "il testo rimanente. È aggiuntivo al sistema automatico.\n\n"
-            "Se la zona contiene un'immagine, viene estratta anche nella\n"
-            "tab 🖼️ Immagini (escludi + estrai in un solo gesto)."
-        )
+        self.btn_exclude.setToolTip(T("page_toolbar.exclude.tip"))
         self.btn_exclude.clicked.connect(self._on_exclude_toggled)
         bar.addWidget(self.btn_exclude)
 
         # Zone inclusion (green): numbered reading-order boxes
-        self.btn_include = QPushButton("🟩 Includi zona")
+        self.btn_include = QPushButton(T("page_toolbar.include"))
         self.btn_include.setCheckable(True)
-        self.btn_include.setToolTip(
-            "Trascina col mouse i box verdi nell'ordine di lettura che vuoi:\n"
-            "il testo verrà ricostruito seguendo la numerazione (1, 2, 3…).\n"
-            "Un box verde = una colonna/regione di lettura."
-        )
+        self.btn_include.setToolTip(T("page_toolbar.include.tip"))
         self.btn_include.clicked.connect(self._on_include_toggled)
         bar.addWidget(self.btn_include)
 
-        self.btn_reset_zones = QPushButton("🧹 Reset zone")
-        self.btn_reset_zones.setToolTip(
-            "Rimuove tutte le zone (rosse e verdi) dalla pagina corrente"
-        )
+        self.btn_reset_zones = QPushButton(T("page_toolbar.reset"))
+        self.btn_reset_zones.setToolTip(T("page_toolbar.reset.tip"))
         self.btn_reset_zones.clicked.connect(self._on_reset_zones)
         bar.addWidget(self.btn_reset_zones)
         return bar
@@ -2362,19 +2716,32 @@ class MainWindow(QMainWindow):
         if not self._pdf_path:
             return 0.0
         text, label, elapsed = self._extract_text(page_num)
-        self._display_text(
-            self._extraction_header(text, elapsed, label) + text,
-            page_num=page_num,
-        )
+        self._last_result = (text, label, elapsed)
+        self._display_last_result()
         return elapsed
+
+    def _display_last_result(self):
+        """Re-display the stored extraction (header only if enabled).
+
+        Used after a language/settings change: no re-extraction needed.
+        """
+        if self._last_result is None:
+            return
+        text, label, elapsed = self._last_result
+        body = text
+        if self._show_header:
+            body = self._extraction_header(text, elapsed, label) + text
+        self._display_text(body, page_num=self._current_page)
 
     def _toggle_markdown(self):
         """Toggle Markdown rendering on/off and refresh display."""
         self._render_md = not self._render_md
         if self._render_md:
-            self.btn_md_toggle.setText("📝 MD ✓")
+            self.btn_md_toggle.setText(T("toolbar.md.on"))
         else:
-            self.btn_md_toggle.setText("📝 Plain")
+            self.btn_md_toggle.setText(T("toolbar.md.plain"))
+        set_setting("render_md", self._render_md)
+        save_config()
         # Re-render current text
         if self._mupdf_doc is not None and self._page_count > 0 and self._pdf_path:
             self._extract_and_display(self._current_page)
@@ -2394,10 +2761,10 @@ class MainWindow(QMainWindow):
         include = tuple(self._inclusion_zones.get(page_num, ()))
         if include or exclude:
             text = self._apply_engine(raw, page_num, exclude=exclude, include=include)
-            label = "Zone manuali"
+            label = "manual"
         else:
             text = self._apply_engine(raw, page_num)
-            label = "Engine adattativo"
+            label = "auto"
         elapsed = time.perf_counter() - t0
         return text, label, elapsed
 
@@ -2406,12 +2773,12 @@ class MainWindow(QMainWindow):
     def _extract_pymupdf4llm(self, page_num: int) -> str:
         """PyMuPDF4LLM: blazing fast, native Markdown with tables."""
         if not _has_pymupdf4llm:
-            return "(pymupdf4llm non installato — esegui: pip install pymupdf4llm)"
+            return T("extract.no_pymupdf4llm")
         try:
             md = pymupdf4llm.to_markdown(str(self._pdf_path), pages=[page_num])
-            return md.strip() or "(nessun testo estraibile su questa pagina)"
+            return md.strip() or T("extract.empty_page")
         except Exception as e:
-            return f"(errore pymupdf4llm: {e})"
+            return T("extract.error", e=e)
 
     # ── image extraction (manual region, PyMuPDF) ───────────────────────
 
@@ -2452,14 +2819,12 @@ class MainWindow(QMainWindow):
         clip = (x0 / scale, y0 / scale, x1 / scale, y1 / scale)
         uri = self._extract_image_region(self._current_page, clip)
         if uri is None:
-            self.status_bar.showMessage(
-                "Nessuna immagine estraibile dalla zona selezionata"
-            )
+            self.status_bar.showMessage(T("status.no_image"))
             return
         self._current_images.append(uri)  # new captures accumulate in the gallery
         self.text_panel.show_images(self._current_images)
         name = Path(QUrl(uri).toLocalFile()).name
-        self.status_bar.showMessage(f"Immagine estratta dalla zona: {name}")
+        self.status_bar.showMessage(T("status.image_extracted", name=name))
 
     def _on_image_removed(self, uri: str):
         """Drop a captured image from the gallery and delete its file."""
@@ -2536,19 +2901,13 @@ class MainWindow(QMainWindow):
         self.text_panel.invalidate_page(self._current_page)
         self._refresh_current_page_text()
 
-        msg = (
-            f"Zona esclusa ({len(zones)} sulla pagina) — trascina altre zone "
-            "o premi 🚫 Escludi zona per terminare"
-        )
+        msg = T("status.zone_excluded", count=len(zones))
         uri = self._extract_image_region(self._current_page, rect, embedded_only=True)
         if uri is not None:
             self._current_images.append(uri)
             self.text_panel.show_images(self._current_images)
             name = Path(QUrl(uri).toLocalFile()).name
-            msg = (
-                f"Zona esclusa e immagine estratta ({name}) — trascina altre "
-                "zone o premi 🚫 Escludi zona per terminare"
-            )
+            msg = T("status.zone_excluded_image", name=name)
         self.status_bar.showMessage(msg)
 
     def _on_region_included(self, x0: float, y0: float, x1: float, y1: float):
@@ -2570,10 +2929,7 @@ class MainWindow(QMainWindow):
         self.pdf_view.show_inclusion_zones(self._scene_inclusions(self._current_page))
         self.text_panel.invalidate_page(self._current_page)
         self._refresh_current_page_text()
-        self.status_bar.showMessage(
-            f"Zona inclusa (n. {len(zones)}) — trascina il prossimo box "
-            "nell'ordine di lettura o premi 🟩 Includi zona per terminare"
-        )
+        self.status_bar.showMessage(T("status.zone_included", count=len(zones)))
 
     def _on_reset_zones(self):
         """Remove all zones (exclusions + inclusions) for the current page."""
@@ -2583,7 +2939,7 @@ class MainWindow(QMainWindow):
         self.pdf_view.show_inclusion_zones([])
         self.text_panel.invalidate_page(self._current_page)
         self._refresh_current_page_text()
-        self.status_bar.showMessage("Zone rimosse per questa pagina")
+        self.status_bar.showMessage(T("status.zones_reset"))
 
     def _scene_exclusions(self, page_num: int) -> list[tuple]:
         """Convert the page's excluded zones (PDF points) to scene pixels."""
@@ -2610,12 +2966,7 @@ class MainWindow(QMainWindow):
     def _get_images_dir(self) -> Path:
         """Return (creating on first use) the per-document figures directory."""
         if self._images_dir is None:
-            base = QStandardPaths.writableLocation(
-                QStandardPaths.StandardLocation.AppDataLocation
-            )
-            if not base:
-                base = str(Path.home() / ".noesis-pdf-reader")
-            self._images_dir = Path(base) / "images" / self._pdf_path.stem
+            self._images_dir = _app_data_base() / "images" / self._pdf_path.stem
         self._images_dir.mkdir(parents=True, exist_ok=True)
         return self._images_dir
 
@@ -2627,6 +2978,7 @@ class MainWindow(QMainWindow):
         count = self._page_count
         page_num = max(0, min(page_num, count - 1))
         self._current_page = page_num
+        self._remember_last_page(page_num)
 
         # Render left
         self._display_page(page_num)
@@ -2641,13 +2993,35 @@ class MainWindow(QMainWindow):
         self.page_spin.setValue(page_num + 1)
         self.page_spin.blockSignals(False)
 
-        self.status_bar.showMessage(
-            f"Pagina {page_num + 1} di {count}  —  {self._pdf_path.name}"
-            f"  |  Testo: PyMuPDF4LLM ⚡ ({elapsed*1000:.0f} ms)"
-        )
+        self._last_elapsed = elapsed
+        self._show_page_status(elapsed)
 
         # Sync TOC highlight
         self.toc_panel.select_page(page_num)
+
+    def _remember_last_page(self, page_num: int):
+        """Track the current page per document; persist with a 2 s debounce."""
+        if not self._resume_last_page or not self._pdf_path:
+            return
+        pages = dict(get_setting("last_pages", {}) or {})
+        pages[self._pdf_path.name] = int(page_num)
+        set_setting("last_pages", pages)
+        self._last_page_timer.start()
+
+    def _show_page_status(self, elapsed: float = 0.0):
+        """Status-bar message for the current page (or the ready hint)."""
+        if not self._pdf_path:
+            self.status_bar.showMessage(T("status.ready"))
+            return
+        self.status_bar.showMessage(
+            T(
+                "status.page",
+                page=self._current_page + 1,
+                total=self._page_count,
+                name=self._pdf_path.name,
+                ms=f"{elapsed*1000:.0f}",
+            )
+        )
 
     def _next_page(self):
         self._set_page(self._current_page + 1)
@@ -2662,13 +3036,109 @@ class MainWindow(QMainWindow):
         """Navigate to a page selected from the TOC."""
         self._set_page(page_idx)
 
-    def _extraction_header(self, text: str, elapsed: float, label: str = "Engine adattativo") -> str:
-        """Build the header line shown above the extracted text."""
-        return (
-            f"── Backend: PyMuPDF4LLM ⚡"
-            f"  │  {elapsed*1000:.1f} ms"
-            f"  │  {len(text)} caratteri"
-            f"  │  Fix: {label} ──\n\n"
+    # ── settings dialog ────────────────────────────────────────────────────
+
+    def _on_open_settings(self):
+        """Open the config dialog; apply on OK."""
+        dlg = SettingsDialog(self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._apply_settings(dlg.values())
+
+    def _apply_settings(self, values: dict):
+        """Apply the settings dialog choices (languages + preferences)."""
+        ui_changed = values.get("lang") != self._ui_lang_applied
+        src = values.get("src_lang", get_source_lang())
+        dst = values.get("dst_lang", get_target_lang())
+        langs_changed = src != get_source_lang() or dst != get_target_lang()
+
+        if values.get("lang") in LANGUAGES:
+            set_language(values["lang"])
+        for key in ("zoom", "font_size", "render_md", "show_header",
+                    "resume_last_page", "remember_tab"):
+            if key in values:
+                set_setting(key, values[key])
+        set_source_lang(src)   # setters validati (auto solo in sorgente)
+        set_target_lang(dst)
+        save_config()
+
+        # Applicazione immediata delle preferenze
+        zoom = float(values.get("zoom", self._render_scale))
+        if abs(zoom - self._render_scale) > 1e-9:
+            self._render_scale = zoom
+            self._update_zoom()
+        self._render_md = bool(values.get("render_md", self._render_md))
+        self._show_header = bool(values.get("show_header", self._show_header))
+        self._resume_last_page = bool(
+            values.get("resume_last_page", self._resume_last_page)
+        )
+        self._remember_tab = bool(values.get("remember_tab", self._remember_tab))
+        self.btn_md_toggle.setChecked(self._render_md)
+        self.btn_md_toggle.setText(
+            T("toolbar.md.on") if self._render_md else T("toolbar.md.plain")
+        )
+        self.text_panel.set_font_size(int(values.get("font_size", 12)))
+        self.text_panel.set_translation_languages(src, dst)
+
+        if ui_changed:
+            self._retranslate_all()
+        else:
+            self._display_last_result()  # header on/off + nuovo font
+        if langs_changed and self.text_panel._btn_translated.isChecked():
+            self.text_panel._maybe_show_translation()
+
+    def _retranslate_all(self):
+        """Re-apply every UI string after a language switch."""
+        self.retranslate()
+        self.text_panel.retranslate()
+        if self._mupdf_doc is not None:
+            # Il TOC riporta "(senza titolo)" e il suffisso "p." per pagina:
+            # ricostruirlo è economico e lo allinea alla lingua attiva.
+            self.toc_panel.build_toc(self._mupdf_doc)
+        self._display_last_result()
+        self._show_page_status(self._last_elapsed)
+        self._ui_lang_applied = get_language()
+
+    def retranslate(self):
+        """Re-apply the MainWindow's own chrome strings."""
+        self.btn_settings.setText(T("settings.button"))
+        self.btn_settings.setToolTip(T("settings.button.tip"))
+        self.btn_open.setText(T("toolbar.open"))
+        self.btn_toc.setText(T("toolbar.toc"))
+        self.btn_toc.setToolTip(T("toolbar.toc.tip"))
+        self.btn_prev.setText(T("toolbar.prev"))
+        self.btn_next.setText(T("toolbar.next"))
+        self.lbl_of.setText(T("toolbar.of"))
+        self.btn_zoom_out.setToolTip(T("toolbar.zoom_out.tip"))
+        self.btn_zoom_in.setToolTip(T("toolbar.zoom_in.tip"))
+        self.zoom_label.setText(
+            T("toolbar.zoom.scale", x=f"{self._render_scale:.2f}")
+        )
+        self.btn_md_toggle.setText(
+            T("toolbar.md.on") if self._render_md else T("toolbar.md.plain")
+        )
+        self.btn_md_toggle.setToolTip(T("toolbar.md.tip"))
+        self.btn_select_region.setText(T("page_toolbar.select"))
+        self.btn_select_region.setToolTip(T("page_toolbar.select.tip"))
+        self.btn_exclude.setText(T("page_toolbar.exclude"))
+        self.btn_exclude.setToolTip(T("page_toolbar.exclude.tip"))
+        self.btn_include.setText(T("page_toolbar.include"))
+        self.btn_include.setToolTip(T("page_toolbar.include.tip"))
+        self.btn_reset_zones.setText(T("page_toolbar.reset"))
+        self.btn_reset_zones.setToolTip(T("page_toolbar.reset.tip"))
+        self.toc_dock.setWindowTitle(T("dock.toc"))
+        self.pdf_view.retranslate()
+
+    def _extraction_header(self, text: str, elapsed: float, label: str = "auto") -> str:
+        """Build the header line shown above the extracted text.
+
+        ``label`` is a key suffix ("auto"/"manual"): it is resolved through
+        T() at display time, so a language switch re-renders it correctly.
+        """
+        return T(
+            "header.line",
+            ms=f"{elapsed*1000:.1f}",
+            chars=len(text),
+            label=T(f"engine.label.{label}"),
         )
 
     def _apply_engine(
@@ -2714,7 +3184,11 @@ class MainWindow(QMainWindow):
         self._update_zoom()
 
     def _update_zoom(self):
-        self.zoom_label.setText(f"Scala: {self._render_scale:.2f}x")
+        self.zoom_label.setText(
+            T("toolbar.zoom.scale", x=f"{self._render_scale:.2f}")
+        )
+        set_setting("zoom", self._render_scale)
+        save_config()
         if self._mupdf_doc is not None and self._page_count > 0:
             self._display_page(self._current_page)
 
@@ -2759,22 +3233,22 @@ class MainWindow(QMainWindow):
             self.pdf_view.show_inclusion_zones(self._scene_inclusions(page_num))
             return
         if not _has_pymupdf:
-            self.pdf_view.show_message("(pymupdf non installato)")
+            self.pdf_view.show_message(T("view.no_pymupdf"))
         else:
-            self.pdf_view.show_message("(pagina non disponibile)")
+            self.pdf_view.show_message(T("view.page_unavailable"))
 
     # ── file open ─────────────────────────────────────────────────────────
 
     def _on_open(self):
         path_str, _ = QFileDialog.getOpenFileName(
-            self, "Apri PDF", "", "PDF Files (*.pdf);;All Files (*)"
+            self, T("dlg.open"), "", T("dlg.open_filter")
         )
         if path_str:
             self._open_pdf(Path(path_str))
 
     def _open_pdf(self, path: Path):
         if not path.exists():
-            QMessageBox.warning(self, "Errore", f"File non trovato:\n{path}")
+            QMessageBox.warning(self, T("dlg.error"), T("dlg.file_not_found", path=path))
             return
 
         if self._mupdf_doc is not None:
@@ -2800,13 +3274,21 @@ class MainWindow(QMainWindow):
             self.toc_panel.build_toc(self._mupdf_doc)
 
             if self._page_count > 0:
-                self._set_page(0)
+                start = 0
+                if self._resume_last_page:
+                    try:
+                        start = int(
+                            (get_setting("last_pages", {}) or {}).get(path.name, 0) or 0
+                        )
+                    except (TypeError, ValueError):
+                        start = 0
+                self._set_page(start)
             else:
                 self.pdf_view.show_page(None)
-                self._display_text("(PDF vuoto)")
-                self.status_bar.showMessage("PDF senza pagine")
+                self._display_text(T("view.empty_pdf"))
+                self.status_bar.showMessage(T("status.empty_pdf"))
         except Exception as e:
-            QMessageBox.critical(self, "Errore PDF", f"Impossibile aprire il PDF:\n{e}")
+            QMessageBox.critical(self, T("dlg.pdf_error"), T("dlg.cannot_open", e=e))
             self._mupdf_doc = None
             self._pdf_path = None
             self._page_count = 0
@@ -2815,6 +3297,8 @@ class MainWindow(QMainWindow):
         if self._mupdf_doc is not None:
             self._mupdf_doc.close()
             self._mupdf_doc = None
+        self._last_page_timer.stop()
+        save_config()  # flush ultima pagina / ultima tab
         self.text_panel.shutdown()
         super().closeEvent(event)
 
@@ -2827,6 +3311,14 @@ class MainWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("noesis-pdf-reader-lite")
+
+    # Config v2: al primo avvio vengono scritti i default (lingua UI = lingua
+    # dell'OS o italiano); le scelte persistono tra gli aggiornamenti (la
+    # cartella dati è ancorata al nome app, non alla versione).
+    config_path = _config_file_path()
+    cfg = init_config(config_path, defaults={**DEFAULTS, "lang": _detect_os_lang()})
+    set_language(cfg["lang"])
+
     window = MainWindow()
     window.show()
 

@@ -13,11 +13,13 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   de-duplicazione titoli, spaziature) — il piano viene scelto automaticamente
   per ogni pagina.
 - Navigazione (prec/succ, spin, zoom), indice (TOC), toggle Markdown.
-- Tab testo: Originale / 🇮🇹 Italiano / 🖼️ Immagini. L'Originale mostra un
+- Tab testo: Originale / Traduzione / 🖼️ Immagini. L'Originale mostra un
   unico testo: l'output del motore adattativo (auto) oppure, quando ci sono
-  zone manuali, il risultato ricostruito da esse; "Italiano" traduce la
-  versione mostrata (traduzione rinviata a dopo una pausa di 600 ms durante
-  il disegno delle zone). Cache su disco.
+  zone manuali, il risultato ricostruito da esse; la tab di traduzione
+  (bandiera + nome della lingua di destinazione scelta, es. "🇫🇷 Français")
+  traduce la versione mostrata nella lingua impostata da ⚙️ Impostazioni
+  (traduzione rinviata a dopo una pausa di 600 ms durante il disegno delle
+  zone). Cache su disco per (pagina, lingua di destinazione).
 - Estrazione immagini: selezione a mouse di una zona (🖱️ Seleziona zona) che
   salva la figura ritagliata nella tab 🖼️ Immagini.
 - Esclusione manuale di zone (🚫 Escludi zona): header, footer, immagini,
@@ -31,6 +33,16 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   Un box verde = una colonna/regione. Rosso e verde compongono: il rosso
   toglie il rumore, il verde ordina; dove si sovrappongono vince il rosso.
 - 🧹 Reset zone: rimuove tutte le zone (rosse e verdi) della pagina corrente.
+- ⚙️ Impostazioni (menu in cima a destra): lingua UI (it/en/fr/de/es),
+  lingua del documento (origine, default "auto") e lingua della traduzione
+  (destinazione), più le preferenze: zoom di avvio, rendering Markdown,
+  header di estrazione, dimensione font del testo, "riprendi dall'ultima
+  pagina" (per documento) e "ricorda l'ultima tab". Il menu è mostrato nella
+  lingua UI scelta, con anteprima dal vivo dentro il dialogo. Tutto è salvato
+  in `config.json` nella cartella dati dell'app (creato al primo avvio con la
+  lingua dell'OS o italiano) e persiste tra gli aggiornamenti. Cambia solo il
+  "chrome" UI: il testo estratto del PDF resta nella lingua originale del
+  documento.
 
 ## Installazione (venv dedicato)
 
