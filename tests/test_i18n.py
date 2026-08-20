@@ -46,6 +46,17 @@ class TranslationCompletenessTests(unittest.TestCase):
         self.assertGreaterEqual(len(i18n._STRINGS), 50)
         self.assertEqual(len(i18n._STRINGS), len(set(i18n._STRINGS)))
 
+    def test_help_keys_exist_in_all_languages(self):
+        """Le chiavi del bottone Guida devono esserci in tutte le 5 lingue."""
+        for key in ("toolbar.help", "toolbar.help.tip"):
+            self.assertIn(key, i18n._STRINGS)
+            for lang in i18n.LANGUAGES:
+                self.assertTrue(
+                    i18n._STRINGS[key].get(lang),
+                    f"'{key}' manca in '{lang}'",
+                )
+        self.assertIn("❓", i18n.T("toolbar.help"))
+
     def test_placeholders_consistent_across_languages(self):
         """Ogni lingua di una chiave deve avere gli STESSI placeholder {…}."""
         import re

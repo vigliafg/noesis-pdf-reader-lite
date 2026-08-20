@@ -198,6 +198,17 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Markdown-Rendering → HTML ein-/ausschalten\n(Strg+M zum Umschalten)",
         "es": "Activar/desactivar el renderizado Markdown → HTML\n(Ctrl+M para alternar)",
     },
+    "toolbar.help": {
+        "it": "❓ Guida", "en": "❓ Help", "fr": "❓ Aide",
+        "de": "❓ Hilfe", "es": "❓ Ayuda",
+    },
+    "toolbar.help.tip": {
+        "it": "Apre la guida online nel browser",
+        "en": "Opens the online help in the browser",
+        "fr": "Ouvre l'aide en ligne dans le navigateur",
+        "de": "Öffnet die Online-Hilfe im Browser",
+        "es": "Abre la ayuda en línea en el navegador",
+    },
     # ── page toolbar ────────────────────────────────────────────────────────
     "page_toolbar.title": {
         "it": "Pagina", "en": "Page", "fr": "Page", "de": "Seite", "es": "Página",

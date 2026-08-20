@@ -55,7 +55,7 @@ from PyQt6.QtCore import (
 )
 from PyQt6.QtGui import (
     QImage, QPixmap, QFont, QKeySequence, QShortcut,
-    QPen, QBrush, QColor, QPainter,
+    QPen, QBrush, QColor, QPainter, QDesktopServices,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -90,6 +90,13 @@ from PyQt6.QtWidgets import (
     QGraphicsEllipseItem,
     QGraphicsTextItem,
     QFrame,
+)
+
+# URL della guida online (sito statico pubblicato su GitHub Pages).
+# Aprire con QDesktopServices.openUrl apre il browser di sistema: nessuna
+# dipendenza QtWebEngine, nessuna pagina incorporata.
+HELP_URL = (
+    "https://vigliafg.github.io/noesis-pdf-reader-lite/help/"
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2666,6 +2673,12 @@ class MainWindow(QMainWindow):
         self.btn_settings.clicked.connect(self._on_open_settings)
         bar.addWidget(self.btn_settings)
 
+        # Guida online (apre il sito help nel browser di sistema)
+        self.btn_help = QPushButton(T("toolbar.help"))
+        self.btn_help.setToolTip(T("toolbar.help.tip"))
+        self.btn_help.clicked.connect(self._on_open_help)
+        bar.addWidget(self.btn_help)
+
     def _build_page_toolbar(self):
         """Mini toolbar shown above the PDF page viewer (left panel)."""
         bar = QToolBar(T("page_toolbar.title"))
@@ -3044,6 +3057,10 @@ class MainWindow(QMainWindow):
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self._apply_settings(dlg.values())
 
+    def _on_open_help(self):
+        """Open the online help site in the system browser."""
+        QDesktopServices.openUrl(QUrl(HELP_URL))
+
     def _apply_settings(self, values: dict):
         """Apply the settings dialog choices (languages + preferences)."""
         ui_changed = values.get("lang") != self._ui_lang_applied
@@ -3102,6 +3119,8 @@ class MainWindow(QMainWindow):
         """Re-apply the MainWindow's own chrome strings."""
         self.btn_settings.setText(T("settings.button"))
         self.btn_settings.setToolTip(T("settings.button.tip"))
+        self.btn_help.setText(T("toolbar.help"))
+        self.btn_help.setToolTip(T("toolbar.help.tip"))
         self.btn_open.setText(T("toolbar.open"))
         self.btn_toc.setText(T("toolbar.toc"))
         self.btn_toc.setToolTip(T("toolbar.toc.tip"))

@@ -59,6 +59,24 @@ python3 -m venv .venv
 ./run.sh /percorso/file.pdf        # apre direttamente un PDF
 ```
 
+## Guida online (help)
+
+Il pulsante **❓ Guida** nella toolbar apre il sito di help nel browser di
+sistema. Il sito è un insieme di pagine statiche in `docs/help/` (5 lingue:
+it/en/fr/de/es, 14 sezioni: features, uso, installazione/disinstallazione per
+piattaforma, disclaimer uso lecito, scorciatoie e FAQ) pubblicato su
+**GitHub Pages** dal workflow `.github/workflows/pages.yml` a ogni push su
+`main`:
+
+```text
+https://vigliafg.github.io/noesis-pdf-reader-lite/help/
+```
+
+Per modificare la guida si edita `docs/help/<lingua>/index.html` (CSS e JS
+condivisi in `docs/help/css/` e `docs/help/js/`); la pubblicazione è
+automatica al push. Il documento tecnico interno `docs/PDF-reflow-tecnica.md`
+resta nel repo ma non viene pubblicato sul sito.
+
 ## Test
 
 ```bash
