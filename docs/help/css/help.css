@@ -190,7 +190,7 @@ kbd {
 .warning { background: #3a2a1e; border-left: 4px solid #e0a030; }
 .legal { background: #2a1e1e; border-left: 4px solid var(--red); }
 
-.note strong, .warning strong, .legal strong { display: block; margin-bottom: 4px; }
+.note > strong, .warning > strong, .legal > strong { display: block; margin-bottom: 4px; }
 
 /* tables */
 main.content table {
