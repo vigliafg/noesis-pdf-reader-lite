@@ -7,6 +7,7 @@ Traduzione e gallery delle figure incluse; nessun dropdown a runtime.
 """
 
 import concurrent.futures
+import hashlib
 import json
 import os
 import re
@@ -27,9 +28,10 @@ import layout_engine
 # Qt): le stringhe del chrome UI passano da qui, la lingua si cambia al volo
 # e il config (lingue + preferenze) è gestito da questo modulo.
 from i18n import (
-    LANGUAGES, TRANSLATION_LANGUAGES, DEFAULTS, T,
+    LANGUAGES, TRANSLATION_LANGUAGES, TRANSLATION_ENGINES, DEFAULTS, T,
     get_language, set_language, get_source_lang, set_source_lang,
     get_target_lang, set_target_lang,
+    get_translation_engine, set_translation_engine,
     flag_endonym, get_config, get_setting, set_setting,
     init_config, save_config,
 )
@@ -70,6 +72,7 @@ from PyQt6.QtWidgets import (
     QToolBar,
     QFileDialog,
     QSpinBox,
+    QStackedWidget,
     QDoubleSpinBox,
     QPushButton,
     QCheckBox,
@@ -144,10 +147,13 @@ def _region_image(
     figure, also for composite/vector figures). Returns None when nothing can
     be extracted.
 
-    When ``embedded_only`` is True the render fallback is skipped and only an
-    embedded raster whose placement is (mostly) inside the selection is
-    returned. Used by the exclude-zone gesture so that excluding a text zone
-    (header/footer/caption) never dumps a rendered PNG into the gallery.
+    When ``embedded_only`` is True the zone is treated as a *capture zone*
+    (exclude gesture): if the selection targets an embedded image (at least
+    half of it inside), the WHOLE selected zone is rendered and captured —
+    so composite figures (several embedded images, image + caption/vector
+    parts) are kept in full instead of a single fragment. Pure-text zones
+    (header/footer/caption, no embedded image) are skipped, so excluding
+    them never dumps a rendered PNG into the gallery.
     """
     if not _has_pymupdf:
         return None
@@ -157,18 +163,29 @@ def _region_image(
         if rect.width < 1.0 or rect.height < 1.0:
             return None
 
-        # 1) embedded image whose placement is (fully, or in embedded_only
-        #    mode at least half) inside the selection
+        # embedded_only (exclude gesture): if the selection targets an
+        # embedded image (at least half of it inside), render and capture
+        # the WHOLE selected zone — composite figures (several embedded
+        # images, image + caption/vector parts) are kept in full instead of
+        # a single fragment. Pure-text zones (no embedded image) are
+        # skipped, so excluding a header/footer/caption never dumps a
+        # rendered PNG into the gallery.
+        if embedded_only:
+            for img in page.get_images(full=True):
+                for r in page.get_image_rects(img[0]):
+                    area = r.get_area()
+                    if area > 0 and (r & rect).get_area() / area >= 0.5:
+                        pix = page.get_pixmap(
+                            clip=rect, matrix=pymupdf.Matrix(zoom, zoom)
+                        )
+                        return pix.tobytes("png"), "png"
+            return None
+
+        # 1) embedded image fully inside the selection → original raster
         for img in page.get_images(full=True):
             xref = img[0]
             for r in page.get_image_rects(xref):
-                if embedded_only:
-                    # Sloppy selection around a figure (e.g. figure + caption)
-                    # is fine: accept an image at least half inside the zone.
-                    area = r.get_area()
-                    if area <= 0 or (r & rect).get_area() / area < 0.5:
-                        continue
-                elif not (
+                if not (
                     r.x0 >= rect.x0 and r.y0 >= rect.y0
                     and r.x1 <= rect.x1 and r.y1 <= rect.y1
                 ):
@@ -176,9 +193,6 @@ def _region_image(
                 converted = _image_as_png(doc, xref)
                 if converted is not None:
                     return converted
-
-        if embedded_only:
-            return None  # no render fallback in embedded-only mode
 
         # 2) fallback: render the selected region at high resolution
         pix = page.get_pixmap(clip=rect, matrix=pymupdf.Matrix(zoom, zoom))
@@ -1031,7 +1045,7 @@ def _spacing_fixes(md: str) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  Google Translate (stdlib only, no API key)
+#  Translation engines — Google Translate and Microsoft Edge (stdlib only, no API key)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _GT_URL = "https://translate.googleapis.com/translate_a/single"
@@ -1061,6 +1075,174 @@ def _gt_translate_one(text: str, source: str, target: str) -> str:
     return text
 
 
+# Free Microsoft Edge endpoint (same scheme as the Ebook Translator calibre
+# plugin): POST a JSON array of strings, get translations back in order.
+_MS_URL = "https://edge.microsoft.com/translate/translatetext"
+# Microsoft uses different codes than Google for a few languages.
+_MS_LANG_CODES = {
+    "zh": "zh-Hans",  # Google "zh" = Simplified Chinese
+}
+
+
+def _ms_lang_code(code: str) -> str:
+    """Map an app language code to the Microsoft Edge API code."""
+    return _MS_LANG_CODES.get(code, code)
+
+
+def _ms_translate_one(text: str, source: str, target: str) -> str:
+    """Call the free Microsoft Edge Translate API for a single chunk."""
+    params = {"isEnterpriseClient": "False", "to": _ms_lang_code(target)}
+    if source and source != "auto":
+        params["from"] = _ms_lang_code(source)
+    full_url = f"{_MS_URL}?{urllib.parse.urlencode(params)}"
+    body = json.dumps([text]).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    req = urllib.request.Request(
+        full_url, data=body, headers=headers, method="POST"
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        result = json.loads(resp.read().decode("utf-8"))
+    try:
+        return result[0]["translations"][0]["text"]
+    except (IndexError, KeyError, TypeError):
+        return text
+
+
+def _translate_one(engine: str, text: str, source: str, target: str) -> str:
+    """Translate a single chunk with the chosen engine (google|microsoft)."""
+    if engine == "microsoft":
+        return _ms_translate_one(text, source, target)
+    return _gt_translate_one(text, source, target)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Tesseract OCR (scanned PDFs)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# App language code → Tesseract traineddata (tessdata_fast) name.
+_TESS_LANG_CODES = {
+    "en": "eng", "it": "ita", "fr": "fra", "de": "deu", "es": "spa",
+    "pt": "por", "nl": "nld", "pl": "pol", "ru": "rus", "zh": "chi_sim",
+    "ja": "jpn", "ko": "kor", "ar": "ara", "tr": "tur",
+}
+# Source "auto" → Tesseract language combination: best match per line among
+# the Latin/Cyrillic/RTL languages bundled with the app. CJK is excluded
+# because mixing scripts degrades accuracy — for zh/ja/ko documents the user
+# sets the source language explicitly (and the resource is bundled anyway).
+_AUTO_TESS_LANGS = "eng+deu+fra+ita+spa+por+nld+pol+rus+tur+ara"
+
+
+def _tess_lang_code(code: str | None) -> str:
+    """Map an app language code to the Tesseract OCR language string."""
+    if not code or code == "auto":
+        return _AUTO_TESS_LANGS
+    return _TESS_LANG_CODES.get(code, "eng")
+
+
+def _setup_bundled_tesseract() -> None:
+    """Point PyMuPDF OCR at the Tesseract bundled in frozen (PyInstaller) builds.
+
+    In a frozen app the ``tesseract`` binary, its shared libraries (``lib/``)
+    and the ``tessdata/`` directory land next to the extracted payload
+    (``sys._MEIPASS``).  Make them discoverable via PATH / TESSDATA_PREFIX and
+    LD_LIBRARY_PATH / DYLD_LIBRARY_PATH (appended, so the app's own bundled
+    libraries keep precedence) so MuPDF's OCR works without a system install.
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    base = getattr(sys, "_MEIPASS", None) or os.path.dirname(sys.executable)
+    tess_exe = os.path.join(base, "tesseract.exe" if os.name == "nt" else "tesseract")
+    if os.path.exists(tess_exe):
+        os.environ["PATH"] = base + os.pathsep + os.environ.get("PATH", "")
+    lib_dir = os.path.join(base, "lib")
+    if os.path.isdir(lib_dir):
+        if os.name == "nt":
+            os.environ["PATH"] = (
+                os.environ.get("PATH", "") + os.pathsep + lib_dir
+            )
+        else:
+            existing = os.environ.get("LD_LIBRARY_PATH") or ""
+            os.environ["LD_LIBRARY_PATH"] = (
+                existing + os.pathsep + lib_dir if existing else lib_dir
+            )
+            existing = os.environ.get("DYLD_LIBRARY_PATH") or ""
+            os.environ["DYLD_LIBRARY_PATH"] = (
+                existing + os.pathsep + lib_dir if existing else lib_dir
+            )
+    tessdata = os.path.join(base, "tessdata")
+    if os.path.isdir(tessdata):
+        os.environ["TESSDATA_PREFIX"] = tessdata
+
+
+def _extract_pymupdf4llm(
+    path: str, page_num: int, ocr_language: str | None = None
+) -> str:
+    """Extract a page to Markdown (native text or Tesseract OCR for scans).
+
+    ``ocr_language`` is a Tesseract language or "+"-joined combination.  If
+    the requested language is unavailable (e.g. the auto combination on a
+    system that bundles only English), it degrades to ``eng`` before giving
+    up, so extraction never hard-fails on a language mismatch.
+    """
+    if not _has_pymupdf4llm:
+        return T("extract.no_pymupdf4llm")
+    attempts = [ocr_language] if ocr_language else ["eng"]
+    if attempts[-1] != "eng":
+        attempts.append("eng")
+    last_error: Exception | None = None
+    for lang in attempts:
+        try:
+            kwargs: dict = {}
+            if lang:
+                kwargs["ocr_language"] = lang
+            md = pymupdf4llm.to_markdown(path, pages=[page_num], **kwargs)
+            return md.strip() or T("extract.empty_page")
+        except Exception as e:  # noqa: BLE001 — degrada al fallback, non crasha
+            last_error = e
+    return T("extract.error", e=last_error)
+
+
+def _apply_engine_on_page(
+    page, text: str, exclude: tuple = (), include: tuple = ()
+) -> tuple[str, str]:
+    """Apply the adaptive layout engine to ``text`` using a pymupdf page.
+
+    ``include`` (numbered inclusion zones, reading order) takes precedence:
+    it rebuilds the text as a whitelist ordered by zone number.  Otherwise
+    the v1 pipeline applies: with ``exclude`` non-empty the page is rebuilt
+    skipping those zones (manual cleaning) before the cosmetic fixes; with
+    neither, the automatic plan is applied unchanged.  Returns
+    ``(text, label)`` where label is "auto" or "manual".  This is CPU-bound
+    (profile_page analyzes the page) and slow on scanned PDFs, so callers
+    run it off the GUI thread.
+    """
+    label = "manual" if (include or exclude) else "auto"
+    try:
+        if include:
+            return _inclusion_order_markdown(page, include, exclude=exclude) or text, label
+        profile = layout_engine.profile_page(page, exclude=exclude)
+        plan = layout_engine.plan_fixes(profile, "PyMuPDF4LLM ⚡", mode="auto")
+        if exclude:
+            cleaned = _column_aware_markdown(page, exclude=exclude) or text
+            plan = [f for f in plan if f.id != "reorder_columns"]
+            return layout_engine.apply_plan(cleaned, page, profile, plan) or cleaned, label
+        return layout_engine.apply_plan(text, page, profile, plan) or text, label
+    except Exception:
+        return text, label
+
+
+def _apply_engine_standalone(
+    path: str, page_num: int, text: str, exclude: tuple = (), include: tuple = ()
+) -> tuple[str, str]:
+    """Apply the layout engine on a freshly opened document (background thread)."""
+    label = "manual" if (include or exclude) else "auto"
+    try:
+        with pymupdf.open(path) as doc:
+            return _apply_engine_on_page(doc[page_num], text, exclude=exclude, include=include)
+    except Exception:
+        return text, label
+
+
 # Markdown structural patterns protected during translation.
 _MD_IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 _MD_TABLE_RE = re.compile(
@@ -1073,15 +1255,19 @@ _SEP_CELL_RE = re.compile(r":?-{3,}:?")
 _MAX_WORKERS = 8  # concurrent translation requests (I/O-bound)
 
 
-def _translate_cell(cell: str, source: str, target: str) -> str:
+def _translate_cell(
+    cell: str, source: str, target: str, engine: str = "google"
+) -> str:
     """Translate one table cell, falling back to the original on failure."""
     try:
-        return _gt_translate_one(cell, source, target).strip()
+        return _translate_one(engine, cell, source, target).strip()
     except Exception:
         return cell
 
 
-def _translate_table(table: str, source: str, target: str) -> str:
+def _translate_table(
+    table: str, source: str, target: str, engine: str = "google"
+) -> str:
     """Translate the cell contents of a markdown table, keeping its structure.
 
     All distinct translatable cells are fetched concurrently (one request per
@@ -1113,7 +1299,7 @@ def _translate_table(table: str, source: str, target: str) -> str:
             max_workers=min(_MAX_WORKERS, len(unique))
         ) as pool:
             futures = {
-                pool.submit(_translate_cell, c, source, target): c
+                pool.submit(_translate_cell, c, source, target, engine): c
                 for c in unique
             }
             for fut in concurrent.futures.as_completed(futures):
@@ -1139,7 +1325,11 @@ def _translate_table(table: str, source: str, target: str) -> str:
 
 
 def _translate_paragraph(
-    para: str, source: str, target: str, chunk_size: int
+    para: str,
+    source: str,
+    target: str,
+    chunk_size: int,
+    engine: str = "google",
 ) -> str:
     """Translate one paragraph, protecting markdown tables and image links."""
     protected: dict[str, str] = {}
@@ -1154,7 +1344,7 @@ def _translate_paragraph(
 
     # Tables: translate their cells, then protect the rebuilt table.
     def _table_repl(m):
-        return _protect("TBL", _translate_table(m.group(0), source, target))
+        return _protect("TBL", _translate_table(m.group(0), source, target, engine))
 
     para = _MD_TABLE_RE.sub(_table_repl, para)
 
@@ -1163,7 +1353,7 @@ def _translate_paragraph(
         out = para
     elif len(para) <= chunk_size:
         try:
-            out = _gt_translate_one(para, source, target)
+            out = _translate_one(engine, para, source, target)
         except Exception:
             out = para
     else:
@@ -1184,7 +1374,7 @@ def _translate_paragraph(
         sub_translated: list[str] = []
         for ch in sub_chunks:
             try:
-                sub_translated.append(_gt_translate_one(ch, source, target))
+                sub_translated.append(_translate_one(engine, ch, source, target))
             except Exception:
                 sub_translated.append(ch)
         out = " ".join(sub_translated)
@@ -1196,17 +1386,21 @@ def _translate_paragraph(
     return out
 
 
-def translate_text_google(
-    text: str, source: str = "en", target: str = "it", chunk_size: int = 1500
+def translate_text(
+    text: str,
+    source: str = "en",
+    target: str = "it",
+    engine: str = "google",
+    chunk_size: int = 1500,
 ) -> str:
-    """Translate text using Google Translate's public API.
+    """Translate text using the chosen engine's public API.
 
-    Translates **each paragraph independently** (split on ``\n\n``) so
-    paragraph breaks never pass through the API, and fetches those paragraphs
-    **concurrently** so a short page doesn't wait on many sequential
-    round-trips.  Markdown tables and image links are protected so Google
-    doesn't mangle their syntax; table cell contents are translated
-    individually (also concurrently).
+    ``engine`` is "google" or "microsoft".  Translates **each paragraph
+    independently** (split on ``\n\n``) so paragraph breaks never pass
+    through the API, and fetches those paragraphs **concurrently** so a short
+    page doesn't wait on many sequential round-trips.  Markdown tables and
+    image links are protected so the translator doesn't mangle their syntax;
+    table cell contents are translated individually (also concurrently).
     """
     if not text or not text.strip():
         return text
@@ -1221,7 +1415,7 @@ def translate_text_google(
         max_workers=min(_MAX_WORKERS, len(tasks))
     ) as pool:
         futures = {
-            pool.submit(_translate_paragraph, p, source, target, chunk_size): i
+            pool.submit(_translate_paragraph, p, source, target, chunk_size, engine): i
             for i, p in tasks
         }
         for fut in concurrent.futures.as_completed(futures):
@@ -1237,6 +1431,15 @@ def translate_text_google(
             results[i] = p
 
     return "\n\n".join(results)
+
+
+def translate_text_google(
+    text: str, source: str = "en", target: str = "it", chunk_size: int = 1500
+) -> str:
+    """Backward-compatible wrapper: translate text with Google Translate."""
+    return translate_text(
+        text, source=source, target=target, engine="google", chunk_size=chunk_size
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1303,6 +1506,7 @@ class PdfPageView(QGraphicsView):
         self._full_pixmap: QPixmap | None = None
         self._pix_item: QGraphicsPixmapItem | None = None
         self._text_item: QGraphicsTextItem | None = None
+        self._view_zoom: float = 1.0  # visible zoom; 1.0 = fit-to-view
 
         self._select_mode = False
         self._exclude_mode = False
@@ -1475,10 +1679,18 @@ class PdfPageView(QGraphicsView):
 
     # ── sizing ──────────────────────────────────────────────────────────
 
+    def set_view_zoom(self, zoom: float):
+        """Set the visible zoom factor on top of the fitted page (1.0 = fit)."""
+        self._view_zoom = zoom
+        if self._pix_item is not None:
+            self._fit_to_view()
+
     def _fit_to_view(self):
         """Scale the full-resolution pixmap to fit the current view size."""
         if self._pix_item is not None:
             self.fitInView(self._pix_item, Qt.AspectRatioMode.KeepAspectRatio)
+            if self._view_zoom != 1.0:
+                self.scale(self._view_zoom, self._view_zoom)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -1557,8 +1769,42 @@ class PdfPageView(QGraphicsView):
         super().mouseReleaseEvent(event)
 
 
+_MIN_FONT_SIZE = 8
+_MAX_FONT_SIZE = 24
+
+
+def _clamp_font_size(px: int, lo: int = _MIN_FONT_SIZE, hi: int = _MAX_FONT_SIZE) -> int:
+    """Clamp a font size in points to the runtime zoom range (8–24 pt)."""
+    return max(lo, min(hi, int(px)))
+
+
+def _text_key(text: str) -> str:
+    """Deterministic short id of a text (stable across app restarts)."""
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()
+
+
+def _strip_header(body: str) -> str:
+    """Return the body without the extraction header line.
+
+    The header is a single line ``── … ──`` (it contains ``│`` separators
+    and ends with a blank line).  It is excluded from the edit-cache key so
+    that UI-language, engine and timing changes don't orphan saved edits.
+    """
+    first, sep, rest = body.partition("\n")
+    if sep and first.startswith("──") and "│" in first:
+        return rest.lstrip("\n")
+    return body
+
+
 class TextPanel(QTextEdit):
-    """Right panel — shows extracted text, optionally rendered as Markdown/HTML."""
+    """Editable text window with a live font zoom (A− / A+).
+
+    Each instance owns its source buffer, font size and plain/rendered mode,
+    so the Original and Translated tabs behave as independent editors.  The
+    content is shown rendered from Markdown (HTML + CSS); once the user edits
+    the text the window falls back to plain text — a re-render would
+    reinterpret typed ``*``/``#``/``_`` and destroy the HTML formatting.
+    """
 
     _CSS_TEMPLATE = """
     <style>
@@ -1587,14 +1833,30 @@ class TextPanel(QTextEdit):
     </style>
     """
 
+    font_size_changed = pyqtSignal(int)
+    edited = pyqtSignal(str, str)  # (base_text, edited_text) from the user
+    modified = pyqtSignal(bool)    # True: buffer differs from its base
+
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._base_font_size = 12
         self._font_size = 12
-        self.setReadOnly(True)
+        self._render_source: str = ""     # markdown/raw-html source for re-renders
+        self._buffer: str = ""            # current plain content (rendered or edited)
+        self._as_markdown: bool = True
+        self._plain_mode: bool = False    # True once the user has edited
+        self._raw_html: bool = False
+        self._programmatic: bool = False  # guard against our own setHtml calls
+        self._shown_buffer: str | None = None  # last programmatic content
+        self._shown_md: bool = True
+        self._edit_base: str | None = None  # base the current buffer derives from
+        self._rendered_text: str = ""  # plain text of the last programmatic render
+        self.setReadOnly(False)
         self.setFont(QFont("Segoe UI", self._font_size))
         self.setStyleSheet(
             "QTextEdit { background: #ffffff; color: #1a1a1a; padding: 12px; }"
         )
+        self.textChanged.connect(self._on_text_changed)
 
     def css(self) -> str:
         """Current HTML stylesheet (font size interpolated).
@@ -1603,27 +1865,241 @@ class TextPanel(QTextEdit):
         """
         return self._CSS_TEMPLATE.replace("{size}", str(self._font_size))
 
-    def set_font_size(self, px: int) -> None:
-        """Apply a font size (clamped 10–16 pt) to plain text and HTML."""
-        px = max(10, min(16, int(px)))
-        self._font_size = px
-        self.setFont(QFont("Segoe UI", px))
+    # ── rendering ──────────────────────────────────────────────────────
 
-    def show_text(self, text: str, as_markdown: bool = True):
-        """Display text, optionally rendering as Markdown → HTML."""
-        if as_markdown:
-            html_body = _md_lib.markdown(text, extensions=_MD_EXTENSIONS)
-            self.setHtml(self.css() + html_body)
+    def _render(self) -> None:
+        """Rebuild the document (from the render source or plain buffer).
+
+        La dimensione del font NON passa dal ``body { font-size }`` del CSS:
+        il motore rich-text di Qt lo ignora nei tag <style>, quindi il testo
+        markdown non si sarebbe mai ridimensionato. Si applica invece
+        ``document().setDefaultFont`` dopo il build del documento (i tag
+        em/percentuali della CSS scalano rispetto al default font).
+        """
+        self._programmatic = True
+        try:
+            if self._raw_html:
+                self.setHtml(self.css() + self._render_source)
+            elif self._as_markdown and not self._plain_mode:
+                html_body = _md_lib.markdown(
+                    self._render_source, extensions=_MD_EXTENSIONS
+                )
+                self.setHtml(self.css() + html_body)
+            else:
+                self.setPlainText(self._buffer)
+        finally:
+            self._programmatic = False
+        self.document().setDefaultFont(QFont("Segoe UI", self._font_size))
+        # il contenuto corrente è sempre il testo renderizzato (i round-trip
+        # HTML possono normalizzare gli spazi: confrontare col sorgente grezzo
+        # darebbe falsi positivi di modifica)
+        self._rendered_text = self.toPlainText()
+        self._buffer = self._rendered_text
+
+    def is_modified(self) -> bool:
+        """True if the user changed the content beyond the last render."""
+        return self._rendered_text != self._buffer
+
+    def _on_text_changed(self) -> None:
+        """A user edit flips the window to plain text and updates the buffer."""
+        if self._programmatic:
+            return
+        self._plain_mode = True
+        self._raw_html = False
+        self._buffer = self.toPlainText()
+        changed = self.is_modified()
+        self.modified.emit(changed)
+        if changed and self._edit_base is not None:
+            self.edited.emit(self._edit_base, self._buffer)
+
+    def show_text(
+        self,
+        text: str,
+        as_markdown: bool = True,
+        edited: str | None = None,
+    ) -> None:
+        """Display text, optionally rendering as Markdown → HTML.
+
+        Idempotent: if the same content is shown again (tab switch, repeat
+        display), the window is left untouched so edits, cursor and scroll
+        position survive.  ``edited`` (the user's stored version of ``text``)
+        is shown instead, in plain mode, while ``text`` stays the edit base.
+        """
+        if text == self._shown_buffer and as_markdown == self._shown_md:
+            return
+        self._shown_buffer = text
+        self._shown_md = as_markdown
+        self._edit_base = text
+        if edited is not None and edited != text:
+            self._render_source = edited
+            self._buffer = edited
+            self._as_markdown = as_markdown
+            self._plain_mode = True
+            self._raw_html = False
         else:
-            self.setPlainText(text)
+            self._render_source = text
+            self._buffer = text
+            self._as_markdown = as_markdown
+            self._plain_mode = False
+            self._raw_html = False
+        self._render()
 
-    def show_html(self, html_body: str):
+    def show_html(self, html_body: str) -> None:
         """Display raw HTML with CSS styling."""
-        self.setHtml(self.css() + html_body)
+        self._render_source = html_body
+        self._buffer = html_body
+        self._as_markdown = False
+        self._plain_mode = False
+        self._raw_html = True
+        self._shown_buffer = html_body
+        self._shown_md = False
+        self._edit_base = html_body
+        self._render()
+
+    # ── font zoom ──────────────────────────────────────────────────────
+
+    def font_size(self) -> int:
+        return self._font_size
+
+    def set_font_size(self, px: int) -> None:
+        """Set the base size (from Settings) and apply it."""
+        self._base_font_size = px
+        self._apply_font_size(px)
+
+    def zoom_in(self) -> None:
+        self._apply_font_size(self._font_size + 1)
+
+    def zoom_out(self) -> None:
+        self._apply_font_size(self._font_size - 1)
+
+    def reset_zoom(self) -> None:
+        self._apply_font_size(self._base_font_size)
+
+    def _apply_font_size(self, px: int) -> None:
+        """Apply a clamped size; plain text resizes live (cursor kept)."""
+        px = _clamp_font_size(px)
+        if px == self._font_size:
+            return
+        self._font_size = px
+        if self._plain_mode and not self._raw_html:
+            self.document().setDefaultFont(QFont("Segoe UI", px))
+        else:
+            self._render()  # markdown / raw HTML: re-render with new CSS size
+        self.font_size_changed.emit(px)
+
+
+class TextToolbar(QWidget):
+    """Mini toolbar (A−  size  A+  ↺  💾) acting on a single TextPanel.
+
+    Each text window gets its own toolbar, so the Original and Translated
+    tabs zoom and export independently.  The size label and button state
+    follow the panel's ``font_size_changed`` signal.
+    """
+
+    export_requested = pyqtSignal()
+
+    _BTN_STYLE = (
+        "QPushButton { background: #f0f0f0; color: #1a1a1a;"
+        " border: 1px solid #ccc; border-radius: 4px; padding: 0;"
+        " font-size: 13px; }"
+        "QPushButton:hover { background: #e0e8f0; }"
+        "QPushButton:pressed { background: #d0d8e0; }"
+        "QPushButton:disabled { color: #aaa; }"
+    )
+
+    # Dimensioni uniformi per tutti i bottoni della mini toolbar (A−, A+,
+    # ↺, 💾): il glifo emoji del salvataggio avrebbe altezza/larghezza
+    # diverse dai caratteri di testo.
+    _BTN_FIXED = (36, 26)
+
+    def __init__(self, panel: TextPanel, parent=None):
+        super().__init__(parent)
+        self._panel = panel
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(4, 2, 4, 2)
+        lay.setSpacing(4)
+
+        self.btn_decrease = QPushButton("A−")
+        self.btn_decrease.setToolTip(T("editor.decrease"))
+        self.btn_decrease.setStyleSheet(self._BTN_STYLE)
+        self.btn_decrease.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_decrease.clicked.connect(panel.zoom_out)
+
+        self.lbl_size = QLabel("")
+        self.lbl_size.setStyleSheet(
+            "color: #aaa; font-size: 12px; min-width: 44px;"
+        )
+        self.lbl_size.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.btn_increase = QPushButton("A+")
+        self.btn_increase.setToolTip(T("editor.increase"))
+        self.btn_increase.setStyleSheet(self._BTN_STYLE)
+        self.btn_increase.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_increase.clicked.connect(panel.zoom_in)
+
+        self.btn_reset = QPushButton("↺")
+        self.btn_reset.setToolTip(T("editor.reset"))
+        self.btn_reset.setStyleSheet(self._BTN_STYLE)
+        self.btn_reset.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_reset.clicked.connect(panel.reset_zoom)
+
+        self.btn_export = QPushButton("💾")
+        self.btn_export.setToolTip(T("editor.export"))
+        self.btn_export.setStyleSheet(self._BTN_STYLE)
+        self.btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_export.clicked.connect(self.export_requested.emit)
+
+        # Punto di stato: modifiche non ancora salvate su disco.
+        self.lbl_dirty = QLabel("")
+        self.lbl_dirty.setToolTip(T("editor.unsaved"))
+        self.lbl_dirty.setStyleSheet(
+            "color: #e67e22; font-size: 14px; min-width: 14px;"
+        )
+        self.lbl_dirty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        for b in (
+            self.btn_decrease,
+            self.btn_increase,
+            self.btn_reset,
+            self.btn_export,
+        ):
+            b.setFixedSize(*self._BTN_FIXED)
+
+        lay.addStretch()
+        lay.addWidget(self.btn_decrease)
+        lay.addWidget(self.lbl_size)
+        lay.addWidget(self.btn_increase)
+        lay.addWidget(self.btn_reset)
+        lay.addSpacing(6)
+        lay.addWidget(self.btn_export)
+        lay.addSpacing(4)
+        lay.addWidget(self.lbl_dirty)
+        lay.addStretch()
+
+        panel.font_size_changed.connect(self._sync)
+        self._sync(panel.font_size())
+
+    def set_dirty(self, dirty: bool) -> None:
+        """Show/hide the "unsaved edits" dot."""
+        self.lbl_dirty.setText("●" if dirty else "")
+
+    def _sync(self, px: int) -> None:
+        self.lbl_size.setText(f"{px} pt")
+        self.btn_decrease.setEnabled(px > _MIN_FONT_SIZE)
+        self.btn_increase.setEnabled(px < _MAX_FONT_SIZE)
+
+    def retranslate(self) -> None:
+        self.btn_decrease.setToolTip(T("editor.decrease"))
+        self.btn_increase.setToolTip(T("editor.increase"))
+        self.btn_reset.setToolTip(T("editor.reset"))
+        self.btn_export.setToolTip(T("editor.export"))
+        self.lbl_dirty.setToolTip(T("editor.unsaved"))
+
 
 
 class TranslateThread(QThread):
-    """Background thread for Google Translate to keep UI responsive."""
+    """Background thread for translation to keep UI responsive."""
 
     result_ready = pyqtSignal(int, str, str)  # generation_id, kind, translated_text
 
@@ -1634,6 +2110,7 @@ class TranslateThread(QThread):
         kind: str = "origin",
         source: str = "en",
         target: str = "it",
+        engine: str = "google",
     ):
         super().__init__()
         self._text = text
@@ -1641,12 +2118,64 @@ class TranslateThread(QThread):
         self._kind = kind
         self._source = source
         self._target = target
+        self._engine = engine
 
     def run(self):
-        translated = translate_text_google(
-            self._text, source=self._source, target=self._target
+        translated = translate_text(
+            self._text,
+            source=self._source,
+            target=self._target,
+            engine=self._engine,
         )
         self.result_ready.emit(self._generation, self._kind, translated)
+
+
+class ExtractThread(QThread):
+    """Background thread for text extraction + layout engine.
+
+    Both Tesseract OCR (scanned PDFs) and the adaptive layout engine's
+    ``profile_page`` are CPU/IO bound and slow (seconds per page), so the
+    whole pipeline runs here and the GUI thread only displays the result.
+    """
+
+    result_ready = pyqtSignal(int, int, str, str, str, float)
+    # generation, page_num, text, label, raw, elapsed
+
+    def __init__(
+        self,
+        path: str,
+        page_num: int,
+        generation: int,
+        ocr_language: str = "eng",
+        exclude: tuple = (),
+        include: tuple = (),
+        raw: str | None = None,
+    ):
+        super().__init__()
+        self._path = path
+        self._page_num = page_num
+        self._generation = generation
+        self._ocr_language = ocr_language
+        self._exclude = exclude
+        self._include = include
+        self._raw = raw
+
+    def run(self):
+        t0 = time.perf_counter()
+        if self._raw is not None:
+            raw = self._raw  # già estratta (cache): solo engine layout
+        else:
+            raw = _extract_pymupdf4llm(
+                self._path, self._page_num, ocr_language=self._ocr_language
+            )
+        text, label = _apply_engine_standalone(
+            self._path, self._page_num, raw,
+            exclude=self._exclude, include=self._include,
+        )
+        elapsed = time.perf_counter() - t0
+        self.result_ready.emit(
+            self._generation, self._page_num, text, label, raw, elapsed
+        )
 
 
 class TranslatablePanel(QWidget):
@@ -1682,6 +2211,7 @@ class TranslatablePanel(QWidget):
         # destinazione scelta (endonimo): es. "🇫🇷 Français", "🇩🇪 Deutsch".
         self._target_lang: str = get_target_lang()
         self._source_lang: str = get_source_lang()
+        self._engine: str = get_translation_engine()
         self._btn_translated = QPushButton(flag_endonym(self._target_lang))
         self._btn_images = QPushButton(T("tab.images"))
 
@@ -1712,12 +2242,31 @@ class TranslatablePanel(QWidget):
 
         tab_layout.addStretch()
 
-        # ── Text panel ─────────────────────────────────────────────────
-        self.text_panel = TextPanel()
-        self.text_panel.set_font_size(get_setting("font_size", 12))
+        # ── Text windows (Original / Translated) ───────────────────────
+        # Two independent editable windows, each with its own mini toolbar
+        # (A− / A+): stacked, the active tab's window is shown.
+        def _make_window() -> tuple[QWidget, TextPanel, TextToolbar]:
+            win = QWidget()
+            v = QVBoxLayout(win)
+            v.setContentsMargins(0, 0, 0, 0)
+            v.setSpacing(0)
+            panel = TextPanel()
+            panel.set_font_size(get_setting("font_size", 12))
+            toolbar = TextToolbar(panel)
+            v.addWidget(toolbar)
+            v.addWidget(panel)
+            return win, panel, toolbar
 
-        layout.addWidget(self._tab_bar)
-        layout.addWidget(self.text_panel)
+        (
+            self._origin_window,
+            self.origin_panel,
+            self.origin_toolbar,
+        ) = _make_window()
+        (
+            self._translated_window,
+            self.translated_panel,
+            self.translated_toolbar,
+        ) = _make_window()
 
         # ── Images panel (gallery of extracted figures) ────────────────
         self.images_panel = QScrollArea()
@@ -1725,8 +2274,14 @@ class TranslatablePanel(QWidget):
         self.images_panel.setStyleSheet(
             "QScrollArea { background: #f5f5f5; border: none; }"
         )
-        self.images_panel.hide()
-        layout.addWidget(self.images_panel)
+
+        self._stack = QStackedWidget()
+        self._stack.addWidget(self._origin_window)      # index 0
+        self._stack.addWidget(self._translated_window)  # index 1
+        self._stack.addWidget(self.images_panel)        # index 2
+
+        layout.addWidget(self._tab_bar)
+        layout.addWidget(self._stack)
 
         # ── State ──────────────────────────────────────────────────────
         self._page_text: str = ""          # the single text shown (auto or manual)
@@ -1734,7 +2289,9 @@ class TranslatablePanel(QWidget):
         self._render_md: bool = True
         # Cache per (pagina, destinazione): cambiare la lingua di destinazione
         # fa cache-miss naturale, senza invalidare nulla.
-        self._page_translation_cache: dict[tuple[int, str], str] = {}
+        # Cache per (pagina, engine, destinazione): cambiare lingua o motore
+        # fa cache-miss naturale, senza invalidare nulla.
+        self._page_translation_cache: dict[tuple[int, str, str], str] = {}
         self._current_page: int = -1
         self._images: list[str] = []  # file:// URIs of manually captured regions
         self._thread: TranslateThread | None = None
@@ -1744,6 +2301,21 @@ class TranslatablePanel(QWidget):
         self._generation: int = 0
         self._cache_file: Path | None = None  # on-disk translation cache file
         self._doc_fingerprint: str = ""  # invalidates the cache if the PDF changes
+        # Modifiche utente per finestra (origin/translated), chiavate per
+        # contenuto base (senza header): sopravvivono alla navigazione e alla
+        # riapertura del documento.
+        self._edit_cache: dict[str, dict[str, str]] = {
+            "origin": {}, "translated": {},
+        }
+        self._edits_cache_file: Path | None = None  # on-disk edits cache file
+        self._doc_stem: str = ""  # PDF name (without extension), for exports
+        self._save_edits: bool = bool(get_setting("save_edits", True))
+        # Indicatore "modifiche non salvate" per finestra (toolbar dot).
+        self._dirty: dict[str, bool] = {"origin": False, "translated": False}
+        self._edits_save_timer = QTimer(self)
+        self._edits_save_timer.setSingleShot(True)
+        self._edits_save_timer.setInterval(1500)
+        self._edits_save_timer.timeout.connect(self._save_edits_cache)
         # Deferral ibrido: traduzione ri-lanciata solo dopo una pausa di 600 ms.
         self._pending_translation: bool = False
         self._translate_timer = QTimer(self)
@@ -1755,6 +2327,20 @@ class TranslatablePanel(QWidget):
         self._btn_original.clicked.connect(self._on_show_original)
         self._btn_translated.clicked.connect(self._on_show_translated)
         self._btn_images.clicked.connect(self._on_show_images)
+        self.origin_panel.edited.connect(self._on_text_edited)
+        self.translated_panel.edited.connect(self._on_text_edited)
+        self.origin_panel.modified.connect(
+            lambda m: self._on_window_modified("origin", m)
+        )
+        self.translated_panel.modified.connect(
+            lambda m: self._on_window_modified("translated", m)
+        )
+        self.origin_toolbar.export_requested.connect(
+            lambda: self._export_window(self.origin_panel)
+        )
+        self.translated_toolbar.export_requested.connect(
+            lambda: self._export_window(self.translated_panel)
+        )
 
         # Riapri sull'ultima tab usata (se abilitato) — dopo che tutto lo
         # stato e i pannelli esistono.
@@ -1775,22 +2361,33 @@ class TranslatablePanel(QWidget):
             self._set_active_tab(self._btn_original)
 
     def retranslate(self):
-        """Re-apply tab labels after a language switch."""
+        """Re-apply tab labels and toolbar tooltips after a language switch."""
         self._btn_original.setText(T("tab.original"))
         self._btn_translated.setText(flag_endonym(self._target_lang))
         self._btn_images.setText(T("tab.images"))
+        self.origin_toolbar.retranslate()
+        self.translated_toolbar.retranslate()
 
     def set_font_size(self, px: int) -> None:
-        """Forward the text font size to the inner panel."""
-        self.text_panel.set_font_size(px)
+        """Apply the Settings font size as the base for both windows."""
+        self.origin_panel.set_font_size(px)
+        self.translated_panel.set_font_size(px)
 
-    def set_translation_languages(self, src: str, dst: str) -> None:
-        """Apply new source/target languages; re-translate if the tab is active."""
+    def set_translation_languages(
+        self, src: str, dst: str, engine: str | None = None
+    ) -> None:
+        """Apply new source/target languages (and optionally engine)."""
         src = src or "auto"
         dst = dst or "it"
-        changed = src != self._source_lang or dst != self._target_lang
+        engine = engine or self._engine
+        changed = (
+            src != self._source_lang
+            or dst != self._target_lang
+            or engine != self._engine
+        )
         self._source_lang = src
         self._target_lang = dst
+        self._engine = engine
         self._btn_translated.setText(flag_endonym(self._target_lang))
         if changed and self._btn_translated.isChecked():
             self._schedule_translation()
@@ -1822,19 +2419,19 @@ class TranslatablePanel(QWidget):
 
         # Original tab is active (default)
         self._set_active_tab(self._btn_original)
-        self.text_panel.show_text(self._page_text, as_markdown=as_markdown)
+        self._show_panel(self.origin_panel, self._page_text, as_markdown)
         self._lbl_spinner.setText("")
 
     def _set_active_tab(self, active):
         for btn in (self._btn_original, self._btn_translated, self._btn_images):
             btn.setChecked(btn is active)
         if active is self._btn_images:
-            self.text_panel.hide()
-            self.images_panel.show()
+            self._stack.setCurrentWidget(self.images_panel)
             self._rebuild_images_panel()
+        elif active is self._btn_translated:
+            self._stack.setCurrentWidget(self._translated_window)
         else:
-            self.images_panel.hide()
-            self.text_panel.show()
+            self._stack.setCurrentWidget(self._origin_window)
         if get_setting("remember_tab", True):
             if active is self._btn_translated:
                 tab_id = "translated"
@@ -1846,10 +2443,90 @@ class TranslatablePanel(QWidget):
                 set_setting("last_tab", tab_id)
                 save_config()
 
-    def _on_show_original(self):
+    def _show_panel(
+        self, panel: TextPanel, text: str, as_markdown: bool
+    ) -> None:
+        """Show text in a window, re-applying the user's saved edits if any.
+
+        Edits are keyed by the content without the extraction header, so they
+        survive navigation, reopen and header re-renders (language/engine
+        switches); the current header is recomposed on display.
+        """
+        window = "origin" if panel is self.origin_panel else "translated"
+        body = _strip_header(text)
+        saved = None
+        if self._save_edits:
+            saved = self._edit_cache.get(window, {}).get(_text_key(body))
+        edited = None
+        if saved is not None and saved != body:
+            # ri-attacca l'header corrente al testo modificato salvato
+            edited = text[: len(text) - len(body)] + saved
+        panel.show_text(text, as_markdown=as_markdown, edited=edited)
+        # indicatore: la finestra mostra una modifica ancora in attesa di
+        # essere scritta su disco (timer di salvataggio attivo)
+        pending = self._edits_save_timer.isActive()
+        self._set_dirty(window, pending and edited is not None and edited != text)
+
+    def _on_text_edited(self, base: str, edited: str) -> None:
+        """Store a user edit (header-stripped) and schedule a disk save."""
+        if not self._save_edits:
+            return
+        window = "origin" if self.sender() is self.origin_panel else "translated"
+        body = _strip_header(base)
+        if not body:
+            return
+        self._edit_cache.setdefault(window, {})[_text_key(body)] = _strip_header(edited)
+        self._edits_save_timer.start()
+
+    def _on_window_modified(self, window: str, modified: bool) -> None:
+        """Track the unsaved-edits dot from the user's typing."""
+        if not self._save_edits:
+            self._set_dirty(window, False)
+            return
+        self._set_dirty(window, modified)
+
+    def _set_dirty(self, window: str, dirty: bool) -> None:
+        """Update the toolbar dot, avoiding redundant repaints."""
+        if self._dirty.get(window) == dirty:
+            return
+        self._dirty[window] = dirty
+        toolbar = self.origin_toolbar if window == "origin" else self.translated_toolbar
+        toolbar.set_dirty(dirty)
+
+    def _export_window(self, panel: TextPanel) -> None:
+        """Export the window content (.md or .txt), edits included.
+
+        The extraction header line is excluded: it is display metadata, not
+        document content.
+        """
+        content = _strip_header(panel.toPlainText())
+        window = "original" if panel is self.origin_panel else "translated"
+        page = max(self._current_page + 1, 1)
+        stem = self._doc_stem or "documento"
+        dest, _ = QFileDialog.getSaveFileName(
+            self,
+            T("editor.export_dialog"),
+            f"{stem}_pag{page}_{window}",
+            T("editor.export_filter"),
+        )
+        if not dest:
+            return
+        if not dest.lower().endswith((".md", ".txt")):
+            dest += ".md"
+        try:
+            Path(dest).write_text(content, encoding="utf-8")
+            self._lbl_spinner.setText(T("status.exported"))
+        except Exception:
+            self._lbl_spinner.setText(T("editor.export_error"))
+
+    def show_original(self):
+        """Switch to the "Originale" text tab (keeps current content)."""
         self._set_active_tab(self._btn_original)
-        self.text_panel.show_text(self._page_text, as_markdown=self._render_md)
         self._lbl_spinner.setText("")
+
+    def _on_show_original(self):
+        self.show_original()
+        self._show_panel(self.origin_panel, self._page_text, self._render_md)
 
     def _on_show_translated(self):
         self._set_active_tab(self._btn_translated)
@@ -1861,11 +2538,11 @@ class TranslatablePanel(QWidget):
 
     def _maybe_show_translation(self):
         """Show the cached translation for the page, or schedule a new one."""
-        key = (self._current_page, self._target_lang)
+        key = (self._current_page, self._engine, self._target_lang)
         cached = self._page_translation_cache.get(key)
         if self._current_page >= 0 and cached is not None:
             self._translated_text = cached
-            self.text_panel.show_text(cached, as_markdown=self._render_md)
+            self._show_panel(self.translated_panel, cached, self._render_md)
             self._lbl_spinner.setText("")
         else:
             self._schedule_translation()
@@ -1880,29 +2557,38 @@ class TranslatablePanel(QWidget):
         self._pending_translation = False
         if not self._btn_translated.isChecked():
             return
-        key = (self._current_page, self._target_lang)
+        key = (self._current_page, self._engine, self._target_lang)
         if self._current_page >= 0 and key in self._page_translation_cache:
             # Debounce obsoleto: la pagina corrente è già tradotta per questa
             # destinazione (es. sbirciata avanti e ritorno) → mostra la cache
             # invece di ritradurre inutilmente.
-            self.text_panel.show_text(
-                self._page_translation_cache[key], as_markdown=self._render_md
+            self._show_panel(
+                self.translated_panel,
+                self._page_translation_cache[key],
+                self._render_md,
             )
             self._lbl_spinner.setText("")
             return
         self._start_translation()
 
-    def show_images(self, images: list[str]):
-        """Set the current page's captured regions and activate the gallery tab."""
+    def show_images(self, images: list[str], activate: bool = True):
+        """Set the current page's captured regions and (by default) activate
+        the gallery tab. Pass ``activate=False`` to update the gallery without
+        switching away from the text window (used by zone exclusion)."""
         self._images = list(images or [])
         self._rebuild_images_panel()
-        self._set_active_tab(self._btn_images)
+        if activate:
+            self._set_active_tab(self._btn_images)
 
     # ── Images gallery ─────────────────────────────────────────────────
 
     def _rebuild_images_panel(self):
         """Rebuild the gallery from the current page's figure URIs."""
         container = QWidget()
+        container.setObjectName("galleryContainer")
+        # fondo esplicito: la galleria resta chiara su qualunque tema di
+        # sistema (il viewport dello QScrollArea potrebbe ereditare il palette)
+        container.setStyleSheet("#galleryContainer { background: #f5f5f5; }")
         lay = QVBoxLayout(container)
         lay.setContentsMargins(8, 8, 8, 8)
         lay.setSpacing(8)
@@ -1982,6 +2668,11 @@ class TranslatablePanel(QWidget):
         dlg = QDialog(self)
         dlg.setWindowTitle(Path(path).name)
         dlg.resize(900, 720)
+        # finestra top-level: tema scuro esplicito, indipendente dal sistema
+        dlg.setStyleSheet(
+            "QDialog { background: #2b2b2b; color: #ddd; }"
+            " QScrollArea { background: #2b2b2b; border: none; }"
+        )
         lay = QVBoxLayout(dlg)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -2035,6 +2726,7 @@ class TranslatablePanel(QWidget):
         thread = TranslateThread(
             text, generation=self._generation, kind="page",
             source=self._source_lang, target=self._target_lang,
+            engine=self._engine,
         )
         thread.result_ready.connect(self._on_translation_done)
         self._thread = thread
@@ -2054,30 +2746,37 @@ class TranslatablePanel(QWidget):
 
         self._translated_text = translated
 
-        # Cache per (pagina, destinazione)
+        # Cache per (pagina, engine, destinazione)
         if self._current_page >= 0:
-            self._page_translation_cache[(self._current_page, self._target_lang)] = translated
+            self._page_translation_cache[
+                (self._current_page, self._engine, self._target_lang)
+            ] = translated
             self._save_disk_cache()
 
-        # Show if the Italiano tab is active
+        # Show if the translated tab is active
         if self._btn_translated.isChecked():
-            self.text_panel.show_text(translated, as_markdown=self._render_md)
+            self._show_panel(self.translated_panel, translated, self._render_md)
 
         self._lbl_spinner.setText("✅")
 
     def show_html(self, html_body: str):
-        """Forward to inner TextPanel."""
-        self.text_panel.setHtml(self.text_panel.css() + html_body)
+        """Forward to the Original text window."""
+        self.origin_panel.show_html(html_body)
 
     # ── persistent translation cache ───────────────────────────────────
 
     def set_document(self, path: Path | None):
-        """Point the translation cache at this PDF and load saved translations."""
+        """Point the caches at this PDF and load saved translations + edits."""
+        self._save_edits_cache()  # flush pending edits of the previous doc
         self._page_translation_cache.clear()
         self._cache_file = None
+        self._edit_cache = {"origin": {}, "translated": {}}
+        self._edits_cache_file = None
         self._doc_fingerprint = ""
         if path is None:
+            self._doc_stem = ""
             return
+        self._doc_stem = path.stem
         try:
             st = path.stat()
             self._doc_fingerprint = f"{st.st_size}-{st.st_mtime_ns}"
@@ -2090,6 +2789,14 @@ class TranslatablePanel(QWidget):
             return
         self._cache_file = cache_dir / f"{path.stem}.json"
         self._load_disk_cache()
+        edits_dir = _app_data_base() / "edits"
+        try:
+            edits_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            return
+        self._edits_cache_file = edits_dir / f"{path.stem}.json"
+        if self._save_edits:
+            self._load_edits_cache()
 
     def _load_disk_cache(self):
         """Load saved translations when they match the current PDF fingerprint."""
@@ -2109,30 +2816,37 @@ class TranslatablePanel(QWidget):
                 continue
             if isinstance(value, str):
                 # vecchio formato {page: testo}: la destinazione era sempre it
-                self._page_translation_cache[(page, "it")] = value
+                self._page_translation_cache[(page, "google", "it")] = value
             elif isinstance(value, dict):
                 if "origin" in value or "cleaned" in value:
                     # formato pre-v2 {origin, cleaned} → migra a destinazione it
                     migrated = value.get("cleaned") or value.get("origin")
                     if isinstance(migrated, str):
-                        self._page_translation_cache[(page, "it")] = migrated
+                        self._page_translation_cache[(page, "google", "it")] = migrated
                 else:
-                    # formato v2 {page: {target: testo}}
+                    # formato v2 {page: {target: testo}} → engine google;
+                    # formato v3 {page: {"engine:target": testo}}
                     for tgt, txt in value.items():
-                        if (
-                            isinstance(txt, str)
-                            and tgt in TRANSLATION_LANGUAGES
-                            and tgt != "auto"
-                        ):
-                            self._page_translation_cache[(page, tgt)] = txt
+                        if not isinstance(txt, str):
+                            continue
+                        if ":" in tgt:
+                            engine, lang = tgt.split(":", 1)
+                            if (
+                                engine in TRANSLATION_ENGINES
+                                and lang in TRANSLATION_LANGUAGES
+                                and lang != "auto"
+                            ):
+                                self._page_translation_cache[(page, engine, lang)] = txt
+                        elif tgt in TRANSLATION_LANGUAGES and tgt != "auto":
+                            self._page_translation_cache[(page, "google", tgt)] = txt
 
     def _save_disk_cache(self):
         """Persist the in-memory translation cache to disk."""
         if self._cache_file is None:
             return
         pages: dict[str, dict[str, str]] = {}
-        for (page, tgt), txt in self._page_translation_cache.items():
-            pages.setdefault(str(page), {})[tgt] = txt
+        for (page, engine, tgt), txt in self._page_translation_cache.items():
+            pages.setdefault(str(page), {})[f"{engine}:{tgt}"] = txt
         payload = {
             "fingerprint": self._doc_fingerprint,
             "pages": pages,
@@ -2143,6 +2857,98 @@ class TranslatablePanel(QWidget):
             )
         except Exception:
             pass
+
+    # ── persistent user-edits cache ─────────────────────────────────────
+
+    def _load_edits_cache(self):
+        """Load saved user edits when they match the current PDF fingerprint."""
+        if self._edits_cache_file is None or not self._edits_cache_file.exists():
+            return
+        try:
+            data = json.loads(self._edits_cache_file.read_text(encoding="utf-8"))
+        except Exception:
+            return
+        if data.get("fingerprint") != self._doc_fingerprint:
+            return
+        for window in ("origin", "translated"):
+            entries = data.get(window)
+            if isinstance(entries, dict):
+                for key, value in entries.items():
+                    if isinstance(value, str):
+                        self._edit_cache[window][key] = value
+
+    def _save_edits_cache(self, force: bool = False):
+        """Persist the user edits to disk.
+
+        No-op while saving is disabled (``force`` overrides it, used by
+        ``clear_saved_edits`` which must wipe the file on purpose).
+        """
+        if not self._save_edits and not force:
+            return
+        if self._edits_cache_file is None:
+            return
+        payload = {"fingerprint": self._doc_fingerprint, **self._edit_cache}
+        try:
+            self._edits_cache_file.write_text(
+                json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+            )
+        except Exception:
+            return
+        # tutto ciò che era in attesa è ora su disco: la baseline di
+        # confronto delle finestre diventa il contenuto appena salvato
+        self.origin_panel._rendered_text = self.origin_panel.toPlainText()
+        self.translated_panel._rendered_text = self.translated_panel.toPlainText()
+        self._set_dirty("origin", False)
+        self._set_dirty("translated", False)
+
+    def set_save_edits(self, enabled: bool) -> None:
+        """Enable/disable the persistence (and application) of text edits.
+
+        Disabling stops saving and drops the in-memory cache (the on-disk
+        file is preserved); re-enabling reloads the saved edits.
+        """
+        enabled = bool(enabled)
+        if enabled == self._save_edits:
+            return
+        self._save_edits = enabled
+        self._edits_save_timer.stop()
+        if enabled:
+            self._load_edits_cache()
+            # il contenuto mostrato non cambia: forza il re-render delle
+            # finestre così le modifiche salvate tornano visibili subito
+            self._force_reshow()
+        else:
+            # flush le modifiche pendenti fatte mentre era attivo, poi
+            # abbandona la cache in memoria (il file su disco resta)
+            self._save_edits_cache(force=True)
+            self._edit_cache = {"origin": {}, "translated": {}}
+            self._set_dirty("origin", False)
+            self._set_dirty("translated", False)
+
+    def _force_reshow(self) -> None:
+        """Re-render the current page, bypassing the idempotent show.
+
+        Used after the edit cache changes (re-enable saving / clear) so the
+        current view reflects it immediately.
+        """
+        self.origin_panel._shown_buffer = None
+        self.translated_panel._shown_buffer = None
+        if self._current_page >= 0:
+            if self._btn_translated.isChecked():
+                self._maybe_show_translation()
+            else:
+                self._show_panel(
+                    self.origin_panel, self._page_text, self._render_md
+                )
+
+    def clear_saved_edits(self) -> None:
+        """Wipe the current document's saved edits (memory + disk)."""
+        self._edits_save_timer.stop()
+        self._edit_cache = {"origin": {}, "translated": {}}
+        self._save_edits_cache(force=True)
+        self._set_dirty("origin", False)
+        self._set_dirty("translated", False)
+        self._force_reshow()
 
     def invalidate_cache(self):
         """Clear per-page translation cache."""
@@ -2157,6 +2963,8 @@ class TranslatablePanel(QWidget):
     def shutdown(self):
         """Wait for any in-flight translation before the app closes."""
         self._translate_timer.stop()
+        self._edits_save_timer.stop()
+        self._save_edits_cache()
         for t in self._retired_threads:
             if t.isRunning():
                 t.wait(3000)
@@ -2326,6 +3134,16 @@ class SettingsDialog(QDialog):
         lang_form.addRow(self._lbl_dst, self._dst_combo)
         root.addWidget(self._box_lang)
 
+        # ── Traduzione ──────────────────────────────────────────────────
+        self._box_translation = QGroupBox(T("settings.group.translation"))
+        trans_form = QFormLayout(self._box_translation)
+        self._lbl_engine = QLabel(T("settings.translation.engine"))
+        self._engine_combo = QComboBox()
+        for code in TRANSLATION_ENGINES:
+            self._engine_combo.addItem(T(f"engine.option.{code}"), code)
+        trans_form.addRow(self._lbl_engine, self._engine_combo)
+        root.addWidget(self._box_translation)
+
         # ── Testo ───────────────────────────────────────────────────────
         self._box_text = QGroupBox(T("settings.group.text"))
         text_form = QFormLayout(self._box_text)
@@ -2337,6 +3155,12 @@ class SettingsDialog(QDialog):
         text_form.addRow(self._md_check)
         self._header_check = QCheckBox(T("settings.text.header"))
         text_form.addRow(self._header_check)
+        self._save_edits_check = QCheckBox(T("settings.edits.save"))
+        text_form.addRow(self._save_edits_check)
+        self._btn_clear_edits = QPushButton(T("settings.edits.clear"))
+        self._btn_clear_edits.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_clear_edits.clicked.connect(self._on_clear_edits)
+        text_form.addRow(self._btn_clear_edits)
         root.addWidget(self._box_text)
 
         # ── Visualizzazione ─────────────────────────────────────────────
@@ -2376,6 +3200,21 @@ class SettingsDialog(QDialog):
         # Anteprima lingua dal vivo: ri-traduce SOLO le label del dialogo.
         self._ui_combo.currentIndexChanged.connect(self._on_ui_preview)
 
+    def _on_clear_edits(self):
+        """Ask confirmation, then wipe the current document's saved edits."""
+        ret = QMessageBox.question(
+            self,
+            T("settings.title"),
+            T("settings.edits.clear_confirm"),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if ret != QMessageBox.StandardButton.Yes:
+            return
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "clear_saved_edits"):
+            parent.clear_saved_edits()
+        QMessageBox.information(self, T("settings.title"), T("settings.edits.clear_done"))
+
     def _load_values(self):
         """Populate the widgets from the current config (bozza)."""
         cfg = self._cfg
@@ -2385,9 +3224,12 @@ class SettingsDialog(QDialog):
         self._src_combo.setCurrentIndex(max(0, idx))
         idx = self._dst_combo.findData(cfg.get("dst_lang", "it"))
         self._dst_combo.setCurrentIndex(max(0, idx))
+        idx = self._engine_combo.findData(cfg.get("engine", "google"))
+        self._engine_combo.setCurrentIndex(max(0, idx))
         self._font_spin.setValue(int(cfg.get("font_size", 12)))
         self._md_check.setChecked(bool(cfg.get("render_md", True)))
         self._header_check.setChecked(bool(cfg.get("show_header", True)))
+        self._save_edits_check.setChecked(bool(cfg.get("save_edits", True)))
         self._zoom_spin.setValue(float(cfg.get("zoom", 3.0)))
         self._resume_check.setChecked(bool(cfg.get("resume_last_page", True)))
         self._tab_check.setChecked(bool(cfg.get("remember_tab", True)))
@@ -2403,15 +3245,28 @@ class SettingsDialog(QDialog):
         """Re-apply the dialog's own labels (names in combos are endonyms)."""
         self.setWindowTitle(T("settings.title"))
         self._box_lang.setTitle(T("settings.group.lang"))
+        self._box_translation.setTitle(T("settings.group.translation"))
         self._box_text.setTitle(T("settings.group.text"))
         self._box_view.setTitle(T("settings.group.view"))
         self._box_beh.setTitle(T("settings.group.behavior"))
         self._lbl_ui.setText(T("settings.lang.ui"))
         self._lbl_src.setText(T("settings.lang.source"))
         self._lbl_dst.setText(T("settings.lang.target"))
+        self._lbl_engine.setText(T("settings.translation.engine"))
+        # Le etichette dei motori passano da T(): ricostruisci la combo
+        # preservando la selezione corrente.
+        cur = self._engine_combo.currentData()
+        self._engine_combo.clear()
+        for code in TRANSLATION_ENGINES:
+            self._engine_combo.addItem(T(f"engine.option.{code}"), code)
+        if cur is not None:
+            idx = self._engine_combo.findData(cur)
+            self._engine_combo.setCurrentIndex(max(0, idx))
         self._lbl_font.setText(T("settings.text.font"))
         self._md_check.setText(T("settings.text.md"))
         self._header_check.setText(T("settings.text.header"))
+        self._save_edits_check.setText(T("settings.edits.save"))
+        self._btn_clear_edits.setText(T("settings.edits.clear"))
         self._lbl_zoom.setText(T("settings.view.zoom"))
         self._resume_check.setText(T("settings.behavior.resume"))
         self._tab_check.setText(T("settings.behavior.tab"))
@@ -2429,10 +3284,12 @@ class SettingsDialog(QDialog):
             "lang": self._ui_combo.currentData() or get_language(),
             "src_lang": self._src_combo.currentData() or "auto",
             "dst_lang": self._dst_combo.currentData() or "it",
+            "engine": self._engine_combo.currentData() or "google",
             "zoom": float(self._zoom_spin.value()),
             "font_size": int(self._font_spin.value()),
             "render_md": bool(self._md_check.isChecked()),
             "show_header": bool(self._header_check.isChecked()),
+            "save_edits": bool(self._save_edits_check.isChecked()),
             "resume_last_page": bool(self._resume_check.isChecked()),
             "remember_tab": bool(self._tab_check.isChecked()),
         }
@@ -2454,7 +3311,13 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(800, 600)
 
         # Preferenze dal config (inizializzato in main() prima della UI).
-        self._render_scale: float = float(get_setting("zoom", 3.0))
+        # ``_base_render_scale`` è la risoluzione di render persistita
+        # (impostazione "zoom", 0.5–4.0); ``_view_zoom`` è lo zoom visibile
+        # runtime (1.0 = adatta alla finestra). ``_render_scale`` è la
+        # risoluzione effettiva usata per render + mappatura zone.
+        self._base_render_scale: float = float(get_setting("zoom", 3.0))
+        self._view_zoom: float = 1.0
+        self._render_scale: float = self._base_render_scale
         self._render_md: bool = bool(get_setting("render_md", True))
         self._show_header: bool = bool(get_setting("show_header", True))
         self._remember_tab: bool = bool(get_setting("remember_tab", True))
@@ -2480,6 +3343,18 @@ class MainWindow(QMainWindow):
         self._current_images: list[str] = []  # captured regions, kept until the book closes
         self._excluded_zones: dict[int, list[tuple]] = {}  # page → excluded PDF rects
         self._inclusion_zones: dict[int, list[tuple]] = {}  # page → numbered inclusion rects
+        # Estrazione asincrona: cache del testo grezzo per (pagina, lingua OCR)
+        # + thread in background. Sui PDF scansionati l'OCR richiede secondi:
+        # niente lavoro sincrono sul thread GUI, e la cache evita di ri-OCRare.
+        self._extraction_cache: dict[tuple[int, str], str] = {}
+        # Testo finale per (pagina, lingua OCR, chiave zone): il caso "auto"
+        # (nessuna zona) è la voce comune e rende la navigazione istantanea.
+        self._final_text_cache: dict[tuple[int, str, str], tuple[str, str, float]] = {}
+        self._extraction_cache_file: Path | None = None
+        self._doc_fingerprint: str = ""
+        self._extract_thread: ExtractThread | None = None
+        self._retired_extract_threads: list[ExtractThread] = []
+        self._extract_generation: int = 0
 
         # Central widget
         central = QWidget()
@@ -2574,6 +3449,46 @@ class MainWindow(QMainWindow):
             }
             QToolBar QLabel { color: #ccc; font-size: 13px; }
             QStatusBar { background: #333; color: #aaa; }
+
+            /* Punti che altrimenti ereditano il tema di sistema: colori
+               espliciti così l'app resta scura anche sui temi chiari/scuri
+               del sistema operativo. */
+            QScrollArea { background: #2b2b2b; border: none; }
+            QSplitter::handle { background: #333; }
+            QDockWidget { color: #ddd; }
+            QDockWidget::title {
+                background: #333; color: #ddd; padding: 5px 8px;
+                text-align: left;
+            }
+            QDockWidget::close-button, QDockWidget::float-button {
+                background: #444; border: none; border-radius: 2px;
+            }
+            QDockWidget::close-button:hover,
+            QDockWidget::float-button:hover { background: #555; }
+            QScrollBar:vertical {
+                background: #2f2f2f; width: 12px; margin: 0;
+            }
+            QScrollBar::handle:vertical {
+                background: #555; min-height: 24px;
+                border-radius: 6px; margin: 2px;
+            }
+            QScrollBar::handle:vertical:hover { background: #666; }
+            QScrollBar:horizontal {
+                background: #2f2f2f; height: 12px; margin: 0;
+            }
+            QScrollBar::handle:horizontal {
+                background: #555; min-width: 24px;
+                border-radius: 6px; margin: 2px;
+            }
+            QScrollBar::handle:horizontal:hover { background: #666; }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+                height: 0; width: 0;
+            }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical,
+            QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+                background: none;
+            }
         """)
 
         # L'apertura del PDF è gestita in main(): argomento da riga di comando
@@ -2639,7 +3554,7 @@ class MainWindow(QMainWindow):
         self.btn_zoom_out.clicked.connect(self._zoom_out)
         bar.addWidget(self.btn_zoom_out)
 
-        self.zoom_label = QLabel(T("toolbar.zoom.scale", x="3.0"))
+        self.zoom_label = QLabel(T("toolbar.zoom.scale", x=f"{self._view_zoom:.2f}"))
         bar.addWidget(self.zoom_label)
 
         self.btn_zoom_in = QPushButton("🔍+")
@@ -2724,14 +3639,97 @@ class MainWindow(QMainWindow):
             text, as_markdown=self._render_md, page_num=page_num, images=images,
         )
 
-    def _extract_and_display(self, page_num: int) -> float:
-        """Extract and display the page's text; returns elapsed ms."""
+    def _zones_key(self, page_num: int) -> str:
+        """Stable fingerprint of the page's manual zones (cache key suffix)."""
+        exclude = tuple(self._excluded_zones.get(page_num, ()))
+        include = tuple(self._inclusion_zones.get(page_num, ()))
+        if not exclude and not include:
+            return "()"  # caso auto: chiave canonica, persistita su disco
+        return repr((exclude, include))
+
+    def _request_extraction(self, page_num: int):
+        """Show the page text, extracting in the background if not cached.
+
+        The whole pipeline (OCR + adaptive layout engine) runs in
+        ``ExtractThread`` so the GUI never freezes on scanned PDFs.  The raw
+        markdown is cached per ``(page, OCR language)`` and the final text per
+        ``(page, OCR language, zones key)``: a repeat view (or a reopen with a
+        warm disk cache) is displayed instantly, and changing manual zones
+        only re-runs the layout engine (fast path, raw already cached).
+        """
         if not self._pdf_path:
-            return 0.0
-        text, label, elapsed = self._extract_text(page_num)
+            return
+        ocr_lang = _tess_lang_code(get_source_lang())
+        key = (page_num, ocr_lang, self._zones_key(page_num))
+        cached = self._final_text_cache.get(key)
+        if cached is not None:
+            text, label, elapsed = cached
+            self._last_result = (text, label, elapsed)
+            self._last_elapsed = elapsed
+            self._display_last_result()
+            self._show_page_status(elapsed)
+            return
+
+        self.status_bar.showMessage(T("status.extracting"))
+        self._extract_generation += 1
+
+        old = self._extract_thread
+        if old is not None:
+            try:
+                old.result_ready.disconnect()
+            except TypeError:
+                pass  # already disconnected
+            if old.isRunning():
+                # Non distruggere un thread ancora attivo: lo si ritira e si
+                # pulisce quando termina da solo (risultati scartati dal guard).
+                self._retired_extract_threads.append(old)
+                old.finished.connect(self._forget_retired_extract_thread)
+
+        thread = ExtractThread(
+            str(self._pdf_path), page_num, self._extract_generation, ocr_lang,
+            exclude=tuple(self._excluded_zones.get(page_num, ())),
+            include=tuple(self._inclusion_zones.get(page_num, ())),
+            raw=self._extraction_cache.get((page_num, ocr_lang)),
+        )
+        thread.result_ready.connect(self._on_extraction_done)
+        self._extract_thread = thread
+        thread.start()
+
+    def _forget_retired_extract_thread(self):
+        """Drop a retired extract thread once it finishes."""
+        thread = self.sender()
+        if thread in self._retired_extract_threads:
+            self._retired_extract_threads.remove(thread)
+
+    def _on_extraction_done(
+        self,
+        generation: int,
+        page_num: int,
+        text: str,
+        label: str,
+        raw: str,
+        elapsed: float,
+    ):
+        """Slot: background pipeline finished (stale results are ignored)."""
+        if generation != self._extract_generation:
+            return
+        ocr_lang = _tess_lang_code(get_source_lang())
+        self._extraction_cache[(page_num, ocr_lang)] = raw
+        self._final_text_cache[(page_num, ocr_lang, self._zones_key(page_num))] = (
+            text, label, elapsed,
+        )
+        self._save_extraction_cache()
+        if page_num == self._current_page:
+            self._finish_extraction(page_num, text, label, elapsed)
+
+    def _finish_extraction(
+        self, page_num: int, text: str, label: str, elapsed: float = 0.0
+    ):
+        """Display a finished extraction (text + engine already computed)."""
         self._last_result = (text, label, elapsed)
+        self._last_elapsed = elapsed
         self._display_last_result()
-        return elapsed
+        self._show_page_status(elapsed)
 
     def _display_last_result(self):
         """Re-display the stored extraction (header only if enabled).
@@ -2755,43 +3753,99 @@ class MainWindow(QMainWindow):
             self.btn_md_toggle.setText(T("toolbar.md.plain"))
         set_setting("render_md", self._render_md)
         save_config()
-        # Re-render current text
-        if self._mupdf_doc is not None and self._page_count > 0 and self._pdf_path:
-            self._extract_and_display(self._current_page)
+        # Re-render current text (cache-aware: no re-OCR on a cached page)
+        self._refresh_current_page_text()
 
-    # ── text extraction backends ──────────────────────────────────────────
+    # ── persistent raw-extraction cache ──────────────────────────────────
 
-    def _extract_text(self, page_num: int) -> tuple[str, str, float]:
-        """Extract the page text and return ``(text, label, elapsed)``.
-
-        No zones → the adaptive engine output (auto). Any red/green zone →
-        the manual override: red zones drop noise, green zones set the
-        reading order. Returns the single text the right panel shows.
-        """
-        t0 = time.perf_counter()
-        raw = self._extract_pymupdf4llm(page_num)
-        exclude = tuple(self._excluded_zones.get(page_num, ()))
-        include = tuple(self._inclusion_zones.get(page_num, ()))
-        if include or exclude:
-            text = self._apply_engine(raw, page_num, exclude=exclude, include=include)
-            label = "manual"
-        else:
-            text = self._apply_engine(raw, page_num)
-            label = "auto"
-        elapsed = time.perf_counter() - t0
-        return text, label, elapsed
-
-    # ── Nuovi backend Markdown ────────────────────────────────────────
-
-    def _extract_pymupdf4llm(self, page_num: int) -> str:
-        """PyMuPDF4LLM: blazing fast, native Markdown with tables."""
-        if not _has_pymupdf4llm:
-            return T("extract.no_pymupdf4llm")
+    def _set_extraction_cache(self, path: Path | None):
+        """Point the raw-extraction cache at this PDF and load saved entries."""
+        self._extraction_cache.clear()
+        self._extraction_cache_file = None
+        self._doc_fingerprint = ""
+        if path is None:
+            return
         try:
-            md = pymupdf4llm.to_markdown(str(self._pdf_path), pages=[page_num])
-            return md.strip() or T("extract.empty_page")
-        except Exception as e:
-            return T("extract.error", e=e)
+            st = path.stat()
+            self._doc_fingerprint = f"{st.st_size}-{st.st_mtime_ns}"
+        except Exception:
+            return
+        cache_dir = _app_data_base() / "extraction"
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            return
+        self._extraction_cache_file = cache_dir / f"{path.stem}.json"
+        self._load_extraction_cache()
+
+    def _load_extraction_cache(self):
+        """Load saved raw extraction when it matches the current fingerprint."""
+        if (
+            self._extraction_cache_file is None
+            or not self._extraction_cache_file.exists()
+        ):
+            return
+        try:
+            data = json.loads(self._extraction_cache_file.read_text(encoding="utf-8"))
+        except Exception:
+            return
+        if data.get("fingerprint") != self._doc_fingerprint:
+            return
+        pages = data.get("pages") or {}
+        for page_str, langs in pages.items():
+            try:
+                page = int(page_str)
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(langs, dict):
+                continue
+            for lang, value in langs.items():
+                if isinstance(value, str):
+                    # formato v1: {lang: testo grezzo}
+                    self._extraction_cache[(page, lang)] = value
+                elif isinstance(value, dict):
+                    # formato v2: {lang: {raw, final}}
+                    raw = value.get("raw")
+                    if isinstance(raw, str):
+                        self._extraction_cache[(page, lang)] = raw
+                    final = value.get("final")
+                    if (
+                        isinstance(final, (list, tuple))
+                        and len(final) == 3
+                        and isinstance(final[0], str)
+                    ):
+                        # il "final" persistito è il caso auto (nessuna zona)
+                        self._final_text_cache[(page, lang, "()")] = (
+                            final[0], final[1], float(final[2]),
+                        )
+
+    def _save_extraction_cache(self):
+        """Persist raw + auto final text to disk."""
+        if self._extraction_cache_file is None:
+            return
+        pages: dict[str, dict[str, object]] = {}
+        for (page, lang), raw in self._extraction_cache.items():
+            entry: dict[str, object] = {"raw": raw}
+            final = self._final_text_cache.get((page, lang, "()"))
+            if final is not None:
+                entry["final"] = [final[0], final[1], final[2]]
+            pages.setdefault(str(page), {})[lang] = entry
+        payload = {"fingerprint": self._doc_fingerprint, "pages": pages}
+        try:
+            self._extraction_cache_file.write_text(
+                json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+            )
+        except Exception:
+            pass
+
+    def _wait_extraction_threads(self):
+        """Wait for any in-flight extraction before the app closes."""
+        for t in self._retired_extract_threads:
+            if t.isRunning():
+                t.wait(3000)
+        self._retired_extract_threads.clear()
+        if self._extract_thread is not None and self._extract_thread.isRunning():
+            self._extract_thread.wait(5000)
 
     # ── image extraction (manual region, PyMuPDF) ───────────────────────
 
@@ -2918,7 +3972,11 @@ class MainWindow(QMainWindow):
         uri = self._extract_image_region(self._current_page, rect, embedded_only=True)
         if uri is not None:
             self._current_images.append(uri)
-            self.text_panel.show_images(self._current_images)
+            # Aggiungi la figura alla gallery ma riporta il focus alla
+            # finestra "Originale": l'utente sta lavorando sull'esclusione
+            # della zona, non sulla gallery.
+            self.text_panel.show_images(self._current_images, activate=False)
+            self.text_panel.show_original()
             name = Path(QUrl(uri).toLocalFile()).name
             msg = T("status.zone_excluded_image", name=name)
         self.status_bar.showMessage(msg)
@@ -2971,10 +4029,10 @@ class MainWindow(QMainWindow):
         ]
 
     def _refresh_current_page_text(self):
-        """Re-extract and re-display the current page's text."""
+        """Re-display the current page's text (cache-aware re-extraction)."""
         if not self._pdf_path or self._mupdf_doc is None or self._page_count == 0:
             return
-        self._extract_and_display(self._current_page)
+        self._request_extraction(self._current_page)
 
     def _get_images_dir(self) -> Path:
         """Return (creating on first use) the per-document figures directory."""
@@ -2996,18 +4054,14 @@ class MainWindow(QMainWindow):
         # Render left
         self._display_page(page_num)
 
-        # Extract text right
-        elapsed = 0.0
+        # Extract text right (async, cache-aware: OCR pages don't block the UI)
         if self._pdf_path:
-            elapsed = self._extract_and_display(page_num)
+            self._request_extraction(page_num)
 
         # Update toolbar
         self.page_spin.blockSignals(True)
         self.page_spin.setValue(page_num + 1)
         self.page_spin.blockSignals(False)
-
-        self._last_elapsed = elapsed
-        self._show_page_status(elapsed)
 
         # Sync TOC highlight
         self.toc_panel.select_page(page_num)
@@ -3066,22 +4120,25 @@ class MainWindow(QMainWindow):
         ui_changed = values.get("lang") != self._ui_lang_applied
         src = values.get("src_lang", get_source_lang())
         dst = values.get("dst_lang", get_target_lang())
+        engine = values.get("engine", get_translation_engine())
         langs_changed = src != get_source_lang() or dst != get_target_lang()
+        engine_changed = engine != get_translation_engine()
 
         if values.get("lang") in LANGUAGES:
             set_language(values["lang"])
         for key in ("zoom", "font_size", "render_md", "show_header",
-                    "resume_last_page", "remember_tab"):
+                    "resume_last_page", "remember_tab", "save_edits"):
             if key in values:
                 set_setting(key, values[key])
         set_source_lang(src)   # setters validati (auto solo in sorgente)
         set_target_lang(dst)
+        set_translation_engine(engine)
         save_config()
 
         # Applicazione immediata delle preferenze
-        zoom = float(values.get("zoom", self._render_scale))
-        if abs(zoom - self._render_scale) > 1e-9:
-            self._render_scale = zoom
+        zoom = float(values.get("zoom", self._base_render_scale))
+        if abs(zoom - self._base_render_scale) > 1e-9:
+            self._base_render_scale = zoom
             self._update_zoom()
         self._render_md = bool(values.get("render_md", self._render_md))
         self._show_header = bool(values.get("show_header", self._show_header))
@@ -3094,14 +4151,23 @@ class MainWindow(QMainWindow):
             T("toolbar.md.on") if self._render_md else T("toolbar.md.plain")
         )
         self.text_panel.set_font_size(int(values.get("font_size", 12)))
-        self.text_panel.set_translation_languages(src, dst)
+        self.text_panel.set_translation_languages(src, dst, engine)
+        self.text_panel.set_save_edits(bool(values.get("save_edits", True)))
 
         if ui_changed:
             self._retranslate_all()
         else:
             self._display_last_result()  # header on/off + nuovo font
-        if langs_changed and self.text_panel._btn_translated.isChecked():
+        if (langs_changed or engine_changed) and self.text_panel._btn_translated.isChecked():
             self.text_panel._maybe_show_translation()
+
+    def clear_saved_edits(self):
+        """Wipe the current document's saved edits and re-show fresh text."""
+        if self._mupdf_doc is None:
+            return
+        self.text_panel.clear_saved_edits()
+        self._display_last_result()
+        self.status_bar.showMessage(T("settings.edits.clear_done"), 3000)
 
     def _retranslate_all(self):
         """Re-apply every UI string after a language switch."""
@@ -3130,7 +4196,7 @@ class MainWindow(QMainWindow):
         self.btn_zoom_out.setToolTip(T("toolbar.zoom_out.tip"))
         self.btn_zoom_in.setToolTip(T("toolbar.zoom_in.tip"))
         self.zoom_label.setText(
-            T("toolbar.zoom.scale", x=f"{self._render_scale:.2f}")
+            T("toolbar.zoom.scale", x=f"{self._view_zoom:.2f}")
         )
         self.btn_md_toggle.setText(
             T("toolbar.md.on") if self._render_md else T("toolbar.md.plain")
@@ -3152,63 +4218,48 @@ class MainWindow(QMainWindow):
 
         ``label`` is a key suffix ("auto"/"manual"): it is resolved through
         T() at display time, so a language switch re-renders it correctly.
+        ``ocr`` is the OCR language derived from the source-language setting
+        ("🌐 Auto" when detection is automatic) and ``engine`` is the active
+        translation engine: both are resolved at display time too, so they
+        stay in sync with settings/language changes.
         """
+        src = get_source_lang()
         return T(
             "header.line",
             ms=f"{elapsed*1000:.1f}",
             chars=len(text),
             label=T(f"engine.label.{label}"),
+            ocr=flag_endonym(src or "auto"),
+            engine=T(f"engine.option.{get_translation_engine()}"),
         )
-
-    def _apply_engine(
-        self, text: str, page_num: int, exclude: tuple = (), include: tuple = ()
-    ) -> str:
-        """Apply the adaptive fix engine to the page.
-
-        ``include`` (numbered inclusion zones, reading order) takes
-        precedence: it rebuilds the text as a whitelist ordered by zone
-        number. Otherwise the v1 pipeline applies: with ``exclude`` non-empty
-        the page is rebuilt skipping those zones (manual cleaning) before the
-        cosmetic fixes; with neither, the automatic plan is applied unchanged.
-        """
-        doc = self._get_mupdf_doc()
-        if doc is None:
-            return text
-        try:
-            page = doc[page_num]
-            if include:
-                return _inclusion_order_markdown(page, include, exclude=exclude) or text
-            profile = layout_engine.profile_page(page, exclude=exclude)
-            plan = layout_engine.plan_fixes(profile, "PyMuPDF4LLM ⚡", mode="auto")
-            if exclude:
-                cleaned = _column_aware_markdown(page, exclude=exclude) or text
-                plan = [f for f in plan if f.id != "reorder_columns"]
-                return layout_engine.apply_plan(cleaned, page, profile, plan) or cleaned
-            return layout_engine.apply_plan(text, page, profile, plan) or text
-        except Exception:
-            return text
 
     # ── zoom ───────────────────────────────────────────────────────────────
 
     def _zoom_in(self):
-        self._render_scale = min(4.0, self._render_scale + 0.25)
+        self._view_zoom = min(8.0, self._view_zoom * 1.25)
         self._update_zoom()
 
     def _zoom_out(self):
-        self._render_scale = max(0.5, self._render_scale - 0.25)
+        self._view_zoom = max(0.25, self._view_zoom / 1.25)
         self._update_zoom()
 
     def _zoom_reset(self):
-        self._render_scale = 3.0
+        self._view_zoom = 1.0  # 1.0 = adatta alla finestra
         self._update_zoom()
 
     def _update_zoom(self):
+        """Apply the visible zoom: bump render resolution for sharpness,
+        push the zoom to the view, and re-render the current page."""
+        # Render at enough resolution so text stays crisp when zoomed in,
+        # while keeping the persisted base as the "fit" quality level.
+        self._render_scale = min(8.0, max(0.5, self._base_render_scale * self._view_zoom))
         self.zoom_label.setText(
-            T("toolbar.zoom.scale", x=f"{self._render_scale:.2f}")
+            T("toolbar.zoom.scale", x=f"{self._view_zoom:.2f}")
         )
-        set_setting("zoom", self._render_scale)
+        set_setting("zoom", self._base_render_scale)
         save_config()
         if self._mupdf_doc is not None and self._page_count > 0:
+            self.pdf_view.set_view_zoom(self._view_zoom)
             self._display_page(self._current_page)
 
     # ── rendering engine ──────────────────────────────────────────────────
@@ -3284,6 +4335,7 @@ class MainWindow(QMainWindow):
             self._excluded_zones = {}
             self._inclusion_zones = {}
             self.text_panel.set_document(path)
+            self._set_extraction_cache(path)
 
             self.page_spin.setEnabled(True)
             self.page_spin.setMaximum(max(self._page_count, 1))
@@ -3317,6 +4369,8 @@ class MainWindow(QMainWindow):
             self._mupdf_doc.close()
             self._mupdf_doc = None
         self._last_page_timer.stop()
+        self._wait_extraction_threads()
+        self._save_extraction_cache()
         save_config()  # flush ultima pagina / ultima tab
         self.text_panel.shutdown()
         super().closeEvent(event)
@@ -3328,6 +4382,11 @@ class MainWindow(QMainWindow):
 
 
 def main():
+    # Nei build congelati (PyInstaller) punta l'OCR di PyMuPDF al Tesseract
+    # incluso nel bundle (binario + librerie + tessdata) invece di richiederlo
+    # come installazione di sistema.
+    _setup_bundled_tesseract()
+
     app = QApplication(sys.argv)
     app.setApplicationName("noesis-pdf-reader-lite")
 

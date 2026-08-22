@@ -147,6 +147,17 @@
           page into the target language chosen in Settings.</li>
         <li><strong>🖼️ Images</strong> — the gallery of extracted figures.</li>
       </ul>
+      <p>The two text tabs (📄 Original and the translation) are editable
+      windows: you can type, select, copy and paste freely (Ctrl+C / Ctrl+V
+      / Ctrl+X / Ctrl+Z). Each window has its own mini toolbar with
+      <strong>A−</strong>, the current size and <strong>A+</strong> to shrink
+      or enlarge the text live, plus <strong>↺</strong> to restore the size
+      set in Settings and <strong>💾</strong> to export the window text as
+      <code>.md</code> or <code>.txt</code> (your edits included, the header
+      excluded). While saving is enabled, an orange <strong>●</strong> dot
+      next to the buttons warns of edits not yet written to disk. The two windows zoom independently. Once you edit a
+      text, it is shown as plain text. The changes are saved per page, in
+      the app's data folder, and come back when you reopen the document.</p>
 
       <h3>Status bar</h3>
       <p>At the bottom it shows the current page, the document and the
@@ -162,7 +173,8 @@
           an entry to jump to the chapter.</li>
         <li><strong>Zoom</strong>: 🔍−/🔍+ buttons, <kbd>Ctrl</kbd>+<kbd>+</kbd> /
           <kbd>Ctrl</kbd>+<kbd>−</kbd>, <kbd>Ctrl</kbd>+<kbd>0</kbd> to
-          reset.</li>
+          reset. 1.00× fits the page to the window; the label shows the
+          current scale (0.25×–8.00×).</li>
         <li><strong>Resume</strong>: if enabled in Settings, the app reopens
           the document at the last page read.</li>
       </ul>
@@ -176,10 +188,17 @@
       table recognition, handling of boxes, legends and captions,
       de-duplication of headings and spacing.</p>
 
+      <div class="note"><strong>Scanned PDFs</strong> Pages without a text
+        layer are recognized via the <strong>Tesseract OCR</strong> included
+        in the app (Windows/macOS/Linux packages); the OCR language follows
+        the document-language setting (automatic detection by default).
+        Extraction runs in the background, so the interface stays responsive,
+        and results are cached per page.</div>
+
       <h3>Extraction header</h3>
       <p>If enabled (Settings → "Show extraction header"), an informational
       line appears above the text:</p>
-      <pre><code>── Backend: PyMuPDF4LLM ⚡ │ 210 ms │ 12,345 characters │ Fix: Adaptive engine ──</code></pre>
+      <pre><code>── Backend: PyMuPDF4LLM ⚡ │ 210 ms │ 12,345 characters │ Fix: Adaptive engine │ OCR: 🌐 Auto │ Transl: Google Translate ──</code></pre>
 
       <h3>Markdown rendering</h3>
       <p>The text is shown as rendered Markdown (tables and formatting
@@ -206,8 +225,11 @@
       </ol>
 
       <h3>Exclude + extract in one gesture</h3>
-      <p>If the red zone contains an embedded image, it is also extracted
-      automatically into the 🖼️ Images tab. The status bar confirms the
+      <p>If the red zone contains an embedded image, the <strong>whole
+      selected zone</strong> is captured automatically into the 🖼️ Images
+      tab (composite figures — several images, image + caption — are kept
+      in full, not just one fragment; the focus stays on the
+      <strong>Originale</strong> text window). The status bar confirms the
       operation.</p>
 
       <div class="warning"><strong>Caution</strong> Exclusion is per-page and
@@ -274,7 +296,9 @@
 
       <h3>How it works</h3>
       <ul>
-        <li>The translation runs in the background (Google Translate, no key).</li>
+        <li>The translation runs in the background using the engine chosen in
+          ⚙️ Settings — Google Translate (default) or Microsoft Edge, both free
+          and without an API key.</li>
         <li>The on-disk cache avoids re-translating the same page: it is
           indexed by page and target language.</li>
         <li>While drawing zones the translation is deferred by a 600 ms pause
@@ -305,16 +329,28 @@
           translate the text into.</li>
       </ul>
 
+      <h3>Translation</h3>
+      <ul>
+        <li><strong>Translation engine</strong> — Google Translate (default)
+          or Microsoft Edge (free); no API key required. Changing it
+          re-translates the current page.</li>
+      </ul>
+
       <h3>Text</h3>
       <ul>
         <li><strong>Font size</strong> — 10–16 pt.</li>
         <li><strong>Markdown rendering</strong> — on/off.</li>
         <li><strong>Show extraction header</strong> — on/off.</li>
+        <li><strong>Save text edits</strong> — persist the edits made in the
+          Original/Translated windows per document (on by default).</li>
+        <li><strong>🗑️ Clear saved edits</strong> — wipe the current
+          document's saved edits (with confirmation).</li>
       </ul>
 
       <h3>View</h3>
       <ul>
-        <li><strong>Initial zoom</strong> — 0.5×–4.0×.</li>
+        <li><strong>Initial zoom</strong> — base render resolution, 0.5×–4.0×
+          (affects sharpness; the visible scale starts at 1.00× = fit).</li>
       </ul>
 
       <h3>Behavior</h3>

@@ -148,6 +148,21 @@
           pagina nella lingua di destinazione scelta nelle Impostazioni.</li>
         <li><strong>🖼️ Immagini</strong> — la galleria delle figure estratte.</li>
       </ul>
+      <p>Le due tab di testo (📄 Originale e la traduzione) sono finestre
+      editabili: puoi digitare, selezionare, copiare e incollare liberamente
+      (Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+Z). Ogni finestra ha la sua mini
+      toolbar con <strong>A−</strong>, la dimensione corrente e
+      <strong>A+</strong> per ridurre o aumentare il testo dal vivo, più
+      <strong>↺</strong> per ripristinare la dimensione delle Impostazioni e
+      <strong>💾</strong> per esportare il testo della finestra come
+      <code>.md</code> o <code>.txt</code> (con le tue modifiche, senza
+      l'header). Con il salvataggio attivo, un punto arancione
+      <strong>●</strong> accanto ai pulsanti avvisa di modifiche non ancora
+      scritte su disco.
+      Le due finestre si ingrandiscono in modo indipendente. Dopo una
+      modifica il testo è mostrato come testo semplice. Le modifiche vengono
+      salvate per pagina (cartella dati dell'app) e tornano alla riapertura
+      del documento.</p>
 
       <h3>Barra di stato</h3>
       <p>In basso mostra la pagina corrente, il documento e il tempo di
@@ -163,7 +178,8 @@
           per saltare al capitolo.</li>
         <li><strong>Zoom</strong>: pulsanti 🔍−/🔍+, <kbd>Ctrl</kbd>+<kbd>+</kbd> /
           <kbd>Ctrl</kbd>+<kbd>−</kbd>, <kbd>Ctrl</kbd>+<kbd>0</kbd> per
-          ripristinare.</li>
+          ripristinare. 1.00× adatta la pagina alla finestra; l'etichetta
+          mostra la scala corrente (0.25×–8.00×).</li>
         <li><strong>Ripresa</strong>: se attivo nelle Impostazioni, l'app
           riapre il documento sull'ultima pagina letta.</li>
       </ul>
@@ -177,10 +193,17 @@
       riordino delle colonne, riconoscimento delle tabelle, gestione di box,
       legende e didascalie, de-duplicazione dei titoli e delle spaziature.</p>
 
+      <div class="note"><strong>PDF scansionati</strong> Le pagine senza
+        livello di testo vengono riconosciute con l'<strong>OCR Tesseract</strong>
+        incluso nell'app (pacchetti Windows/macOS/Linux); la lingua OCR segue
+        l'impostazione della lingua del documento (rilevamento automatico di
+        default). L'estrazione gira in background, quindi l'interfaccia resta
+        reattiva, e i risultati sono memorizzati per pagina.</div>
+
       <h3>Header di estrazione</h3>
       <p>Se attivo (Impostazioni → "Mostra l'header di estrazione"), sopra il
       testo compare una riga informativa:</p>
-      <pre><code>── Backend: PyMuPDF4LLM ⚡ │ 210 ms │ 12.345 caratteri │ Fix: Engine adattativo ──</code></pre>
+      <pre><code>── Backend: PyMuPDF4LLM ⚡ │ 210 ms │ 12.345 caratteri │ Fix: Engine adattativo │ OCR: 🌐 Auto │ Trad: Google Translate ──</code></pre>
 
       <h3>Rendering Markdown</h3>
       <p>Il testo è mostrato come Markdown renderizzato (tabelle e formattazione
@@ -207,8 +230,11 @@
       </ol>
 
       <h3>Escludi + estrai in un solo gesto</h3>
-      <p>Se la zona rossa contiene un'immagine incorporata, questa viene anche
-      estratta automaticamente nella tab 🖼️ Immagini. La barra di stato
+      <p>Se la zona rossa contiene un'immagine incorporata, l'<strong>intera
+      zona selezionata</strong> viene catturata automaticamente nella tab
+      🖼️ Immagini (le figure composite — più immagini, immagine + didascalia
+      — sono conservate per intero, non solo un frammento; il focus resta
+      sulla finestra di testo <strong>Originale</strong>). La barra di stato
       conferma l'operazione.</p>
 
       <div class="warning"><strong>Attenzione</strong> L'esclusione è
@@ -275,7 +301,9 @@
 
       <h3>Come funziona</h3>
       <ul>
-        <li>La traduzione parte in background (Google Translate, senza chiave).</li>
+        <li>La traduzione parte in background usando il motore scelto in
+          ⚙️ Impostazioni — Google Translate (default) o Microsoft Edge,
+          entrambi gratuiti e senza chiave API.</li>
         <li>La cache su disco evita di ritradurre la stessa pagina: è indicizzata
           per pagina e lingua di destinazione.</li>
         <li>Durante il disegno delle zone la traduzione è rinviata di una
@@ -305,16 +333,30 @@
           lingua in cui tradurre il testo.</li>
       </ul>
 
+      <h3>Traduzione</h3>
+      <ul>
+        <li><strong>Motore di traduzione</strong> — Google Translate (default)
+          o Microsoft Edge (gratuito), senza chiave API. Cambiarlo ritraduce
+          la pagina corrente.</li>
+      </ul>
+
       <h3>Testo</h3>
       <ul>
         <li><strong>Dimensione font</strong> — 10–16 pt.</li>
         <li><strong>Rendering Markdown</strong> — on/off.</li>
         <li><strong>Mostra l'header di estrazione</strong> — on/off.</li>
+        <li><strong>Salva le modifiche ai testi</strong> — salva le modifiche
+          fatte nelle finestre Originale/Tradotto per documento (attivo di
+          default).</li>
+        <li><strong>🗑️ Cancella modifiche salvate</strong> — elimina le
+          modifiche salvate del documento corrente (con conferma).</li>
       </ul>
 
       <h3>Visualizzazione</h3>
       <ul>
-        <li><strong>Zoom di avvio</strong> — 0.5×–4.0×.</li>
+        <li><strong>Zoom di avvio</strong> — risoluzione di base del render,
+          0.5×–4.0× (incide sulla nitidezza; la scala visibile parte da
+          1.00× = adatta).</li>
       </ul>
 
       <h3>Comportamento</h3>

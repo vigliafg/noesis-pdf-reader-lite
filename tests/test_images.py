@@ -101,10 +101,11 @@ class RegionImageTests(unittest.TestCase):
 
 
 class EmbeddedOnlyTests(unittest.TestCase):
-    """The exclude-zone gesture extracts embedded rasters only (no render
-    fallback), so excluding a text zone never adds a rendered PNG."""
+    """The exclude-zone gesture captures the WHOLE selected zone (rendered)
+    when the zone targets an embedded image; a pure-text zone never adds a
+    rendered PNG to the gallery."""
 
-    def test_full_cover_returns_embedded(self):
+    def test_full_cover_captures_whole_zone(self):
         doc, _page, _png = _make_doc_with_image()
         try:
             out = _region_image(doc, 0, (40, 40, 160, 160), 2.0, embedded_only=True)
@@ -115,7 +116,7 @@ class EmbeddedOnlyTests(unittest.TestCase):
         finally:
             doc.close()
 
-    def test_partial_overlap_returns_embedded(self):
+    def test_partial_overlap_captures_whole_zone(self):
         """A sloppy selection covering ≥50% of the image still captures it."""
         doc, _page, _png = _make_doc_with_image()
         try:
@@ -124,6 +125,33 @@ class EmbeddedOnlyTests(unittest.TestCase):
             data, ext = out
             self.assertEqual(ext, "png")
             self.assertTrue(data.startswith(PNG_SIG))
+        finally:
+            doc.close()
+
+    def test_composite_zone_captures_whole_zone_not_one_fragment(self):
+        """Two embedded images side by side: the exclude zone must render the
+        WHOLE selected region (both images), not just one raster."""
+        import struct
+
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        pix = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 30, 20))
+        pix.clear_with(250)
+        png = pix.tobytes("png")
+        page.insert_image(pymupdf.Rect(50, 50, 150, 150), stream=png)
+        page.insert_image(pymupdf.Rect(160, 50, 260, 150), stream=png)
+        try:
+            # The zone wraps both images (composite figure).
+            out = _region_image(doc, 0, (40, 40, 270, 160), 2.0, embedded_only=True)
+            self.assertIsNotNone(out)
+            data, ext = out
+            self.assertEqual(ext, "png")
+            self.assertTrue(data.startswith(PNG_SIG))
+            # Raw PNG pixel size (IHDR): whole zone = 230 x 120 pt at zoom
+            # 2.0 -> 460 x 240 px. A single embedded fragment would be only
+            # 200 x 200 px (one 100 pt image at zoom 2.0).
+            width, height = struct.unpack(">II", data[16:24])
+            self.assertEqual((width, height), (460, 240))
         finally:
             doc.close()
 

@@ -152,6 +152,21 @@
         <li><strong>🖼️ Imágenes</strong> — la galería de las figuras
           extraídas.</li>
       </ul>
+      <p>Las dos pestañas de texto (📄 Original y la traducción) son ventanas
+      editables: puedes escribir, seleccionar, copiar y pegar libremente
+      (Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+Z). Cada ventana tiene su mini barra
+      de herramientas con <strong>A−</strong>, el tamaño actual y
+      <strong>A+</strong> para reducir o aumentar el texto en vivo, además de
+      <strong>↺</strong> para restaurar el tamaño de Configuración y
+      <strong>💾</strong> para exportar el texto de la ventana como
+      <code>.md</code> o <code>.txt</code> (con tus cambios, sin la
+      cabecera). Con el guardado activo, un punto naranja
+      <strong>●</strong> junto a los botones avisa de cambios aún no
+      escritos en el disco. Las dos
+      ventanas hacen zoom de forma independiente. Tras una modificación, el
+      texto se muestra como texto sin formato. Los cambios se guardan por
+      página (carpeta de datos de la aplicación) y vuelven al reabrir el
+      documento.</p>
 
       <h3>Barra de estado</h3>
       <p>Abajo muestra la página actual, el documento y el tiempo de
@@ -168,7 +183,9 @@
           entrada para saltar al capítulo.</li>
         <li><strong>Zoom</strong>: botones 🔍−/🔍+,
           <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>−</kbd>,
-          <kbd>Ctrl</kbd>+<kbd>0</kbd> para restablecer.</li>
+          <kbd>Ctrl</kbd>+<kbd>0</kbd> para restablecer. 1,00× ajusta la
+          página a la ventana; la etiqueta muestra la escala actual
+          (0,25×–8,00×).</li>
         <li><strong>Reanudar</strong>: si está activado en Configuración, la
           app reabre el documento en la última página leída.</li>
       </ul>
@@ -182,10 +199,18 @@
       reordenación de columnas, reconocimiento de tablas, gestión de recuadros,
       leyendas y epígrafes, deduplicación de títulos y espaciados.</p>
 
+      <div class="note"><strong>PDF escaneados</strong> Las páginas sin capa
+        de texto se reconocen mediante el <strong>OCR Tesseract</strong>
+        incluido en la app (paquetes Windows/macOS/Linux); el idioma del OCR
+        sigue el ajuste del idioma del documento (detección automática por
+        defecto). La extracción se ejecuta en segundo plano, así que la
+        interfaz sigue respondiendo, y los resultados se guardan en caché por
+        página.</div>
+
       <h3>Cabecera de extracción</h3>
       <p>Si está activada (Configuración → «Mostrar la cabecera de
       extracción»), aparece una línea informativa encima del texto:</p>
-      <pre><code>── Backend: PyMuPDF4LLM ⚡ │ 210 ms │ 12 345 caracteres │ Fix: Motor adaptativo ──</code></pre>
+      <pre><code>── Backend: PyMuPDF4LLM ⚡ │ 210 ms │ 12 345 caracteres │ Fix: Motor adaptativo │ OCR: 🌐 Auto │ Trad.: Google Translate ──</code></pre>
 
       <h3>Renderizado Markdown</h3>
       <p>El texto se muestra como Markdown renderizado (incluidas tablas y
@@ -212,9 +237,12 @@
       </ol>
 
       <h3>Excluir + extraer en un solo gesto</h3>
-      <p>Si la zona roja contiene una imagen incrustada, también se extrae
-      automáticamente en la pestaña 🖼️ Imágenes. La barra de estado confirma
-      la operación.</p>
+      <p>Si la zona roja contiene una imagen incrustada, <strong>toda la
+      zona seleccionada</strong> se captura automáticamente en la pestaña
+      🖼️ Imágenes (las figuras compuestas — varias imágenes, imagen +
+      leyenda — se conservan completas, no solo un fragmento; el foco
+      permanece en la ventana de texto <strong>Original</strong>). La barra
+      de estado confirma la operación.</p>
 
       <div class="warning"><strong>Atención</strong> La exclusión es por
         página y vive solo en memoria: al cerrar la app las zonas se
@@ -282,8 +310,9 @@
 
       <h3>Cómo funciona</h3>
       <ul>
-        <li>La traducción se ejecuta en segundo plano (Google Translate, sin
-          clave).</li>
+        <li>La traducción se ejecuta en segundo plano con el motor elegido en
+          ⚙️ Configuración — Google Translate (por defecto) o Microsoft Edge,
+          ambos gratuitos y sin clave API.</li>
         <li>La caché en disco evita volver a traducir la misma página: está
           indexada por página e idioma de destino.</li>
         <li>Mientras dibujas zonas, la traducción se difiere con una pausa de
@@ -316,17 +345,31 @@
           que traducir el texto.</li>
       </ul>
 
+      <h3>Traducción</h3>
+      <ul>
+        <li><strong>Motor de traducción</strong> — Google Translate (por
+          defecto) o Microsoft Edge (gratis), sin clave API. Cambiarlo vuelve
+          a traducir la página actual.</li>
+      </ul>
+
       <h3>Texto</h3>
       <ul>
         <li><strong>Tamaño de fuente</strong> — 10–16 pt.</li>
         <li><strong>Renderizado Markdown</strong> — activado/desactivado.</li>
         <li><strong>Mostrar la cabecera de extracción</strong> —
           activado/desactivado.</li>
+        <li><strong>Guardar cambios de texto</strong> — guarda los cambios
+          hechos en las ventanas Original/Traducción por documento (activo por
+          defecto).</li>
+        <li><strong>🗑️ Borrar cambios guardados</strong> — elimina los cambios
+          guardados del documento actual (con confirmación).</li>
       </ul>
 
       <h3>Visualización</h3>
       <ul>
-        <li><strong>Zoom inicial</strong> — 0,5×–4,0×.</li>
+        <li><strong>Zoom inicial</strong> — resolución base del renderizado,
+          0,5×–4,0× (afecta a la nitidez; la escala visible empieza en
+          1,00× = ajustar).</li>
       </ul>
 
       <h3>Comportamiento</h3>

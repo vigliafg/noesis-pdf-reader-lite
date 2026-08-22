@@ -152,6 +152,20 @@
         <li><strong>🖼️ Bilder</strong> — die Galerie der extrahierten
           Abbildungen.</li>
       </ul>
+      <p>Die beiden Text-Tabs (📄 Original und die Übersetzung) sind
+      editierbare Fenster: Sie können frei tippen, auswählen, kopieren und
+      einfügen (Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+Z). Jedes Fenster hat seine
+      eigene Mini-Symbolleiste mit <strong>A−</strong>, der aktuellen Größe
+      und <strong>A+</strong>, um den Text live zu verkleinern oder zu
+      vergrößern, plus <strong>↺</strong>, um die Größe aus den Einstellungen
+      wiederherzustellen, und <strong>💾</strong>, um den Fenstertext als
+      <code>.md</code> oder <code>.txt</code> zu exportieren (mit Ihren
+      Änderungen, ohne die Kopfzeile). Bei aktiviertem Speichern weist ein
+      orangener Punkt <strong>●</strong> neben den Schaltflächen auf
+      Änderungen hin, die noch nicht auf die Festplatte geschrieben wurden. Die beiden Fenster zoomen unabhängig voneinander.
+      Nach einer Bearbeitung wird der Text als Klartext angezeigt und die
+      Änderungen werden pro Seite gespeichert (Datenspeicherordner der App)
+      und erscheinen beim erneuten Öffnen des Dokuments wieder.</p>
 
       <h3>Statusleiste</h3>
       <p>Unten zeigt sie die aktuelle Seite, das Dokument und die
@@ -169,7 +183,9 @@
           springen.</li>
         <li><strong>Zoom</strong>: Schaltflächen 🔍−/🔍+,
           <kbd>Strg</kbd>+<kbd>+</kbd> / <kbd>Strg</kbd>+<kbd>−</kbd>,
-          <kbd>Strg</kbd>+<kbd>0</kbd> zum Zurücksetzen.</li>
+          <kbd>Strg</kbd>+<kbd>0</kbd> zum Zurücksetzen. 1,00× passt die
+          Seite an das Fenster an; das Etikett zeigt die aktuelle Skalierung
+          (0,25×–8,00×).</li>
         <li><strong>Fortsetzen</strong>: wenn in den Einstellungen aktiviert,
           öffnet die App das Dokument an der zuletzt gelesenen Seite.</li>
       </ul>
@@ -184,10 +200,18 @@
       Bildunterschriften, Deduplizierung von Überschriften und
       Abständen.</p>
 
+      <div class="note"><strong>Gescannte PDFs</strong> Seiten ohne
+        Textebene werden über die in der App enthaltene
+        <strong>Tesseract-OCR</strong> erkannt (Windows/macOS/Linux-Pakete);
+        die OCR-Sprache folgt der Dokumentensprache-Einstellung (Standard:
+        automatische Erkennung). Die Extraktion läuft im Hintergrund, die
+        Oberfläche bleibt also reaktionsfähig, und die Ergebnisse werden pro
+        Seite zwischengespeichert.</div>
+
       <h3>Extraktions-Header</h3>
       <p>Wenn aktiviert (Einstellungen → „Extraktions-Header anzeigen"),
       erscheint über dem Text eine Informationszeile:</p>
-      <pre><code>── Backend: PyMuPDF4LLM ⚡ │ 210 ms │ 12.345 Zeichen │ Fix: Adaptive Engine ──</code></pre>
+      <pre><code>── Backend: PyMuPDF4LLM ⚡ │ 210 ms │ 12.345 Zeichen │ Fix: Adaptive Engine │ OCR: 🌐 Auto │ Übers.: Google Translate ──</code></pre>
 
       <h3>Markdown-Rendering</h3>
       <p>Der Text wird als gerendertes Markdown angezeigt (einschließlich
@@ -214,9 +238,12 @@
       </ol>
 
       <h3>Ausschließen + Extrahieren in einem Schritt</h3>
-      <p>Wenn die rote Zone ein eingebettetes Bild enthält, wird es
-      automatisch auch in den Tab 🖼️ Bilder extrahiert. Die Statusleiste
-      bestätigt den Vorgang.</p>
+      <p>Wenn die rote Zone ein eingebettetes Bild enthält, wird die
+      <strong>gesamte ausgewählte Zone</strong> automatisch in den Tab 🖼️
+      Bilder übernommen (zusammengesetzte Abbildungen — mehrere Bilder,
+      Bild + Beschriftung — werden vollständig erfasst, nicht nur ein
+      Fragment; der Fokus bleibt auf dem Textfenster
+      <strong>Original</strong>). Die Statusleiste bestätigt den Vorgang.</p>
 
       <div class="warning"><strong>Achtung</strong> Der Ausschluss gilt pro
         Seite und existiert nur im Speicher: Beim Schließen der App gehen die
@@ -285,8 +312,9 @@
 
       <h3>So funktioniert es</h3>
       <ul>
-        <li>Die Übersetzung läuft im Hintergrund (Google Translate, ohne
-          Schlüssel).</li>
+        <li>Die Übersetzung läuft im Hintergrund mit der in ⚙️ Einstellungen
+          gewählten Engine — Google Translate (Standard) oder Microsoft Edge,
+          beide kostenlos und ohne API-Schlüssel.</li>
         <li>Der Cache auf der Festplatte vermeidet das erneute Übersetzen
           derselben Seite: Er ist nach Seite und Zielsprache indiziert.</li>
         <li>Beim Zeichnen von Zonen wird die Übersetzung um eine Pause von
@@ -318,16 +346,30 @@
           der Text übersetzt werden soll.</li>
       </ul>
 
+      <h3>Übersetzung</h3>
+      <ul>
+        <li><strong>Übersetzungs-Engine</strong> — Google Translate
+          (Standard) oder Microsoft Edge (kostenlos), ohne API-Schlüssel. Ein
+          Wechsel übersetzt die aktuelle Seite neu.</li>
+      </ul>
+
       <h3>Text</h3>
       <ul>
         <li><strong>Schriftgröße</strong> — 10–16 pt.</li>
         <li><strong>Markdown-Rendering</strong> — ein/aus.</li>
         <li><strong>Extraktions-Header anzeigen</strong> — ein/aus.</li>
+        <li><strong>Textänderungen speichern</strong> — speichert die
+          Änderungen in den Fenstern Original/Übersetzung pro Dokument
+          (standardmäßig aktiv).</li>
+        <li><strong>🗑️ Gespeicherte Änderungen löschen</strong> — löscht die
+          gespeicherten Änderungen des aktuellen Dokuments (mit Bestätigung).</li>
       </ul>
 
       <h3>Anzeige</h3>
       <ul>
-        <li><strong>Start-Zoom</strong> — 0,5×–4,0×.</li>
+        <li><strong>Start-Zoom</strong> — Basis-Renderauflösung, 0,5×–4,0×
+          (beeinflusst die Schärfe; die sichtbare Skalierung startet bei
+          1,00× = anpassen).</li>
       </ul>
 
       <h3>Verhalten</h3>

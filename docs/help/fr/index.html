@@ -151,6 +151,20 @@
           page dans la langue cible choisie dans les Paramètres.</li>
         <li><strong>🖼️ Images</strong> — la galerie des figures extraites.</li>
       </ul>
+      <p>Les deux onglets de texte (📄 Original et la traduction) sont des
+      fenêtres éditables : vous pouvez saisir, sélectionner, copier et coller
+      librement (Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+Z). Chaque fenêtre a sa
+      mini-barre d'outils avec <strong>A−</strong>, la taille courante et
+      <strong>A+</strong> pour réduire ou agrandir le texte en direct, plus
+      <strong>↺</strong> pour restaurer la taille des Paramètres et
+      <strong>💾</strong> pour exporter le texte de la fenêtre en
+      <code>.md</code> ou <code>.txt</code> (avec vos modifications, sans
+      l'en-tête). Avec l'enregistrement activé, un point orange
+      <strong>●</strong> à côté des boutons signale des modifications pas
+      encore écrites sur le disque. Les deux
+      fenêtres zooment indépendamment. Après une modification, le texte est
+      affiché en texte brut. Les changements sont enregistrés par page (dossier
+      de données de l'application) et reviennent à la réouverture du document.</p>
 
       <h3>Barre d'état</h3>
       <p>En bas, elle affiche la page courante, le document et le temps
@@ -167,7 +181,8 @@
           et choisissez une entrée pour sauter au chapitre.</li>
         <li><strong>Zoom</strong> : boutons 🔍−/🔍+, <kbd>Ctrl</kbd>+<kbd>+</kbd> /
           <kbd>Ctrl</kbd>+<kbd>−</kbd>, <kbd>Ctrl</kbd>+<kbd>0</kbd> pour
-          réinitialiser.</li>
+          réinitialiser. 1,00× adapte la page à la fenêtre ; l'étiquette
+          affiche l'échelle courante (0,25×–8,00×).</li>
         <li><strong>Reprise</strong> : si activé dans les Paramètres, l'app
           rouvre le document à la dernière page lue.</li>
       </ul>
@@ -181,10 +196,17 @@
       colonnes, reconnaissance des tableaux, gestion des boîtes, légendes et
       didascalies, dé-duplication des titres et des espaces.</p>
 
+      <div class="note"><strong>PDF scannés</strong> Les pages sans couche de
+        texte sont reconnues via l'<strong>OCR Tesseract</strong> inclus dans
+        l'application (paquets Windows/macOS/Linux) ; la langue OCR suit le
+        réglage de la langue du document (détection automatique par défaut).
+        L'extraction s'exécute en arrière-plan, l'interface reste donc
+        réactive, et les résultats sont mis en cache par page.</div>
+
       <h3>En-tête d'extraction</h3>
       <p>S'il est activé (Paramètres → « Afficher l'en-tête d'extraction »),
       une ligne informative apparaît au-dessus du texte :</p>
-      <pre><code>── Backend : PyMuPDF4LLM ⚡ │ 210 ms │ 12 345 caractères │ Correctifs : Moteur adaptatif ──</code></pre>
+      <pre><code>── Backend : PyMuPDF4LLM ⚡ │ 210 ms │ 12 345 caractères │ Correctifs : Moteur adaptatif │ OCR : 🌐 Auto │ Trad. : Google Translate ──</code></pre>
 
       <h3>Rendu Markdown</h3>
       <p>Le texte est affiché en Markdown rendu (tableaux et mise en forme
@@ -211,9 +233,12 @@
       </ol>
 
       <h3>Exclure + extraire en un seul geste</h3>
-      <p>Si la zone rouge contient une image incorporée, elle est aussi
-      extraite automatiquement dans l'onglet 🖼️ Images. La barre d'état
-      confirme l'opération.</p>
+      <p>Si la zone rouge contient une image incorporée, <strong>toute la
+      zone sélectionnée</strong> est capturée automatiquement dans l'onglet
+      🖼️ Images (les figures composites — plusieurs images, image +
+      légende — sont conservées en entier, pas seulement un fragment ; le
+      focus reste sur la fenêtre de texte <strong>Original</strong>). La
+      barre d'état confirme l'opération.</p>
 
       <div class="warning"><strong>Attention</strong> L'exclusion est
         par-page et vit uniquement en mémoire : la fermeture de l'app fait
@@ -281,8 +306,9 @@
 
       <h3>Comment ça marche</h3>
       <ul>
-        <li>La traduction s'exécute en arrière-plan (Google Translate, sans
-          clé).</li>
+        <li>La traduction s'exécute en arrière-plan avec le moteur choisi dans
+          ⚙️ Paramètres — Google Translate (par défaut) ou Microsoft Edge,
+          tous deux gratuits et sans clé API.</li>
         <li>Le cache sur disque évite de retraduire la même page : il est
           indexé par page et langue cible.</li>
         <li>Pendant le dessin des zones, la traduction est différée d'une pause
@@ -314,17 +340,32 @@
           laquelle traduire le texte.</li>
       </ul>
 
+      <h3>Traduction</h3>
+      <ul>
+        <li><strong>Moteur de traduction</strong> — Google Translate (par
+          défaut) ou Microsoft Edge (gratuit), sans clé API. Le changer
+          retraduit la page courante.</li>
+      </ul>
+
       <h3>Texte</h3>
       <ul>
         <li><strong>Taille de police</strong> — 10–16 pt.</li>
         <li><strong>Rendu Markdown</strong> — activé/désactivé.</li>
         <li><strong>Afficher l'en-tête d'extraction</strong> —
           activé/désactivé.</li>
+        <li><strong>Enregistrer les modifications de texte</strong> — enregistre
+          les modifications faites dans les fenêtres Original/Traduit par
+          document (actif par défaut).</li>
+        <li><strong>🗑️ Effacer les modifications enregistrées</strong> —
+          supprime les modifications enregistrées du document courant (avec
+          confirmation).</li>
       </ul>
 
       <h3>Affichage</h3>
       <ul>
-        <li><strong>Zoom initial</strong> — 0,5×–4,0×.</li>
+        <li><strong>Zoom initial</strong> — résolution de base du rendu,
+          0,5×–4,0× (agit sur la netteté ; l'échelle visible démarre à
+          1,00× = adapter).</li>
       </ul>
 
       <h3>Comportement</h3>

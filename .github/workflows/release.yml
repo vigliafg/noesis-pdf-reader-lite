@@ -38,6 +38,40 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
 
+      - name: Download tessdata (fast, 14 languages)
+        shell: bash
+        run: |
+          mkdir -p ocr/tessdata
+          for l in eng ita fra deu spa por nld pol rus chi_sim jpn kor ara tur; do
+            curl -sL "https://github.com/tesseract-ocr/tessdata_fast/raw/main/${l}.traineddata" \
+              -o "ocr/tessdata/${l}.traineddata"
+          done
+          du -sh ocr/tessdata
+
+      - name: Stage Tesseract (Windows)
+        shell: bash
+        if: runner.os == 'Windows'
+        run: |
+          choco install tesseract -y --no-progress
+          TESS="/c/Program Files/Tesseract-OCR"
+          cp "$TESS/tesseract.exe" ocr/
+          cp "$TESS"/libtesseract*.dll "$TESS"/liblept*.dll ocr/ || true
+          ls -la ocr
+
+      - name: Stage Tesseract (macOS)
+        shell: bash
+        if: runner.os == 'macOS'
+        run: |
+          brew install tesseract dylibbundler
+          PREFIX="$(brew --prefix tesseract)"
+          mkdir -p ocr/lib
+          cp "$PREFIX/bin/tesseract" ocr/
+          # Reloca l'intera closure di dylib in ocr/lib con install name
+          # @executable_path/lib (i path Homebrew assoluti non esistono sui
+          # Mac degli utenti).
+          dylibbundler -b -o -x ocr/tesseract -d ocr/lib -p @executable_path/lib
+          ls -la ocr ocr/lib
+
       - name: Build with PyInstaller
         shell: bash
         run: |
@@ -45,6 +79,23 @@ jobs:
           case "$RUNNER_OS" in
             Windows) ICON="--icon assets/noesispdf.ico" ;;
             macOS)   ICON="--icon assets/noesispdf.icns" ;;
+          esac
+          case "$RUNNER_OS" in
+            Windows)
+              EXTRA=(
+                --add-binary "ocr/tesseract.exe;."
+                --add-binary "ocr/libtesseract*.dll;."
+                --add-binary "ocr/liblept*.dll;."
+                --add-data "ocr/tessdata;tessdata"
+              )
+              ;;
+            macOS)
+              EXTRA=(
+                --add-binary "ocr/tesseract;."
+                --add-binary "ocr/lib;lib"
+                --add-data "ocr/tessdata;tessdata"
+              )
+              ;;
           esac
           pyinstaller \
             --onefile \
@@ -55,6 +106,7 @@ jobs:
             $ICON \
             --collect-all pymupdf4llm \
             --collect-data pymupdf \
+            "${EXTRA[@]}" \
             main.py
 
       - name: Package artifact
@@ -99,6 +151,34 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
 
+      - name: Download tessdata (fast, 14 languages)
+        shell: bash
+        run: |
+          mkdir -p ocr/tessdata
+          for l in eng ita fra deu spa por nld pol rus chi_sim jpn kor ara tur; do
+            curl -sL "https://github.com/tesseract-ocr/tessdata_fast/raw/main/${l}.traineddata" \
+              -o "ocr/tessdata/${l}.traineddata"
+          done
+          du -sh ocr/tessdata
+
+      - name: Stage Tesseract (Linux)
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tesseract-ocr libtesseract5 libleptonica-1.82.0 \
+            libarchive13 libcurl4
+          mkdir -p ocr/lib
+          cp /usr/bin/tesseract ocr/
+          # Closure ldd: copia le dipendenze non-glibc in ocr/lib (le librerie
+          # di sistema già presenti sui target non vanno incluse).
+          for lib in $(ldd /usr/bin/tesseract | awk '/=> \//{print $3}'); do
+            case "$lib" in
+              *libc.so*|*libm.so*|*libstdc++*|*libgcc*|*libdl*|*libpthread*|*librt*|*ld-linux*) ;;
+              *) cp -L "$lib" ocr/lib/ ;;
+            esac
+          done
+          ls -la ocr ocr/lib
+
       - name: Build with PyInstaller
         shell: bash
         run: |
@@ -110,6 +190,9 @@ jobs:
             --name NoesisPDFReaderLite \
             --collect-all pymupdf4llm \
             --collect-data pymupdf \
+            --add-binary "ocr/tesseract;." \
+            --add-binary "ocr/lib;lib" \
+            --add-data "ocr/tessdata;tessdata" \
             main.py
 
       - name: Package AppImage

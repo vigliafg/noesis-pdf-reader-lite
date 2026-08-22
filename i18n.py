@@ -21,6 +21,7 @@ from pathlib import Path
 __all__ = [
     "LANGUAGES",
     "TRANSLATION_LANGUAGES",
+    "TRANSLATION_ENGINES",
     "DEFAULTS",
     "T",
     "get_language",
@@ -29,6 +30,8 @@ __all__ = [
     "set_source_lang",
     "get_target_lang",
     "set_target_lang",
+    "get_translation_engine",
+    "set_translation_engine",
     "flag_endonym",
     "get_config",
     "get_setting",
@@ -71,17 +74,23 @@ TRANSLATION_LANGUAGES: dict[str, tuple[str, str]] = {
     "tr": ("🇹🇷", "Türkçe"),
 }
 
+# Translation engines selectable in the settings dialog (label via T()).
+TRANSLATION_ENGINES: tuple[str, ...] = ("google", "microsoft")
+
 # Default configuration (config.json schema v2). ``last_tab``/``last_pages``
 # are runtime state persisted alongside the user settings.
 DEFAULTS: dict = {
     "lang": "it",           # lingua UI (LANGUAGES)
     "src_lang": "auto",     # origine traduzione (TRANSLATION_LANGUAGES)
     "dst_lang": "it",       # destinazione traduzione (TRANSLATION_LANGUAGES, no auto)
-    "zoom": 3.0,             # scala di zoom di avvio (0.5–4.0)
+    "engine": "google",     # motore di traduzione (TRANSLATION_ENGINES)
+    "zoom": 3.0,             # risoluzione base del render (0.5–4.0);
+                           # lo zoom visibile è runtime (1.0 = adatta)
     "render_md": True,       # rendering Markdown on/off
     "show_header": True,     # riga "── Backend … Fix: …" on/off
     "remember_tab": True,    # riapri il pannello sull'ultima tab usata
     "resume_last_page": True,  # riprendi dall'ultima pagina del documento
+    "save_edits": True,      # salva le modifiche ai testi (per documento)
     "font_size": 12,         # dimensione font testo estratto (10–16 pt)
     "last_tab": "original",  # ultima tab attiva (original|translated|images)
     "last_pages": {},        # nome.pdf → ultima pagina (max 20, LRU)
@@ -125,6 +134,17 @@ def set_target_lang(code: str) -> None:
     """Set the translation (target) language (auto not allowed)."""
     if code in TRANSLATION_LANGUAGES and code != "auto":
         _CONFIG["dst_lang"] = code
+
+
+def get_translation_engine() -> str:
+    """Return the active translation engine id (google|microsoft)."""
+    return _CONFIG.get("engine", "google")
+
+
+def set_translation_engine(code: str) -> None:
+    """Set the translation engine (validated against the known list)."""
+    if code in TRANSLATION_ENGINES:
+        _CONFIG["engine"] = code
 
 
 def flag_endonym(code: str) -> str:
@@ -270,11 +290,57 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "🖼️ Immagini", "en": "🖼️ Images", "fr": "🖼️ Images",
         "de": "🖼️ Bilder", "es": "🖼️ Imágenes",
     },
+    # ── text editor mini-toolbar ────────────────────────────────────────────
+    "editor.decrease": {
+        "it": "Riduci testo", "en": "Decrease text size",
+        "fr": "Réduire le texte", "de": "Text verkleinern", "es": "Reducir texto",
+    },
+    "editor.increase": {
+        "it": "Aumenta testo", "en": "Increase text size",
+        "fr": "Agrandir le texte", "de": "Text vergrößern", "es": "Aumentar texto",
+    },
+    "editor.reset": {
+        "it": "Ripristina dimensione", "en": "Reset size",
+        "fr": "Réinitialiser la taille", "de": "Größe zurücksetzen",
+        "es": "Restablecer tamaño",
+    },
+    "editor.export": {
+        "it": "Esporta testo", "en": "Export text",
+        "fr": "Exporter le texte", "de": "Text exportieren",
+        "es": "Exportar texto",
+    },
+    "editor.export_dialog": {
+        "it": "Salva testo come...", "en": "Save text as...",
+        "fr": "Enregistrer le texte sous...", "de": "Text speichern unter...",
+        "es": "Guardar texto como...",
+    },
+    "editor.export_filter": {
+        "it": "Markdown (*.md);;Testo (*.txt)",
+        "en": "Markdown (*.md);;Text (*.txt)",
+        "fr": "Markdown (*.md);;Texte (*.txt)",
+        "de": "Markdown (*.md);;Text (*.txt)",
+        "es": "Markdown (*.md);;Texto (*.txt)",
+    },
+    "editor.export_error": {
+        "it": "❌ Errore di esportazione", "en": "❌ Export error",
+        "fr": "❌ Erreur d'exportation", "de": "❌ Exportfehler",
+        "es": "❌ Error de exportación",
+    },
+    "editor.unsaved": {
+        "it": "Modifiche non salvate", "en": "Unsaved edits",
+        "fr": "Modifications non enregistrées",
+        "de": "Nicht gespeicherte Änderungen", "es": "Cambios sin guardar",
+    },
     # ── spinner / gallery status ────────────────────────────────────────────
     "status.translating": {
         "it": "⏳ Traducendo...", "en": "⏳ Translating...",
         "fr": "⏳ Traduction...", "de": "⏳ Übersetzen...",
         "es": "⏳ Traduciendo...",
+    },
+    "status.extracting": {
+        "it": "⏳ Estrazione in corso...", "en": "⏳ Extracting...",
+        "fr": "⏳ Extraction en cours...", "de": "⏳ Extraktion läuft...",
+        "es": "⏳ Extrayendo...",
     },
     "status.copied": {
         "it": "✅ Copiata", "en": "✅ Copied", "fr": "✅ Copiée",
@@ -283,6 +349,10 @@ _STRINGS: dict[str, dict[str, str]] = {
     "status.saved": {
         "it": "✅ Salvata", "en": "✅ Saved", "fr": "✅ Enregistrée",
         "de": "✅ Gespeichert", "es": "✅ Guardada",
+    },
+    "status.exported": {
+        "it": "✅ Esportato", "en": "✅ Exported", "fr": "✅ Exporté",
+        "de": "✅ Exportiert", "es": "✅ Exportado",
     },
     # ── images gallery ──────────────────────────────────────────────────────
     "gallery.empty": {
@@ -388,11 +458,11 @@ _STRINGS: dict[str, dict[str, str]] = {
     },
     # ── extraction header / engine labels ───────────────────────────────────
     "header.line": {
-        "it": "── Backend: PyMuPDF4LLM ⚡  │  {ms} ms  │  {chars} caratteri  │  Fix: {label} ──\n\n",
-        "en": "── Backend: PyMuPDF4LLM ⚡  │  {ms} ms  │  {chars} characters  │  Fix: {label} ──\n\n",
-        "fr": "── Backend : PyMuPDF4LLM ⚡  │  {ms} ms  │  {chars} caractères  │  Correctifs : {label} ──\n\n",
-        "de": "── Backend: PyMuPDF4LLM ⚡  │  {ms} ms  │  {chars} Zeichen  │  Fix: {label} ──\n\n",
-        "es": "── Backend: PyMuPDF4LLM ⚡  │  {ms} ms  │  {chars} caracteres  │  Fix: {label} ──\n\n",
+        "it": "── Backend: PyMuPDF4LLM ⚡  │  {ms} ms  │  {chars} caratteri  │  Fix: {label}  │  OCR: {ocr}  │  Trad: {engine} ──\n\n",
+        "en": "── Backend: PyMuPDF4LLM ⚡  │  {ms} ms  │  {chars} characters  │  Fix: {label}  │  OCR: {ocr}  │  Transl: {engine} ──\n\n",
+        "fr": "── Backend : PyMuPDF4LLM ⚡  │  {ms} ms  │  {chars} caractères  │  Correctifs : {label}  │  OCR : {ocr}  │  Trad. : {engine} ──\n\n",
+        "de": "── Backend: PyMuPDF4LLM ⚡  │  {ms} ms  │  {chars} Zeichen  │  Fix: {label}  │  OCR: {ocr}  │  Übers.: {engine} ──\n\n",
+        "es": "── Backend: PyMuPDF4LLM ⚡  │  {ms} ms  │  {chars} caracteres  │  Fix: {label}  │  OCR: {ocr}  │  Trad.: {engine} ──\n\n",
     },
     "engine.label.auto": {
         "it": "Engine adattativo", "en": "Adaptive engine",
@@ -401,6 +471,15 @@ _STRINGS: dict[str, dict[str, str]] = {
     "engine.label.manual": {
         "it": "Zone manuali", "en": "Manual zones",
         "fr": "Zones manuelles", "de": "Manuelle Zonen", "es": "Zonas manuales",
+    },
+    "engine.option.google": {
+        "it": "Google Translate", "en": "Google Translate",
+        "fr": "Google Translate", "de": "Google Translate", "es": "Google Translate",
+    },
+    "engine.option.microsoft": {
+        "it": "Microsoft Edge (gratuito)", "en": "Microsoft Edge (Free)",
+        "fr": "Microsoft Edge (gratuit)", "de": "Microsoft Edge (kostenlos)",
+        "es": "Microsoft Edge (gratis)",
     },
     # ── dialogs ─────────────────────────────────────────────────────────────
     "dlg.open": {
@@ -523,6 +602,15 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Übersetzungssprache (Ziel)",
         "es": "Idioma de traducción (destino)",
     },
+    "settings.group.translation": {
+        "it": "Traduzione", "en": "Translation", "fr": "Traduction",
+        "de": "Übersetzung", "es": "Traducción",
+    },
+    "settings.translation.engine": {
+        "it": "Motore di traduzione", "en": "Translation engine",
+        "fr": "Moteur de traduction", "de": "Übersetzungs-Engine",
+        "es": "Motor de traducción",
+    },
     "settings.group.text": {
         "it": "Testo", "en": "Text", "fr": "Texte",
         "de": "Text", "es": "Texto",
@@ -543,6 +631,32 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fr": "Afficher l'en-tête d'extraction",
         "de": "Extraktions-Header anzeigen",
         "es": "Mostrar la cabecera de extracción",
+    },
+    "settings.edits.save": {
+        "it": "Salva le modifiche ai testi",
+        "en": "Save text edits",
+        "fr": "Enregistrer les modifications de texte",
+        "de": "Textänderungen speichern",
+        "es": "Guardar cambios de texto",
+    },
+    "settings.edits.clear": {
+        "it": "🗑️ Cancella modifiche salvate",
+        "en": "🗑️ Clear saved edits",
+        "fr": "🗑️ Effacer les modifications enregistrées",
+        "de": "🗑️ Gespeicherte Änderungen löschen",
+        "es": "🗑️ Borrar cambios guardados",
+    },
+    "settings.edits.clear_confirm": {
+        "it": "Cancellare le modifiche salvate di questo documento?",
+        "en": "Delete the saved edits of this document?",
+        "fr": "Supprimer les modifications enregistrées de ce document ?",
+        "de": "Gespeicherte Änderungen dieses Dokuments löschen?",
+        "es": "¿Borrar los cambios guardados de este documento?",
+    },
+    "settings.edits.clear_done": {
+        "it": "✅ Modifiche cancellate", "en": "✅ Edits cleared",
+        "fr": "✅ Modifications effacées", "de": "✅ Änderungen gelöscht",
+        "es": "✅ Cambios borrados",
     },
     "settings.group.view": {
         "it": "Visualizzazione", "en": "View", "fr": "Affichage",
@@ -651,7 +765,7 @@ def _validate_config(raw: dict, defaults: dict) -> dict:
         out["font_size"] = min(16, max(10, int(raw.get("font_size", out["font_size"]))))
     except (TypeError, ValueError):
         pass
-    for key in ("render_md", "show_header", "remember_tab", "resume_last_page"):
+    for key in ("render_md", "show_header", "remember_tab", "resume_last_page", "save_edits"):
         out[key] = _to_bool(raw.get(key, out[key]), out[key])
     if raw.get("last_tab") in ("original", "translated", "images"):
         out["last_tab"] = raw["last_tab"]
