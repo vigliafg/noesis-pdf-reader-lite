@@ -184,6 +184,12 @@ jobs:
       - name: Build with PyInstaller
         shell: bash
         run: |
+          # PyInstaller uses ';' as the source:dest separator on Windows
+          # and ':' on Linux/macOS.
+          case "$RUNNER_OS" in
+            Windows) SEP=';' ;;
+            *)       SEP=':' ;;
+          esac
           pyinstaller \
             --onefile \
             --windowed \
@@ -192,9 +198,9 @@ jobs:
             --name NoesisPDFReaderLite \
             --collect-all pymupdf4llm \
             --collect-data pymupdf \
-            --add-binary "ocr/tesseract;." \
-            --add-binary "ocr/lib;lib" \
-            --add-data "ocr/tessdata;tessdata" \
+            --add-binary "ocr/tesseract${SEP}." \
+            --add-binary "ocr/lib${SEP}lib" \
+            --add-data "ocr/tessdata${SEP}tessdata" \
             main.py
 
       - name: Package AppImage
