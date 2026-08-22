@@ -91,9 +91,9 @@ jobs:
               ;;
             macOS)
               EXTRA=(
-                --add-binary "ocr/tesseract;."
-                --add-binary "ocr/lib;lib"
-                --add-data "ocr/tessdata;tessdata"
+                --add-binary "ocr/tesseract:."
+                --add-binary "ocr/lib:lib"
+                --add-data "ocr/tessdata:tessdata"
               )
               ;;
           esac
