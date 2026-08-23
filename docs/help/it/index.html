@@ -204,6 +204,9 @@
       <p>Se attivo (Impostazioni → "Mostra l'header di estrazione"), sopra il
       testo compare una riga informativa:</p>
       <pre><code>── Backend: PyMuPDF4LLM ⚡ │ 210 ms │ 12.345 caratteri │ Fix: Engine adattativo │ OCR: 🌐 Auto │ Trad: Google Translate ──</code></pre>
+      <p>Il nome del motore nell'header riflette sempre il motore
+      attivo: cambiarlo al volo aggiorna la riga sopra il testo originale e
+      sopra quello tradotto.</p>
 
       <h3>Rendering Markdown</h3>
       <p>Il testo è mostrato come Markdown renderizzato (tabelle e formattazione
@@ -303,7 +306,13 @@
       <ul>
         <li>La traduzione parte in background usando il motore scelto in
           ⚙️ Impostazioni — Google Translate (default) o Microsoft Edge,
-          entrambi gratuiti e senza chiave API.</li>
+          entrambi gratuiti e senza chiave API. Puoi anche cambiare motore al
+          volo con i radio button Google / Microsoft a sinistra della barra
+          delle tab di traduzione: la scelta viene salvata, la pagina corrente
+          viene ritradotta e un toast conferma il cambio per 2 secondi.</li>
+        <li>Mentre la traduzione viene prodotta, un toast (⏳ Traducendo con <em>motore</em>…)
+          appare sopra il testo tradotto; scompare quando compare il
+          risultato.</li>
         <li>La cache su disco evita di ritradurre la stessa pagina: è indicizzata
           per pagina e lingua di destinazione.</li>
         <li>Durante il disegno delle zone la traduzione è rinviata di una
@@ -337,7 +346,10 @@
       <ul>
         <li><strong>Motore di traduzione</strong> — Google Translate (default)
           o Microsoft Edge (gratuito), senza chiave API. Cambiarlo ritraduce
-          la pagina corrente.</li>
+          la pagina corrente. Google Translate commuta automaticamente tra
+          tre endpoint gratuiti (dict-chrome-ex → translate-pa → gtx): se il servizio è
+          bloccato sulla tua rete, appare un avviso invece di mostrare
+          silenziosamente il testo non tradotto.</li>
       </ul>
 
       <h3>Testo</h3>

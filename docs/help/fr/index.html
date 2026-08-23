@@ -207,6 +207,9 @@
       <p>S'il est activé (Paramètres → « Afficher l'en-tête d'extraction »),
       une ligne informative apparaît au-dessus du texte :</p>
       <pre><code>── Backend : PyMuPDF4LLM ⚡ │ 210 ms │ 12 345 caractères │ Correctifs : Moteur adaptatif │ OCR : 🌐 Auto │ Trad. : Google Translate ──</code></pre>
+      <p>Le nom du moteur dans l'en-tête reflète toujours le
+      moteur actif : le changer en direct met à jour la ligne au-dessus du
+      texte original et du texte traduit.</p>
 
       <h3>Rendu Markdown</h3>
       <p>Le texte est affiché en Markdown rendu (tableaux et mise en forme
@@ -308,7 +311,14 @@
       <ul>
         <li>La traduction s'exécute en arrière-plan avec le moteur choisi dans
           ⚙️ Paramètres — Google Translate (par défaut) ou Microsoft Edge,
-          tous deux gratuits et sans clé API.</li>
+          tous deux gratuits et sans clé API. Vous pouvez aussi changer de
+          moteur en direct avec les boutons radio Google / Microsoft à gauche
+          de la barre d'onglets de traduction : le choix est enregistré, la
+          page courante est retraduite et un toast confirme le changement
+          pendant 2 secondes.</li>
+        <li>Pendant la production de la traduction, un toast (⏳ Traduction avec <em>moteur</em>…)
+          flotte au-dessus du texte traduit ; il disparaît quand le résultat
+          apparaît.</li>
         <li>Le cache sur disque évite de retraduire la même page : il est
           indexé par page et langue cible.</li>
         <li>Pendant le dessin des zones, la traduction est différée d'une pause
@@ -344,7 +354,11 @@
       <ul>
         <li><strong>Moteur de traduction</strong> — Google Translate (par
           défaut) ou Microsoft Edge (gratuit), sans clé API. Le changer
-          retraduit la page courante.</li>
+          retraduit la page courante. Google Translate bascule
+          automatiquement entre trois points d'accès gratuits
+          (dict-chrome-ex → translate-pa → gtx) : si le service est bloqué sur votre réseau,
+          un avertissement s'affiche au lieu de montrer silencieusement un
+          texte non traduit.</li>
       </ul>
 
       <h3>Texte</h3>

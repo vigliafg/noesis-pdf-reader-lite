@@ -212,6 +212,9 @@
       <p>Wenn aktiviert (Einstellungen → „Extraktions-Header anzeigen"),
       erscheint über dem Text eine Informationszeile:</p>
       <pre><code>── Backend: PyMuPDF4LLM ⚡ │ 210 ms │ 12.345 Zeichen │ Fix: Adaptive Engine │ OCR: 🌐 Auto │ Übers.: Google Translate ──</code></pre>
+      <p>Der Engine-Name im Header entspricht immer der aktiven
+      Engine: Ein Wechsel aktualisiert die Zeile über dem Original- und dem
+      übersetzten Text.</p>
 
       <h3>Markdown-Rendering</h3>
       <p>Der Text wird als gerendertes Markdown angezeigt (einschließlich
@@ -314,7 +317,14 @@
       <ul>
         <li>Die Übersetzung läuft im Hintergrund mit der in ⚙️ Einstellungen
           gewählten Engine — Google Translate (Standard) oder Microsoft Edge,
-          beide kostenlos und ohne API-Schlüssel.</li>
+          beide kostenlos und ohne API-Schlüssel. Sie können die Engine auch
+          live mit den Radio-Buttons Google / Microsoft links der
+          Übersetzungs-Tab-Leiste wechseln: Die Wahl wird gespeichert, die
+          aktuelle Seite neu übersetzt und ein Toast bestätigt den Wechsel für
+          2 Sekunden.</li>
+        <li>Während eine Übersetzung erstellt wird, schwebt ein Toast (⏳ Übersetzen mit <em>Engine</em>…) über dem
+          übersetzten Text; er verschwindet, sobald
+          das Ergebnis erscheint.</li>
         <li>Der Cache auf der Festplatte vermeidet das erneute Übersetzen
           derselben Seite: Er ist nach Seite und Zielsprache indiziert.</li>
         <li>Beim Zeichnen von Zonen wird die Übersetzung um eine Pause von
@@ -350,7 +360,11 @@
       <ul>
         <li><strong>Übersetzungs-Engine</strong> — Google Translate
           (Standard) oder Microsoft Edge (kostenlos), ohne API-Schlüssel. Ein
-          Wechsel übersetzt die aktuelle Seite neu.</li>
+          Wechsel übersetzt die aktuelle Seite neu. Google Translate wechselt
+          automatisch zwischen drei kostenlosen Endpunkten
+          (dict-chrome-ex → translate-pa → gtx): Ist der Dienst in Ihrem Netzwerk blockiert,
+          erscheint eine Warnung, statt stillschweigend unübersetzten Text zu
+          zeigen.</li>
       </ul>
 
       <h3>Text</h3>

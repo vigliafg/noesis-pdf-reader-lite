@@ -337,6 +337,25 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fr": "⏳ Traduction...", "de": "⏳ Übersetzen...",
         "es": "⏳ Traduciendo...",
     },
+    "status.translating_engine": {
+        "it": "⏳ Traducendo con {engine}…", "en": "⏳ Translating with {engine}…",
+        "fr": "⏳ Traduction avec {engine}…", "de": "⏳ Übersetzen mit {engine}…",
+        "es": "⏳ Traduciendo con {engine}…",
+    },
+    "status.translation_error": {
+        "it": "⚠️ Traduzione fallita ({engine}): {reason} — riprova o scegli l'altro motore nelle Impostazioni",
+        "en": "⚠️ Translation failed ({engine}): {reason} — retry or choose the other engine in Settings",
+        "fr": "⚠️ Échec de la traduction ({engine}) : {reason} — réessayez ou choisissez l'autre moteur dans Paramètres",
+        "de": "⚠️ Übersetzung fehlgeschlagen ({engine}): {reason} — erneut versuchen oder die andere Engine in den Einstellungen wählen",
+        "es": "⚠️ Error de traducción ({engine}): {reason} — reinténtalo o elige el otro motor en Configuración",
+    },
+    "toast.engine_changed": {
+        "it": "⚙️ Engine cambiato: {engine}",
+        "en": "⚙️ Engine changed: {engine}",
+        "fr": "⚙️ Moteur changé : {engine}",
+        "de": "⚙️ Engine geändert: {engine}",
+        "es": "⚙️ Motor cambiado: {engine}",
+    },
     "status.extracting": {
         "it": "⏳ Estrazione in corso...", "en": "⏳ Extracting...",
         "fr": "⏳ Extraction en cours...", "de": "⏳ Extraktion läuft...",
@@ -480,6 +499,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "Microsoft Edge (gratuito)", "en": "Microsoft Edge (Free)",
         "fr": "Microsoft Edge (gratuit)", "de": "Microsoft Edge (kostenlos)",
         "es": "Microsoft Edge (gratis)",
+    },
+    "engine.short.google": {
+        "it": "Google", "en": "Google",
+        "fr": "Google", "de": "Google", "es": "Google",
+    },
+    "engine.short.microsoft": {
+        "it": "Microsoft", "en": "Microsoft",
+        "fr": "Microsoft", "de": "Microsoft", "es": "Microsoft",
     },
     # ── dialogs ─────────────────────────────────────────────────────────────
     "dlg.open": {

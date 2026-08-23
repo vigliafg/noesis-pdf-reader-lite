@@ -199,6 +199,9 @@
       <p>If enabled (Settings → "Show extraction header"), an informational
       line appears above the text:</p>
       <pre><code>── Backend: PyMuPDF4LLM ⚡ │ 210 ms │ 12,345 characters │ Fix: Adaptive engine │ OCR: 🌐 Auto │ Transl: Google Translate ──</code></pre>
+      <p>The engine name in the header always reflects the
+      currently active engine — switching engines live updates it above both
+      the original and the translated text.</p>
 
       <h3>Markdown rendering</h3>
       <p>The text is shown as rendered Markdown (tables and formatting
@@ -298,7 +301,13 @@
       <ul>
         <li>The translation runs in the background using the engine chosen in
           ⚙️ Settings — Google Translate (default) or Microsoft Edge, both free
-          and without an API key.</li>
+          and without an API key. You can also switch engine live with the
+          Google / Microsoft radio buttons at the left of the translation tab
+          bar: the choice is saved, the current page is re-translated and a
+          toast confirms the change for 2 seconds.</li>
+        <li>While a translation is being produced, a toast (⏳ Translating with <em>engine</em>…)
+          floats over the translated text; it disappears when the result
+          appears.</li>
         <li>The on-disk cache avoids re-translating the same page: it is
           indexed by page and target language.</li>
         <li>While drawing zones the translation is deferred by a 600 ms pause
@@ -333,7 +342,10 @@
       <ul>
         <li><strong>Translation engine</strong> — Google Translate (default)
           or Microsoft Edge (free); no API key required. Changing it
-          re-translates the current page.</li>
+          re-translates the current page. Google Translate automatically falls
+          back between three free endpoints (dict-chrome-ex → translate-pa → gtx): if the
+          service is blocked on your network, a warning appears instead of
+          silently showing untranslated text.</li>
       </ul>
 
       <h3>Text</h3>

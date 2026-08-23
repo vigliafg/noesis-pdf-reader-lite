@@ -211,6 +211,9 @@
       <p>Si está activada (Configuración → «Mostrar la cabecera de
       extracción»), aparece una línea informativa encima del texto:</p>
       <pre><code>── Backend: PyMuPDF4LLM ⚡ │ 210 ms │ 12 345 caracteres │ Fix: Motor adaptativo │ OCR: 🌐 Auto │ Trad.: Google Translate ──</code></pre>
+      <p>El nombre del motor en la cabecera refleja siempre el
+      motor activo: cambiarlo en vivo actualiza la línea sobre el texto
+      original y el traducido.</p>
 
       <h3>Renderizado Markdown</h3>
       <p>El texto se muestra como Markdown renderizado (incluidas tablas y
@@ -312,7 +315,14 @@
       <ul>
         <li>La traducción se ejecuta en segundo plano con el motor elegido en
           ⚙️ Configuración — Google Translate (por defecto) o Microsoft Edge,
-          ambos gratuitos y sin clave API.</li>
+          ambos gratuitos y sin clave API. También puedes cambiar de motor en
+          vivo con los botones de radio Google / Microsoft a la izquierda de
+          la barra de pestañas de traducción: la elección se guarda, la página
+          actual se vuelve a traducir y un aviso confirma el cambio durante
+          2 segundos.</li>
+        <li>Mientras se produce la traducción, aparece un aviso (⏳ Traduciendo con <em>motor</em>…) sobre
+          el texto traducido; desaparece cuando
+          aparece el resultado.</li>
         <li>La caché en disco evita volver a traducir la misma página: está
           indexada por página e idioma de destino.</li>
         <li>Mientras dibujas zonas, la traducción se difiere con una pausa de
@@ -349,7 +359,10 @@
       <ul>
         <li><strong>Motor de traducción</strong> — Google Translate (por
           defecto) o Microsoft Edge (gratis), sin clave API. Cambiarlo vuelve
-          a traducir la página actual.</li>
+          a traducir la página actual. Google Translate cambia automáticamente
+          entre tres endpoints gratuitos (dict-chrome-ex → translate-pa → gtx): si el servicio
+          está bloqueado en tu red, aparece un aviso en lugar de mostrar
+          silenciosamente el texto sin traducir.</li>
       </ul>
 
       <h3>Texto</h3>

@@ -1,9 +1,11 @@
 """Tests for the markdown-preserving translation (tables + image links)."""
 
+import io
 import json
 import os
 import sys
 import unittest
+import urllib.error
 from unittest import mock
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -108,12 +110,26 @@ class MicrosoftEngineTests(unittest.TestCase):
         req = urlopen.call_args.args[0]
         self.assertNotIn("from=", req.full_url)
 
-    def test_pipeline_falls_back_when_engine_raises(self):
-        """Like Google: single-chunk calls propagate errors; the pipeline
-        (paragraph/table level) degrades to the original text."""
+    def test_pipeline_raises_when_every_chunk_fails(self):
+        """Total engine failure surfaces as TranslationError instead of a
+        silent no-op (the client's Google problem)."""
         with mock.patch("main._ms_translate_one", side_effect=OSError("boom")):
-            out = main.translate_text("Hello world.", engine="microsoft")
-        self.assertEqual(out, "Hello world.")
+            with self.assertRaises(main.TranslationError):
+                main.translate_text("Hello world.", engine="microsoft")
+
+    def test_pipeline_degrades_when_only_some_chunks_fail(self):
+        """Partial failure still translates the paragraphs that work."""
+        def flaky(para: str, source: str, target: str) -> str:
+            if "fails" in para:
+                raise OSError("boom")
+            return para.upper()
+
+        with mock.patch("main._ms_translate_one", side_effect=flaky):
+            out = main.translate_text(
+                "First works.\n\nSecond fails.", engine="microsoft"
+            )
+        self.assertIn("FIRST WORKS.", out)
+        self.assertIn("Second fails.", out)
 
     def test_ms_lang_code_mapping(self):
         self.assertEqual(main._ms_lang_code("zh"), "zh-Hans")
@@ -152,6 +168,86 @@ class MicrosoftEngineTests(unittest.TestCase):
             out = main.translate_text_google("Hello world.")
         self.assertEqual(out, "HELLO WORLD.")
         ms.assert_not_called()
+
+    def test_gt_client_falls_back_when_primary_blocked(self):
+        """Google blocks the primary 'dict-chrome-ex' client on some networks
+        (HTTP 429); the engine must retry with the translate-pa endpoint."""
+        payload = json.dumps({"translation": "ciao mondo"}).encode("utf-8")
+        calls: list[str] = []
+
+        def fake_urlopen(req, timeout=30):
+            calls.append(req.full_url)
+            if "client=dict-chrome-ex" in req.full_url:
+                raise urllib.error.HTTPError(
+                    req.full_url, 429, "Too Many Requests", {}, io.BytesIO(b"")
+                )
+            return _FakeResponse(payload)
+
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            out = main._gt_translate_one("hello world", "en", "it")
+        self.assertEqual(out, "ciao mondo")
+        self.assertEqual(len(calls), 2)
+        self.assertIn("client=dict-chrome-ex", calls[0])
+        self.assertIn("translate-pa.googleapis.com", calls[1])
+
+    def test_gt_falls_back_to_gtx_when_translate_pa_blocked(self):
+        """Last-resort chain: both newer endpoints blocked → legacy 'gtx'."""
+        segments = json.dumps(
+            [[["ciao mondo", "hello world", None, None]], None, "en", None]
+        ).encode("utf-8")
+        calls: list[str] = []
+
+        def fake_urlopen(req, timeout=30):
+            calls.append(req.full_url)
+            # translate-pa embeds "params.client=gtx" too — distinguish by host
+            if "translate-pa.googleapis.com" in req.full_url:
+                raise urllib.error.HTTPError(
+                    req.full_url, 429, "Too Many Requests", {}, io.BytesIO(b"")
+                )
+            if "client=dict-chrome-ex" in req.full_url:
+                raise urllib.error.HTTPError(
+                    req.full_url, 429, "Too Many Requests", {}, io.BytesIO(b"")
+                )
+            return _FakeResponse(segments)
+
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            out = main._gt_translate_one("hello world", "en", "it")
+        self.assertEqual(out, "ciao mondo")
+        self.assertEqual(len(calls), 3)
+        self.assertIn("client=dict-chrome-ex", calls[0])
+        self.assertIn("translate-pa.googleapis.com", calls[1])
+        self.assertIn("client=gtx", calls[2])
+
+    def test_gt_uses_dict_chrome_ex_first(self):
+        """The current default — 'gtx' is increasingly blocked (429) while
+        'dict-chrome-ex' is still served."""
+        payload = json.dumps(
+            [[["ciao mondo", "hello world", None, None]], None, "en", None]
+        ).encode("utf-8")
+        calls: list[str] = []
+
+        def fake_urlopen(req, timeout=30):
+            calls.append(req.full_url)
+            return _FakeResponse(payload)
+
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            out = main._gt_translate_one("hello world", "en", "it")
+        self.assertEqual(out, "ciao mondo")
+        self.assertEqual(len(calls), 1)
+        self.assertIn("client=dict-chrome-ex", calls[0])
+
+    def test_gt_raises_when_all_endpoints_blocked(self):
+        with mock.patch(
+            "urllib.request.urlopen",
+            side_effect=OSError("network unreachable"),
+        ):
+            with self.assertRaises(OSError):
+                main._gt_translate_one("hello", "en", "it")
+
+    def test_google_total_failure_raises_translation_error(self):
+        with mock.patch("main._gt_translate_one", side_effect=OSError("boom")):
+            with self.assertRaises(main.TranslationError):
+                main.translate_text_google("Hello world.")
 
 
 class TesseractOcrTests(unittest.TestCase):

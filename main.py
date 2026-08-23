@@ -53,7 +53,8 @@ except ImportError:
     _has_pymupdf = False
 
 from PyQt6.QtCore import (
-    Qt, QThread, QTimer, pyqtSignal, QUrl, QStandardPaths, QRectF, QLocale,
+    Qt, QThread, QTimer, QEvent, pyqtSignal, QUrl, QStandardPaths, QRectF,
+    QLocale,
 )
 from PyQt6.QtGui import (
     QImage, QPixmap, QFont, QKeySequence, QShortcut,
@@ -72,6 +73,8 @@ from PyQt6.QtWidgets import (
     QToolBar,
     QFileDialog,
     QSpinBox,
+    QRadioButton,
+    QButtonGroup,
     QStackedWidget,
     QDoubleSpinBox,
     QPushButton,
@@ -1057,21 +1060,75 @@ _GT_HEADERS = {
 }
 
 
-def _gt_translate_one(text: str, source: str, target: str) -> str:
-    """Call Google Translate API for a single chunk of text."""
-    params = {
-        "client": "gtx",
-        "sl": source,
-        "tl": target,
-        "dt": "t",
-        "q": text,
-    }
-    full_url = f"{_GT_URL}?{urllib.parse.urlencode(params)}"
+# Google progressively blocks the legacy "gtx" client (HTTP 429 "Sorry...")
+# on many networks/IPs. Three *free, no-key* endpoints are tried in order:
+#   1. the Chrome-extension client "dict-chrome-ex" on the classic endpoint;
+#   2. Google's "translate-pa" endpoint with its embedded public browser key
+#      (the same endpoint the bookfere calibre plugin ships as
+#      "Google (Free) - New");
+#   3. the legacy "gtx" client as a last-resort safety net.
+_GT_PA_URL = "https://translate-pa.googleapis.com/v1/translate"
+_GT_PA_KEY = "AIzaSyDLEeFI5OtFBwYBIoK_jj5m32rZK5CkCXA"
+
+
+def _gt_request(url: str, params: dict) -> object:
+    """GET a Google endpoint and return the parsed JSON (raises on failure)."""
+    full_url = f"{url}?{urllib.parse.urlencode(params)}"
     req = urllib.request.Request(full_url, headers=_GT_HEADERS)
     with urllib.request.urlopen(req, timeout=30) as resp:
-        result = json.loads(resp.read().decode("utf-8"))
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _gt_segments(text: str, source: str, target: str, client: str) -> str:
+    """Classic translate_a/single response: list of [text, ...] segments."""
+    result = _gt_request(_GT_URL, {
+        "client": client, "sl": source, "tl": target, "dt": "t", "q": text,
+    })
     if result and result[0]:
         return "".join(item[0] for item in result[0] if item[0])
+    return ""
+
+
+def _gt_pa(text: str, source: str, target: str) -> str:
+    """translate-pa v1/translate response: {"translation": "..."}."""
+    result = _gt_request(_GT_PA_URL, {
+        "params.client": "gtx",
+        "query.source_language": source,
+        "query.target_language": target,
+        "query.display_language": "en-US",
+        "data_types": "TRANSLATION",
+        "key": _GT_PA_KEY,
+        "query.text": text,
+    })
+    if isinstance(result, dict) and result.get("translation"):
+        return result["translation"]
+    return ""
+
+
+def _gt_translate_one(text: str, source: str, target: str) -> str:
+    """Call a free Google Translate endpoint for a single chunk of text.
+
+    Only network/HTTP failures move to the next endpoint; an answered-but-
+    empty response stops the chain (the engine is reachable, there is simply
+    nothing to return).
+    """
+    attempts = (
+        lambda: _gt_segments(text, source, target, "dict-chrome-ex"),
+        lambda: _gt_pa(text, source, target),
+        lambda: _gt_segments(text, source, target, "gtx"),
+    )
+    last_error: Exception | None = None
+    for attempt in attempts:
+        try:
+            out = attempt()
+            if out:
+                return out
+            return text
+        except Exception as exc:
+            last_error = exc
+            continue
+    if last_error is not None:
+        raise last_error
     return text
 
 
@@ -1108,11 +1165,20 @@ def _ms_translate_one(text: str, source: str, target: str) -> str:
         return text
 
 
-def _translate_one(engine: str, text: str, source: str, target: str) -> str:
+def _translate_one(
+    engine: str, text: str, source: str, target: str,
+    _stats: _TranslateStats | None = None,
+) -> str:
     """Translate a single chunk with the chosen engine (google|microsoft)."""
+    if _stats is not None:
+        _stats.attempted()
     if engine == "microsoft":
-        return _ms_translate_one(text, source, target)
-    return _gt_translate_one(text, source, target)
+        out = _ms_translate_one(text, source, target)
+    else:
+        out = _gt_translate_one(text, source, target)
+    if _stats is not None:
+        _stats.succeeded()
+    return out
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1255,18 +1321,59 @@ _SEP_CELL_RE = re.compile(r":?-{3,}:?")
 _MAX_WORKERS = 8  # concurrent translation requests (I/O-bound)
 
 
+class TranslationError(RuntimeError):
+    """Raised when a translation engine fails on every chunk of a request.
+
+    Individual chunk failures still degrade gracefully to the original text;
+    only a *total* failure (engine unreachable/blocked on this network) is
+    raised so the UI can surface it instead of silently showing untranslated
+    text.
+    """
+
+
+class _TranslateStats:
+    """Attempt/ok counters shared across the concurrent translation chunks.
+
+    ``list.append`` is atomic under the GIL, so no lock is needed even though
+    paragraphs (and their nested table-cell/sub-chunk calls) run in worker
+    threads.
+    """
+
+    def __init__(self) -> None:
+        self._attempts: list[int] = []
+        self._ok: list[int] = []
+
+    @property
+    def attempts(self) -> int:
+        return len(self._attempts)
+
+    @property
+    def ok(self) -> int:
+        return len(self._ok)
+
+    def attempted(self) -> None:
+        self._attempts.append(1)
+
+    def succeeded(self) -> None:
+        self._ok.append(1)
+
+
 def _translate_cell(
-    cell: str, source: str, target: str, engine: str = "google"
+    cell: str, source: str, target: str, engine: str = "google",
+    _stats: _TranslateStats | None = None,
 ) -> str:
     """Translate one table cell, falling back to the original on failure."""
     try:
-        return _translate_one(engine, cell, source, target).strip()
+        return _translate_one(
+            engine, cell, source, target, _stats=_stats
+        ).strip()
     except Exception:
         return cell
 
 
 def _translate_table(
-    table: str, source: str, target: str, engine: str = "google"
+    table: str, source: str, target: str, engine: str = "google",
+    _stats: _TranslateStats | None = None,
 ) -> str:
     """Translate the cell contents of a markdown table, keeping its structure.
 
@@ -1299,7 +1406,7 @@ def _translate_table(
             max_workers=min(_MAX_WORKERS, len(unique))
         ) as pool:
             futures = {
-                pool.submit(_translate_cell, c, source, target, engine): c
+                pool.submit(_translate_cell, c, source, target, engine, _stats): c
                 for c in unique
             }
             for fut in concurrent.futures.as_completed(futures):
@@ -1330,6 +1437,7 @@ def _translate_paragraph(
     target: str,
     chunk_size: int,
     engine: str = "google",
+    _stats: _TranslateStats | None = None,
 ) -> str:
     """Translate one paragraph, protecting markdown tables and image links."""
     protected: dict[str, str] = {}
@@ -1344,7 +1452,9 @@ def _translate_paragraph(
 
     # Tables: translate their cells, then protect the rebuilt table.
     def _table_repl(m):
-        return _protect("TBL", _translate_table(m.group(0), source, target, engine))
+        return _protect(
+            "TBL", _translate_table(m.group(0), source, target, engine, _stats)
+        )
 
     para = _MD_TABLE_RE.sub(_table_repl, para)
 
@@ -1353,7 +1463,7 @@ def _translate_paragraph(
         out = para
     elif len(para) <= chunk_size:
         try:
-            out = _translate_one(engine, para, source, target)
+            out = _translate_one(engine, para, source, target, _stats=_stats)
         except Exception:
             out = para
     else:
@@ -1374,7 +1484,9 @@ def _translate_paragraph(
         sub_translated: list[str] = []
         for ch in sub_chunks:
             try:
-                sub_translated.append(_translate_one(engine, ch, source, target))
+                sub_translated.append(
+                    _translate_one(engine, ch, source, target, _stats=_stats)
+                )
             except Exception:
                 sub_translated.append(ch)
         out = " ".join(sub_translated)
@@ -1411,11 +1523,14 @@ def translate_text(
     if not tasks:
         return text
 
+    stats = _TranslateStats()
     with concurrent.futures.ThreadPoolExecutor(
         max_workers=min(_MAX_WORKERS, len(tasks))
     ) as pool:
         futures = {
-            pool.submit(_translate_paragraph, p, source, target, chunk_size, engine): i
+            pool.submit(
+                _translate_paragraph, p, source, target, chunk_size, engine, stats
+            ): i
             for i, p in tasks
         }
         for fut in concurrent.futures.as_completed(futures):
@@ -1430,6 +1545,10 @@ def translate_text(
         if not p.strip():
             results[i] = p
 
+    if stats.attempts > 0 and stats.ok == 0:
+        raise TranslationError(
+            f"engine '{engine}' failed on all {stats.attempts} request(s)"
+        )
     return "\n\n".join(results)
 
 
@@ -2102,6 +2221,7 @@ class TranslateThread(QThread):
     """Background thread for translation to keep UI responsive."""
 
     result_ready = pyqtSignal(int, str, str)  # generation_id, kind, translated_text
+    error_ready = pyqtSignal(int, str)        # generation_id, error message
 
     def __init__(
         self,
@@ -2121,12 +2241,16 @@ class TranslateThread(QThread):
         self._engine = engine
 
     def run(self):
-        translated = translate_text(
-            self._text,
-            source=self._source,
-            target=self._target,
-            engine=self._engine,
-        )
+        try:
+            translated = translate_text(
+                self._text,
+                source=self._source,
+                target=self._target,
+                engine=self._engine,
+            )
+        except Exception as exc:
+            self.error_ready.emit(self._generation, str(exc))
+            return
         self.result_ready.emit(self._generation, self._kind, translated)
 
 
@@ -2183,6 +2307,8 @@ class TranslatablePanel(QWidget):
 
     # Emitted when the user removes a captured image from the gallery.
     image_removed = pyqtSignal(str)  # file:// URI
+    # Transient message for the main window status bar (message, duration ms).
+    toast = pyqtSignal(str, int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -2242,6 +2368,33 @@ class TranslatablePanel(QWidget):
 
         tab_layout.addStretch()
 
+        # ── Engine radios (live engine switch), far right of the tab bar ──
+        self._radio_google = QRadioButton(T("engine.short.google"))
+        self._radio_microsoft = QRadioButton(T("engine.short.microsoft"))
+        radio_style = """
+            QRadioButton { color: #bbb; font-size: 12px; background: transparent;
+                           spacing: 5px; }
+            QRadioButton:hover { color: #fff; }
+            QRadioButton::indicator {
+                width: 13px; height: 13px; border: 1px solid #888;
+                border-radius: 7px; background: #444;
+            }
+            QRadioButton::indicator:checked {
+                background: #3a6bc5; border-color: #3a6bc5;
+            }
+        """
+        for rb in (self._radio_google, self._radio_microsoft):
+            rb.setStyleSheet(radio_style)
+            rb.setCursor(Qt.CursorShape.PointingHandCursor)
+            tab_layout.addWidget(rb)
+        self._engine_group = QButtonGroup(self)
+        self._engine_group.addButton(self._radio_google)
+        self._engine_group.addButton(self._radio_microsoft)
+        self._radio_google.setChecked(self._engine == "google")
+        self._radio_microsoft.setChecked(self._engine == "microsoft")
+        self._radio_google.toggled.connect(self._on_engine_radio)
+        self._radio_microsoft.toggled.connect(self._on_engine_radio)
+
         # ── Text windows (Original / Translated) ───────────────────────
         # Two independent editable windows, each with its own mini toolbar
         # (A− / A+): stacked, the active tab's window is shown.
@@ -2268,6 +2421,27 @@ class TranslatablePanel(QWidget):
             self.translated_toolbar,
         ) = _make_window()
 
+        # ── Translating overlay: a toast floating over the translated text
+        # while a translation is being produced (the old tiny spinner label
+        # was barely visible). Shown on schedule/start, hidden when the
+        # translated text appears (or on error). ─────────────────────────
+        self._translating_toast = QLabel(
+            T("status.translating_engine", engine=T(f"engine.option.{self._engine}"))
+        )
+        self._translating_toast.setStyleSheet("""
+            QLabel {
+                background: rgba(20, 20, 20, 230); color: #fff;
+                border: 1px solid #666; border-radius: 12px;
+                padding: 16px 34px; font-size: 20px; font-weight: bold;
+            }
+        """)
+        self._translating_toast.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._translating_toast.hide()
+        # Overlay child of the translated window: the layout does not manage
+        # it, we position it manually (centered) and keep it on top.
+        self._translating_toast.setParent(self._translated_window)
+        self._translated_window.installEventFilter(self)
+
         # ── Images panel (gallery of extracted figures) ────────────────
         self.images_panel = QScrollArea()
         self.images_panel.setWidgetResizable(True)
@@ -2285,6 +2459,9 @@ class TranslatablePanel(QWidget):
 
         # ── State ──────────────────────────────────────────────────────
         self._page_text: str = ""          # the single text shown (auto or manual)
+        self._page_body: str = ""          # page text without the extraction header
+        self._header_prefix: str = ""      # header template before the engine token
+        self._header_tail: str = ""        # header template after the engine token
         self._translated_text: str = ""
         self._render_md: bool = True
         # Cache per (pagina, destinazione): cambiare la lingua di destinazione
@@ -2365,6 +2542,11 @@ class TranslatablePanel(QWidget):
         self._btn_original.setText(T("tab.original"))
         self._btn_translated.setText(flag_endonym(self._target_lang))
         self._btn_images.setText(T("tab.images"))
+        self._radio_google.setText(T("engine.short.google"))
+        self._radio_microsoft.setText(T("engine.short.microsoft"))
+        self._translating_toast.setText(
+            T("status.translating_engine", engine=T(f"engine.option.{self._engine}"))
+        )
         self.origin_toolbar.retranslate()
         self.translated_toolbar.retranslate()
 
@@ -2389,8 +2571,88 @@ class TranslatablePanel(QWidget):
         self._target_lang = dst
         self._engine = engine
         self._btn_translated.setText(flag_endonym(self._target_lang))
+        # Keep the tab-bar engine radios in sync (Settings change → radios).
+        for rb, code in (
+            (self._radio_google, "google"),
+            (self._radio_microsoft, "microsoft"),
+        ):
+            rb.blockSignals(True)
+            rb.setChecked(engine == code)
+            rb.blockSignals(False)
         if changed and self._btn_translated.isChecked():
             self._schedule_translation()
+
+    def _on_engine_radio(self, checked: bool):
+        """Live engine switch from the tab-bar radios.
+
+        Persists the choice, shows a 2-second toast, and re-translates the
+        current page when the translated tab is active (cache is keyed by
+        engine, so switching engines naturally misses and re-translates).
+        """
+        if not checked:
+            return  # toggled fires for both radios; act on the checked one
+        code = "google" if self.sender() is self._radio_google else "microsoft"
+        if code == self._engine:
+            return
+        self._engine = code
+        set_translation_engine(code)
+        save_config()
+        # The origin window also shows the engine in its header: recompose it
+        # so both windows agree after a live switch (same root cause as the
+        # stale translated header).
+        if self._header_prefix and not self._btn_translated.isChecked():
+            self._page_text = self._recomposed_header() + self._page_body
+            self._show_panel(self.origin_panel, self._page_text, self._render_md)
+        self.toast.emit(
+            T("toast.engine_changed", engine=T(f"engine.option.{code}")), 2000
+        )
+        if self._btn_translated.isChecked():
+            self._maybe_show_translation()
+
+    # ── translation header / translating toast ────────────────────────
+
+    def _recomposed_header(self) -> str:
+        """Header for the translated window, recomposed with the current engine.
+
+        The header template (ms/chars/label/OCR + engine) is captured at
+        ``show_text`` time; only the engine token is refreshed, so a live
+        engine switch (radio buttons / Settings) is reflected above the
+        translated text instead of keeping the stale name.
+        """
+        if not self._header_prefix:
+            return ""
+        return (
+            f"{self._header_prefix} {T(f'engine.option.{self._engine}')}"
+            f" ──{self._header_tail}"
+        )
+
+    def _show_translating_toast(self):
+        """Center and show the 'translating…' toast over the translated text."""
+        toast = self._translating_toast
+        toast.setText(
+            T("status.translating_engine", engine=T(f"engine.option.{self._engine}"))
+        )
+        toast.adjustSize()
+        r = self._translated_window.rect()
+        toast.move(
+            r.center().x() - toast.width() // 2,
+            r.center().y() - toast.height() // 2,
+        )
+        toast.show()
+        toast.raise_()
+
+    def _hide_translating_toast(self):
+        self._translating_toast.hide()
+
+    def _center_translating_toast(self):
+        """Keep the toast centered after the translated window is resized."""
+        if self._translating_toast.isVisible():
+            self._show_translating_toast()
+
+    def eventFilter(self, obj, event):
+        if obj is self._translated_window and event.type() == QEvent.Type.Resize:
+            self._center_translating_toast()
+        return super().eventFilter(obj, event)
 
     def show_text(
         self,
@@ -2408,6 +2670,27 @@ class TranslatablePanel(QWidget):
         self._page_text = text
         self._current_page = page_num
         self._images = list(images or [])
+        # The header line (``── … Trad: {engine} ──``) must never be sent to
+        # the translator: it is baked at display time and would carry a stale
+        # engine name. Translate only the body and recompose the header with
+        # the *current* engine when the translated result is shown.
+        body = _strip_header(text)
+        self._page_body = body
+        header = text[: len(text) - len(body)]
+        if header:
+            # The header template ends with the engine name right before the
+            # closing "──": drop that baked name from the prefix, so the
+            # recomposed header can swap in the *current* engine later.
+            prefix, tail = header.rsplit("──", 1)
+            old_engine = T(f"engine.option.{self._engine}")
+            stripped = prefix.rstrip()  # the template ends "…{engine} ──"
+            if stripped.endswith(old_engine):
+                prefix = stripped[: -len(old_engine)].rstrip()
+            self._header_prefix = prefix
+            self._header_tail = tail
+        else:
+            self._header_prefix = ""
+            self._header_tail = ""
         self._rebuild_images_panel()
 
         if self._btn_images.isChecked():
@@ -2544,12 +2827,14 @@ class TranslatablePanel(QWidget):
             self._translated_text = cached
             self._show_panel(self.translated_panel, cached, self._render_md)
             self._lbl_spinner.setText("")
+            self._hide_translating_toast()
         else:
             self._schedule_translation()
 
     def _schedule_translation(self):
         """Debounce: re-translate only after the user pauses drawing."""
-        self._lbl_spinner.setText(T("status.translating"))
+        self._lbl_spinner.setText("")
+        self._show_translating_toast()
         self._pending_translation = True
         self._translate_timer.start()
 
@@ -2568,6 +2853,7 @@ class TranslatablePanel(QWidget):
                 self._render_md,
             )
             self._lbl_spinner.setText("")
+            self._hide_translating_toast()
             return
         self._start_translation()
 
@@ -2707,16 +2993,21 @@ class TranslatablePanel(QWidget):
 
     def _start_translation(self):
         """Fire a background translation for the current page text."""
-        text = self._page_text
-        self._lbl_spinner.setText(T("status.translating"))
+        # Translate only the body: the extraction header is recomposed at
+        # display time with the current engine (see ``_recomposed_header``),
+        # so a live engine switch updates the name above the translated text.
+        text = self._page_body
+        self._lbl_spinner.setText("")
+        self._show_translating_toast()
         self._generation += 1
 
         old = self._thread
         if old is not None:
-            try:
-                old.result_ready.disconnect()
-            except TypeError:
-                pass  # already disconnected
+            for sig in (old.result_ready, old.error_ready):
+                try:
+                    sig.disconnect()
+                except TypeError:
+                    pass  # already disconnected
             if old.isRunning():
                 # Non distruggere un thread ancora attivo: lo si ritira e si
                 # pulisce quando termina da solo.
@@ -2729,6 +3020,7 @@ class TranslatablePanel(QWidget):
             engine=self._engine,
         )
         thread.result_ready.connect(self._on_translation_done)
+        thread.error_ready.connect(self._on_translation_error)
         self._thread = thread
         thread.start()
 
@@ -2744,20 +3036,36 @@ class TranslatablePanel(QWidget):
         if generation != self._generation:
             return
 
-        self._translated_text = translated
+        # Attach the header recomposed with the *current* engine, so the
+        # engine name above the translated text always matches the active one
+        # (e.g. after a live switch from Google to Microsoft).
+        displayed = self._recomposed_header() + translated
+        self._translated_text = displayed
 
         # Cache per (pagina, engine, destinazione)
         if self._current_page >= 0:
             self._page_translation_cache[
                 (self._current_page, self._engine, self._target_lang)
-            ] = translated
+            ] = displayed
             self._save_disk_cache()
 
         # Show if the translated tab is active
         if self._btn_translated.isChecked():
-            self._show_panel(self.translated_panel, translated, self._render_md)
+            self._show_panel(self.translated_panel, displayed, self._render_md)
 
         self._lbl_spinner.setText("✅")
+        self._hide_translating_toast()
+
+    def _on_translation_error(self, generation: int, message: str):
+        """Slot: engine failed on every chunk — surface it instead of the
+        silent no-op that used to leave untranslated text on screen."""
+        if generation != self._generation:
+            return
+        engine = T(f"engine.option.{self._engine}")
+        self._lbl_spinner.setText(
+            T("status.translation_error", engine=engine, reason=message)
+        )
+        self._hide_translating_toast()
 
     def show_html(self, html_body: str):
         """Forward to the Original text window."""
@@ -3402,6 +3710,7 @@ class MainWindow(QMainWindow):
         # Right — text panel with translation tabs
         self.text_panel = TranslatablePanel()
         self.text_panel.image_removed.connect(self._on_image_removed)
+        self.text_panel.toast.connect(self._show_toast)
 
         self.splitter.addWidget(left_panel)
         self.splitter.addWidget(self.text_panel)
@@ -3446,6 +3755,11 @@ class MainWindow(QMainWindow):
                 background: #444; color: #eee; border: 1px solid #555;
                 border-radius: 4px; padding: 4px 8px; font-size: 13px;
                 min-width: 60px;
+            }
+            /* Page-number box: no up/down buttons (they made the widget look
+               cluttered); navigation is via ◀ ▶ or by typing a page number. */
+            QToolBar QSpinBox::up-button, QToolBar QSpinBox::down-button {
+                width: 0px; border: none; background: transparent;
             }
             QToolBar QLabel { color: #ccc; font-size: 13px; }
             QStatusBar { background: #333; color: #aaa; }
@@ -3530,7 +3844,8 @@ class MainWindow(QMainWindow):
         # Keyboard tracking off: with it on, every keystroke committed a value
         # and fired valueChanged -> _set_page -> full page render + text
         # extraction (Docling ~2-6s), freezing the box while typing. Now the
-        # page changes only on Enter / focus-out (arrows still work instantly).
+        # page changes only on Enter / focus-out. The up/down spin buttons are
+        # hidden via QSS (cleaner look); typing + Enter or ◀ ▶ do navigation.
         self.page_spin.setKeyboardTracking(False)
         self.page_spin.valueChanged.connect(self._on_spin)
         self.page_spin.setEnabled(False)
@@ -4160,6 +4475,10 @@ class MainWindow(QMainWindow):
             self._display_last_result()  # header on/off + nuovo font
         if (langs_changed or engine_changed) and self.text_panel._btn_translated.isChecked():
             self.text_panel._maybe_show_translation()
+
+    def _show_toast(self, message: str, ms: int):
+        """Show a transient message in the status bar (the app's 'toast')."""
+        self.status_bar.showMessage(message, ms)
 
     def clear_saved_edits(self):
         """Wipe the current document's saved edits and re-show fresh text."""
