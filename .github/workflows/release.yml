@@ -109,6 +109,19 @@ jobs:
             "${EXTRA[@]}" \
             main.py
 
+      - name: Build NSIS installer (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          choco install nsis -y --no-progress
+          # Extract version from the git tag (strip leading 'v')
+          V="${GITHUB_REF#refs/tags/v}"
+          # Fallback for manual runs / non-tag pushes
+          [[ "$V" == "$GITHUB_REF" ]] && V="0.0.0-dev"
+          echo "NSIS VERSION=$V"
+          makensis "/DVERSION=$V" installer.nsi
+          ls -la NoesisPDFReaderLite-*-setup.exe
+
       - name: Package artifact
         shell: bash
         env:
@@ -117,6 +130,11 @@ jobs:
           case "$RUNNER_OS" in
             Windows)
               mv "dist/NoesisPDFReaderLite.exe" "$BASE.exe"
+              # Rename NSIS installer to include platform in filename
+              SETUP=$(echo NoesisPDFReaderLite-*-setup.exe)
+              if [ -f "$SETUP" ]; then
+                mv "$SETUP" "$BASE-setup.exe"
+              fi
               ;;
             macOS)
               # .app is a directory bundle → wrap it in a .dmg
