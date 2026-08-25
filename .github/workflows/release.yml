@@ -120,7 +120,7 @@ jobs:
           [[ "$V" == "$GITHUB_REF" ]] && V="0.0.0-dev"
           echo "NSIS VERSION=$V"
           export PATH="/c/Program Files (x86)/NSIS:$PATH"
-          makensis "/DVERSION=$V" installer.nsi
+          MSYS_NO_PATHCONV=1 makensis "/DVERSION=$V" installer.nsi
           ls -la NoesisPDFReaderLite-*-setup.exe
 
       - name: Package artifact
