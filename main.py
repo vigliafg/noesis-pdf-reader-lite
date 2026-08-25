@@ -6,6 +6,8 @@ estrazione (PyMuPDF4LLM) e l'engine adattativo dei fix di layout sempre attivo.
 Traduzione e gallery delle figure incluse; nessun dropdown a runtime.
 """
 
+from __future__ import annotations
+
 import concurrent.futures
 import hashlib
 import json
