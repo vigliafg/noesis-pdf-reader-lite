@@ -31,8 +31,10 @@ guadagni misurabili. Nessun caso di crash/timeout/errore in 92 pagine × 2 motor
 
 ## 3. Fedeltà del testo
 
-- **Nessun carattere di sostituzione (`\ufffd`) né CID** in nessuno dei due motori:
-  siamo su born-digital e il text layer è affidabile per entrambi.
+- **Glifi matematici**: PyMuPDF4LLM emette **9 `�` (U+FFFD) su 2 pagine** per
+  simboli ≥/≤ (pa23/p743 `glucose �126 mg/dL`, ce24/p4210 `( � 4 METs)`).
+  Xberg **non mette `�` ma cancella il simbolo** (`glucose 126 mg/dL`, `( 4 METs)`):
+  entrambi sbagliano, in modo diverso (uno lo segnala, l'altro lo nasconde).
 - **PyMuPDF4LLM**: paragrafi coesi, spazi corretti, de-sillabazione discreta.
 - **Xberg**: testo corretto ma **paragrafi spezzati** in molte righe separate
   (hard break a fine riga), es. p2230 e p1232. Su p2240 il testo è
@@ -117,3 +119,59 @@ nel percorso di produzione "lite".
 
 > Le righe sopra sono arbitrate visivamente sul PNG; il resto del corpus è
 > riassunto dalle metriche automatiche in `out/compare.md`.
+
+## 11. Debolezze di PyMuPDF4LLM (dettaglio)
+
+Dati da `out/pymupdf_weaknesses.md` + ispezione dei markdown.
+
+### Header, footer e rumore di layout — 57/92 pagine, 72 occorrenze
+- **Header di capitolo e numero di pagina emessi come testo**: `**275**` +
+  `CHAPTER **46**` + `**HEART FAIluRE: TREATMEnT AnD pRoGnoSIS**` (ce24/p489);
+  `656` + `CHAPTER 18 Endocrine System` (pa23/p743); `**1196**` (A/p1237).
+- I **footer di stampa** (`HPIM21e_…indd`, orari) sono invece ben soppressi
+  (Xberg li emette) → PyMuPDF4LLM è più pulito sui footer, peggiore su
+  header/numero di pagina. I titoli di capitolo correnti non sono deduplicati.
+
+### Tabelle — 21/92 pagine
+- **Griglia persa**: tabelle a 1 colonna con `<br>` dentro la cella
+  (ce24/p489 TABLE 46-10, pa23/p743 Table 18.5, B/p2240 57 righe a 1 colonna).
+- **Colonne disallineate** su tabelle numeriche: co23/p931 TABLE 2 PSI → punti
+  nella cella sbagliata e **22 celle vuote adiacenti** (`||`).
+- **Caption incoerente**: a volte riga di tabella, a volte promossa a heading
+  (`# **TABLE 46-10**`, `## Table 18.5`); caption spezzata a metà parola tra due
+  celle (A/p1232 `|**TABLE 148-3 Treat**|**ment of …**|`).
+
+### Immagini e figure
+- **0 link immagine** in tutto il corpus: le figure raster non diventano
+  `![](...)`. Restano solo didascalia + eventuale `<!-- Start of picture text -->`
+  (testo dentro l'immagine), che può sparire nel rendering Markdown.
+- Valori di legenda a volte incollati (`1.01.3` invece di `1.0 1.3`).
+
+### Box embedded
+- Box/tabelle incorniciati → 1 colonna: **ordine mantenuto, griglia persa**
+  (B/p2240). Le sidebar di capitolo sono soppresse bene (meglio di Xberg), ma
+  l'header di capitolo resta una riga isolata.
+
+### Multicolonna e senso di lettura
+- Ordine di lettura **corretto** nel raw su prosa a due colonne (B/p2230, pa23/p743).
+- **Liste fragili**: voci spezzate o continuazioni promosse a nuovo bullet
+  (co23/p931: PSI e CURB-65 fusi dentro un solo bullet, continuazione
+  `- short-term mortality…` separata).
+- **13/92 pagine senza alcun heading**, incluse pagine con titoli evidenti
+  (B/p2231, B/p2240, pa23/p602).
+
+### Titoli inframmezzati (heading detection)
+- **Over-detection**: A/p1237 → 13 heading, con run-in `###` e titoli spezzati
+  su due righe (`### ■ ABIOTROPHIA AND` + `### (NUTRITIONALLY VARIANT STREPTOCOCCI)`).
+- Artefatti: `## **~~TREATMENT~~**` (barratura), e lo stesso tipo di titolo reso
+  a volte `#`, a volte bold inline.
+
+### Estrazione corretta / glifi
+- **9 `�` su 2 pagine** per ≥/≤ (pa23/p743, ce24/p4210); Xberg cancella il
+  simbolo invece di segnalarlo.
+- Dash/glifi matematici resi come `d` (`modificationdspecifically`, `beef)dcan`,
+  pa23/p301) e parole incollate (`obesityrelated`, `Selfdetection`).
+
+### Post-`layout_engine` — 13/92 pagine con perdita di spazi > 1/100
+- Il fix di riordino **rimuove gli spazi** (pa23/p431, p301, p909, p743):
+  è il difetto più impattante del percorso di produzione.
