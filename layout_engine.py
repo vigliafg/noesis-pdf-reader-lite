@@ -226,7 +226,12 @@ def _norm_noise(text: str) -> str:
 
 
 def _margin_noise(page) -> set[str]:
-    """Stringhe che compaiono nei margini alto/basso della pagina (header/footer)."""
+    """Stringhe che compaiono nei margini alto/basso della pagina (header/footer).
+
+    Solo righe **brevi** (gli header/footer lo sono): una riga lunga di corpo
+    che per caso entra nella banda dei margini non deve diventare un candidato,
+    altrimenti si rischierebbe di cancellare testo legittimo.
+    """
     if page is None:
         return set()
     try:
@@ -244,21 +249,36 @@ def _margin_noise(page) -> set[str]:
             if y1 <= top or y0 >= bottom:
                 text = "".join(s["text"] for s in line["spans"])
                 norm = _norm_noise(text)
-                if norm:
+                if norm and len(norm) <= 120 and len(norm.split()) <= 15:
                     found.add(norm)
     return found
+
+
+def _is_noise_line(line: str, candidates: set[str]) -> bool:
+    """True se la riga è (o contiene solo) un header/footer di stampa."""
+    if not candidates or len(line) >= 200:
+        return False
+    norm = _norm_noise(line)
+    if norm and norm in candidates:
+        return True
+    # Il reorder può fondere il numero di pagina con l'header:
+    # "656 CHAPTER 18 Endocrine System" o "CHAPTER 18 … 656".
+    for pat in (
+        r"^\s*\**\s*\d{1,4}\s*\**\s+(.*)$",
+        r"^(.*?)\s+\**\s*\d{1,4}\s*\**\s*$",
+    ):
+        m = re.match(pat, line)
+        if m and _norm_noise(m.group(1)) in candidates:
+            return True
+    return False
 
 
 def _strip_running_headers(md: str, page) -> str:
     """Rimuove header/footer di stampa e numeri di pagina isolati."""
     candidates = _margin_noise(page)
-    lines = md.split("\n")
-    kept: list[str] = []
-    for line in lines:
-        norm = _norm_noise(line)
-        if norm and norm in candidates and len(line) < 200:
-            continue
-        kept.append(line)
+    kept: list[str] = [
+        line for line in md.split("\n") if not _is_noise_line(line, candidates)
+    ]
     # Numeri di pagina isolati in testa/coda (pymupdf4llm li sposta talvolta).
     non_empty = [i for i, ln in enumerate(kept) if ln.strip()]
     if non_empty:
@@ -287,9 +307,11 @@ def _normalize_headings(md: str) -> str:
             if pm and len(pm.group(1)) == len(m.group(1)):
                 prev_text = pm.group(2).rstrip()
                 cur_text = m.group(2).strip()
-                starts_like_continuation = (
-                    cur_text[:1] in "([" or (cur_text and cur_text.isupper())
-                )
+                # Solo un titolo che riprende tra parentesi è chiaramente la
+                # continuazione di quello precedente (es. "ABIOTROPHIA AND" +
+                # "(NUTRITIONALLY VARIANT …)"). Niente euristica ALL-CAPS:
+                # fonderebbe titoli legittimi come "INTRODUCTION"/"METHODS".
+                starts_like_continuation = cur_text[:1] in "(["
                 if (
                     starts_like_continuation
                     and len(cur_text) < 80
@@ -302,26 +324,20 @@ def _normalize_headings(md: str) -> str:
 
 
 def _repair_lists(md: str) -> str:
-    """Converte i bullet inline e ricuce i bullet di continuazione."""
-    md = re.sub(r"\s•\s", "\n- ", md)
-    lines = md.split("\n")
-    out: list[str] = []
-    for line in lines:
-        if line.startswith("- ") and out:
-            j = len(out) - 1
-            while j >= 0 and out[j].strip() == "":
-                j -= 1
-            if j >= 0 and out[j].startswith("- "):
-                prev = out[j].rstrip()
-                rest = line[2:].lstrip()
-                if (
-                    rest[:1].islower()
-                    and not prev.endswith((".", "!", "?", ":", ";"))
-                ):
-                    out[j] = prev + " " + rest
-                    continue
-        out.append(line)
-    return "\n".join(out)
+    """Converte i bullet inline (``• x``) in voci di lista.
+
+    Non tocca le righe di tabella markdown (``| … |``): un ``•`` dentro una
+    cella verrebbe trasformato in un a-capo e spezzerebbe la tabella. Non
+    ricuce i bullet di continuazione: ``- a`` / ``- b`` sono indistinguibili da
+    una continuazione, e fonderebbe liste legittime.
+    """
+    converted: list[str] = []
+    for line in md.split("\n"):
+        if line.lstrip().startswith("|"):
+            converted.append(line)
+        else:
+            converted.append(re.sub(r"\s•\s", "\n- ", line))
+    return "\n".join(converted)
 
 
 def _normalize_emphasis(md: str) -> str:
@@ -329,11 +345,26 @@ def _normalize_emphasis(md: str) -> str:
     return re.sub(r"(?<=[_*])([A-Z])\.(?=[a-z])", r"\1. ", md)
 
 
+#: Blocchi di codice fenced: il cleanup non deve toccarne il contenuto.
+_FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
+
+
 def _apply_cleanup(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
     md = _strip_running_headers(md, page)
+
+    # Protegge i blocchi di codice: dentro un fence `#`, `~~`, `•` sono letterali.
+    fenced: list[str] = []
+
+    def _stash(match: "re.Match[str]") -> str:
+        fenced.append(match.group(0))
+        return f"\x00FENCE{len(fenced) - 1}\x00"
+
+    md = _FENCE_RE.sub(_stash, md)
     md = _normalize_headings(md)
     md = _repair_lists(md)
     md = _normalize_emphasis(md)
+    for i, block in enumerate(fenced):
+        md = md.replace(f"\x00FENCE{i}\x00", block)
     return md
 
 

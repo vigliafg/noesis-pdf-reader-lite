@@ -30,6 +30,7 @@ import layout_engine  # noqa: E402
 from layout_engine import (  # noqa: E402
     FIX_REGISTRY,
     LayoutProfile,
+    _apply_cleanup,
     _load_overrides,
     _normalize_emphasis,
     _normalize_headings,
@@ -248,6 +249,30 @@ class CleanupMarkdownTests(unittest.TestCase):
         self.assertIn("Body text here.", out)
         doc.close()
 
+    def test_strip_running_headers_handles_merged_page_number(self):
+        # Il reorder può fondere numero + header in una sola riga.
+        doc, page = _new_page()
+        page.insert_text((50, 20), "CHAPTER 18 Endocrine System", fontsize=9)
+        page.insert_textbox(pymupdf.Rect(50, 120, 520, 400), "Body text here.", fontsize=10)
+        md = "656 CHAPTER 18 Endocrine System\n\nBody text here."
+        out = _strip_running_headers(md, page)
+        self.assertNotIn("CHAPTER", out)
+        self.assertNotIn("656", out)
+        self.assertIn("Body text here.", out)
+        doc.close()
+
+    def test_long_body_line_in_margin_band_is_not_noise(self):
+        # Una riga lunga di corpo non deve diventare candidato header.
+        doc, page = _new_page()
+        page.insert_textbox(
+            pymupdf.Rect(50, 10, 545, 60),
+            "This is a long body sentence that happens to sit near the top of the page.",
+            fontsize=10,
+        )
+        md = "This is a long body sentence that happens to sit near the top of the page."
+        self.assertEqual(_strip_running_headers(md, page), md)
+        doc.close()
+
     def test_normalize_headings_merges_split_title(self):
         md = "### ■ **ABIOTROPHIA** AND\n\n### (NUTRITIONALLY VARIANT STREPTOCOCCI)"
         out = _normalize_headings(md)
@@ -264,21 +289,46 @@ class CleanupMarkdownTests(unittest.TestCase):
         self.assertNotIn("~~", out)
         self.assertNotIn("■", out)
 
-    def test_repair_lists_inline_bullet_and_continuation(self):
-        md = (
-            "- Several scoring systems have been developed to help predict\n\n"
-            "- short- term mortality and need for ICU admission: • PSI score"
-        )
+    def test_normalize_headings_does_not_merge_all_caps_headings(self):
+        md = "# INTRODUCTION\n\n# METHODS"
+        self.assertEqual(_normalize_headings(md), md)
+
+    def test_repair_lists_converts_inline_bullet_only(self):
+        md = "- one\n\n- two: • PSI score"
         out = _repair_lists(md)
-        self.assertIn(
-            "- Several scoring systems have been developed to help predict "
-            "short- term mortality and need for ICU admission:",
-            out,
-        )
+        self.assertIn("- one", out)
+        self.assertIn("- two:", out)  # non fuso con "- one"
         self.assertIn("\n- PSI score", out)
 
     def test_normalize_emphasis_adds_space_after_abbrev(self):
         self.assertEqual(_normalize_emphasis("_S.pyogenes_ is"), "_S. pyogenes_ is")
+
+    def test_repair_lists_does_not_touch_table_rows(self):
+        md = "| a | b |\n| --- | --- |\n| • x | y |"
+        self.assertEqual(_repair_lists(md), md)
+
+    def test_normalize_headings_does_not_merge_distinct_headings(self):
+        md = "# Introduction\n\n# Methods"
+        self.assertEqual(_normalize_headings(md), md)
+
+    def test_cleanup_preserves_fenced_code(self):
+        md = "```python\n# comment\n• item\n~~x~~\n```"
+        self.assertEqual(_apply_cleanup(md, None, None), md)
+
+    def test_cleanup_is_idempotent(self):
+        md = (
+            "### ■ **A** AND\n\n### (B)\n\n"
+            "- one two\n\n- three four: • five\n\n# **TABLE 1** x"
+        )
+        once = _apply_cleanup(md, None, None)
+        self.assertEqual(_apply_cleanup(once, None, None), once)
+
+    def test_fix_rules_disable_cleanup(self):
+        plan = plan_fixes(
+            _profile(1), "PyMuPDF4LLM ⚡",
+            overrides={"disable": ["cleanup_markdown"]},
+        )
+        self.assertEqual(_ids(plan), ["spacing"])
 
 
 class OverridesFileTests(unittest.TestCase):

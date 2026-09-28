@@ -25,6 +25,7 @@ if _ROOT not in sys.path:
 
 import pymupdf  # noqa: E402
 
+import layout_engine  # noqa: E402
 import main  # noqa: E402
 from main import _block_to_md, _collect_blocks, _collect_lines, _trim_edge_spaces  # noqa: E402
 
@@ -104,6 +105,22 @@ class CollectBlocksSpacingTests(unittest.TestCase):
         text = _block_to_md(_collect_blocks(page)[0], as_column=True)
         self.assertIn("S.pyogenes", text)
 
+    def test_gap_below_threshold_does_not_insert_space(self):
+        page = _StubPage([_text_block([[
+            _span("they", x0=0.0, x1=20.0),
+            _span("increase", x0=20.7, x1=60.0),  # gap 0.7 < 0.8
+        ]])])
+        text = _block_to_md(_collect_blocks(page)[0], as_column=True)
+        self.assertIn("theyincrease", text)
+
+    def test_gap_above_threshold_inserts_space(self):
+        page = _StubPage([_text_block([[
+            _span("they", x0=0.0, x1=20.0),
+            _span("increase", x0=21.0, x1=60.0),  # gap 1.0 > 0.8
+        ]])])
+        text = _block_to_md(_collect_blocks(page)[0], as_column=True)
+        self.assertIn("they increase", text)
+
     def test_whitespace_span_not_wrapped_in_markdown(self):
         # Uno spazio con flag bold non deve diventare "** **".
         bold = 16
@@ -153,6 +170,49 @@ class GoldSpacingTests(unittest.TestCase):
                     0.9 * self._spaces_per100(raw),
                     f"perdita di spazi su pa23 p{page_no}",
                 )
+
+
+@unittest.skipUnless(_gold_pdf("ce24.pdf"), "ce24.pdf non presente (gold cleanup)")
+class GoldCleanupTests(unittest.TestCase):
+    """Pack 1 end-to-end su pagine reali: header e titoli spezzati."""
+
+    def _run(self, pdf, page_no):
+        import pymupdf4llm
+
+        raw = pymupdf4llm.to_markdown(pdf, pages=[page_no - 1])
+        with pymupdf.open(pdf) as doc:
+            text, _ = main._apply_engine_on_page(doc[page_no - 1], raw)
+        return raw, text
+
+    def test_running_header_removed(self):
+        raw, text = self._run(_gold_pdf("ce24.pdf"), 489)
+        self.assertIn("HEART FAIluRE", raw)  # sanity: il raw ce l'ha
+        self.assertNotIn(
+            "heart failure treatment and prognosis",
+            layout_engine._norm_noise(text),
+        )
+
+    @unittest.skipUnless(_gold_pdf("pa23.pdf"), "pa23.pdf non presente")
+    def test_chapter_header_and_page_number_removed(self):
+        raw, text = self._run(_gold_pdf("pa23.pdf"), 743)
+        self.assertIn("CHAPTER 18 Endocrine System", raw)
+        norm = layout_engine._norm_noise(text)
+        self.assertNotIn("chapter 18 endocrine system", norm)
+        first = next(ln for ln in text.split("\n") if ln.strip())
+        self.assertIsNone(
+            layout_engine._STANDALONE_NUM_RE.match(first),
+            f"numero di pagina rimasto in testa: {first!r}",
+        )
+
+    @unittest.skipUnless(_gold_pdf("ha22.pdf"), "ha22.pdf non presente")
+    def test_split_heading_merged(self):
+        raw, text = self._run(_gold_pdf("ha22.pdf"), 1237)
+        self.assertIn("NUTRITIONALLY VARIANT STREPTOCOCCI", raw)
+        norm = layout_engine._norm_noise(text)
+        self.assertIn(
+            "abiotrophia and granulicatella species (nutritionally variant streptococci)",
+            norm,
+        )
 
 
 if __name__ == "__main__":
