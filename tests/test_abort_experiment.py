@@ -55,6 +55,8 @@ class AbortExperimentTests(unittest.TestCase):
         _git(self.repo, "add", "requirements-xberg.txt", "PIANO-motori-estrazione-vlm.md")
         _git(self.repo, "commit", "-m", "experiment")
         (self.repo / "leftover.tmp").write_text("non tracciato\n", encoding="utf-8")
+        # Un PDF utente non tracciato: NON deve essere toccato dal rollback.
+        (self.repo / "user.pdf").write_bytes(b"%PDF-1.4 user data")
 
     def tearDown(self) -> None:
         self._tmp.cleanup()
@@ -75,13 +77,19 @@ class AbortExperimentTests(unittest.TestCase):
         self.assertNotIn("experimental", branches)
         self.assertIn("main", branches)
 
-        status = _git(self.repo, "status", "--porcelain").stdout.strip()
-        self.assertEqual(status, "", f"working tree sporco:\n{status}")
+        status_lines = [
+            line for line in _git(self.repo, "status", "--porcelain").stdout.splitlines()
+            if line.strip()
+        ]
+        # Rimane solo il PDF utente, che il rollback deve preservare.
+        self.assertEqual(status_lines, ["?? user.pdf"], f"working tree: {status_lines}")
 
         self.assertFalse((self.repo / "requirements-xberg.txt").exists())
         self.assertFalse((self.repo / "leftover.tmp").exists())
         self.assertFalse((self.repo / "PIANO-motori-estrazione-vlm.md").exists())
         self.assertTrue((self.repo / "app.txt").exists())
+        # I PDF dell'utente sopravvivono al clean.
+        self.assertTrue((self.repo / "user.pdf").exists())
 
     def test_keep_plan_preserves_document(self) -> None:
         result = self._run("--yes", "--keep-plan")

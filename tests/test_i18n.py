@@ -246,6 +246,15 @@ class ConfigV2Tests(unittest.TestCase):
         self.assertFalse(cfg["show_header"])
         self.assertEqual(cfg["last_tab"], "original")
 
+    def test_extract_backend_validated(self):
+        self._write({"extract_backend": "xberg"})
+        cfg = i18n.load_config(self._path)
+        self.assertEqual(cfg["extract_backend"], "xberg")
+        self._write({"extract_backend": "bogus"})
+        cfg = i18n.load_config(self._path)
+        self.assertEqual(cfg["extract_backend"], "pymupdf4llm")
+        self.assertEqual(i18n.DEFAULTS["extract_backend"], "pymupdf4llm")
+
     def test_get_set_setting_roundtrip_and_clamps(self):
         i18n.init_config(self._path)
         i18n.set_setting("zoom", 2.5)

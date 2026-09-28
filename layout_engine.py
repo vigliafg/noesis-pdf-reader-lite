@@ -217,7 +217,16 @@ def _when_split_glued(p: LayoutProfile, b: str) -> bool:
     return b == "Docling 🧠" and p.columns >= 2
 
 
+#: Backend che ricostruiscono già il reading order a monte (forma B del piano):
+#: il fix di riordino colonne non va riapplicato sopra di loro. Xberg lo fa
+#: solo quando la layout detection è attiva, ma è l'unico backend alternativo
+#: previsto dal branch experimental.
+_BACKENDS_SELF_ORDERED = ("Xberg",)
+
+
 def _when_reorder_columns(p: LayoutProfile, b: str) -> bool:
+    if b in _BACKENDS_SELF_ORDERED:
+        return False
     return b != "Docling 🧠" and p.columns >= 2 and p.columns_overlap
 
 

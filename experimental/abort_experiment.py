@@ -222,10 +222,11 @@ def purge_venv_packages(root: Path, *, dry_run: bool) -> None:
 
 def clean_untracked(root: Path, *, keep_plan: bool, dry_run: bool) -> None:
     echo("\n== File non tracciati ==")
-    cmd = ["clean", "-fd"]
+    # ``-fd`` (senza ``-x``): NON tocca i file ignorati come .venv/.
+    # Esclude i PDF: sono dati dell'utente, non artefatti dell'esperimento.
+    cmd = ["clean", "-fd", "-e", "*.pdf"]
     if keep_plan:
         cmd += ["-e", PLAN_DOC]
-    # ``-fd`` (senza ``-x``): NON tocca i file ignorati come .venv/.
     git(cmd, cwd=root, dry_run=dry_run)
 
 
@@ -325,12 +326,21 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     status = git(["status", "--porcelain"], cwd=root, check=False)
-    dirty_lines = [
-        line
-        for line in (status.stdout or "").splitlines()
-        if line.strip() and not (args.keep_plan and line.strip().endswith(PLAN_DOC))
-    ]
+    dirty_lines: list[str] = []
+    preserved: list[str] = []
+    for line in (status.stdout or "").splitlines():
+        if not line.strip():
+            continue
+        stripped = line.strip()
+        if args.keep_plan and stripped.endswith(PLAN_DOC):
+            preserved.append(stripped)
+        elif stripped.startswith("?? ") and stripped.lower().endswith(".pdf"):
+            preserved.append(stripped)  # i PDF dell'utente non sono artefatti
+        else:
+            dirty_lines.append(line)
     echo("\n".join(dirty_lines) if dirty_lines else "(vuoto)")
+    for line in preserved:
+        echo(f"(conservato) {line}")
     if dirty_lines:
         echo("\nATTENZIONE: il repository non e' pulito (vedi sopra).")
         return 1

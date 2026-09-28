@@ -26,6 +26,10 @@ import markdown as _md_lib
 # pipeline. Importa lazy alcuni helper puri da questo modulo.
 import layout_engine
 
+# Adapter del motore alternativo Xberg (branch experimental, import leggero:
+# il pacchetto `xberg` pesante viene caricato solo alla prima estrazione).
+import xberg_engine
+
 # Internazionalizzazione della sola interfaccia (dict T(), nessuna dipendenza
 # Qt): le stringhe del chrome UI passano da qui, la lingua si cambia al volo
 # e il config (lingue + preferenze) è gestito da questo modulo.
@@ -1270,8 +1274,57 @@ def _extract_pymupdf4llm(
     return T("extract.error", e=last_error)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+#  selezione del backend di estrazione (sperimentale: PyMuPDF4LLM | Xberg)
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Backend di default: il tier "lite" resta su PyMuPDF4LLM.
+_DEFAULT_EXTRACT_BACKEND = "pymupdf4llm"
+_EXTRACT_BACKENDS = ("pymupdf4llm", "xberg")
+
+
+def _extract_backend_name() -> str:
+    """Backend attivo: env ``NOESIS_EXTRACT_BACKEND`` > config > default.
+
+    Il default è PyMuPDF4LLM; il branch experimental abilita Xberg con
+    ``NOESIS_EXTRACT_BACKEND=xberg`` oppure ``"extract_backend": "xberg"`` in
+    config.json. Un valore sconosciuto degrada al default invece di rompere.
+    """
+    env = os.environ.get("NOESIS_EXTRACT_BACKEND", "").strip().lower()
+    if env in _EXTRACT_BACKENDS:
+        return env
+    value = str(
+        get_setting("extract_backend", _DEFAULT_EXTRACT_BACKEND)
+    ).strip().lower()
+    return value if value in _EXTRACT_BACKENDS else _DEFAULT_EXTRACT_BACKEND
+
+
+def _extract_backend_label(backend: str) -> str:
+    """Etichetta del backend usata da ``layout_engine`` e nell'header."""
+    return T(f"engine.backend.{backend}")
+
+
+def _extract_raw(path: str, page_num: int, backend: str, ocr_language: str) -> str:
+    """Estrae il Markdown grezzo col backend scelto (con fallback sicuro).
+
+    Se Xberg non è installato o non riesce a produrre la pagina richiesta si
+    ricade su PyMuPDF4LLM, così l'app resta sempre funzionante.
+    """
+    if backend == "xberg" and xberg_engine.is_available():
+        text = xberg_engine.extract_page(path, page_num)
+        if text:
+            return text
+    return _extract_pymupdf4llm(path, page_num, ocr_language=ocr_language)
+
+
+def _cache_lang_key(ocr_lang: str, backend: str) -> str:
+    """Chiave di cache per il backend: il default resta retro-compatibile."""
+    return ocr_lang if backend == _DEFAULT_EXTRACT_BACKEND else f"{backend}:{ocr_lang}"
+
+
 def _apply_engine_on_page(
-    page, text: str, exclude: tuple = (), include: tuple = ()
+    page, text: str, exclude: tuple = (), include: tuple = (),
+    backend: str = "PyMuPDF4LLM ⚡",
 ) -> tuple[str, str]:
     """Apply the adaptive layout engine to ``text`` using a pymupdf page.
 
@@ -1289,7 +1342,7 @@ def _apply_engine_on_page(
         if include:
             return _inclusion_order_markdown(page, include, exclude=exclude) or text, label
         profile = layout_engine.profile_page(page, exclude=exclude)
-        plan = layout_engine.plan_fixes(profile, "PyMuPDF4LLM ⚡", mode="auto")
+        plan = layout_engine.plan_fixes(profile, backend, mode="auto")
         if exclude:
             cleaned = _column_aware_markdown(page, exclude=exclude) or text
             plan = [f for f in plan if f.id != "reorder_columns"]
@@ -1300,13 +1353,16 @@ def _apply_engine_on_page(
 
 
 def _apply_engine_standalone(
-    path: str, page_num: int, text: str, exclude: tuple = (), include: tuple = ()
+    path: str, page_num: int, text: str, exclude: tuple = (), include: tuple = (),
+    backend: str = "PyMuPDF4LLM ⚡",
 ) -> tuple[str, str]:
     """Apply the layout engine on a freshly opened document (background thread)."""
     label = "manual" if (include or exclude) else "auto"
     try:
         with pymupdf.open(path) as doc:
-            return _apply_engine_on_page(doc[page_num], text, exclude=exclude, include=include)
+            return _apply_engine_on_page(
+                doc[page_num], text, exclude=exclude, include=include, backend=backend
+            )
     except Exception:
         return text, label
 
@@ -2275,6 +2331,7 @@ class ExtractThread(QThread):
         ocr_language: str = "eng",
         exclude: tuple = (),
         include: tuple = (),
+        backend: str = _DEFAULT_EXTRACT_BACKEND,
         raw: str | None = None,
     ):
         super().__init__()
@@ -2284,6 +2341,7 @@ class ExtractThread(QThread):
         self._ocr_language = ocr_language
         self._exclude = exclude
         self._include = include
+        self._backend = backend
         self._raw = raw
 
     def run(self):
@@ -2291,12 +2349,13 @@ class ExtractThread(QThread):
         if self._raw is not None:
             raw = self._raw  # già estratta (cache): solo engine layout
         else:
-            raw = _extract_pymupdf4llm(
-                self._path, self._page_num, ocr_language=self._ocr_language
+            raw = _extract_raw(
+                self._path, self._page_num, self._backend, self._ocr_language
             )
         text, label = _apply_engine_standalone(
             self._path, self._page_num, raw,
             exclude=self._exclude, include=self._include,
+            backend=_extract_backend_label(self._backend),
         )
         elapsed = time.perf_counter() - t0
         self.result_ready.emit(
@@ -3633,6 +3692,7 @@ class MainWindow(QMainWindow):
         self._remember_tab: bool = bool(get_setting("remember_tab", True))
         self._resume_last_page: bool = bool(get_setting("resume_last_page", True))
         self._last_result: tuple[str, str, float] | None = None  # (text, label, elapsed)
+        self._last_backend: str = "PyMuPDF4LLM ⚡"  # etichetta backend nell'header
         self._last_elapsed: float = 0.0
         # Lingua con cui le stringhe dei widget sono state applicate: serve a
         # capire se serve una ri-traduzione dopo l'OK delle Impostazioni (la
@@ -3967,21 +4027,24 @@ class MainWindow(QMainWindow):
     def _request_extraction(self, page_num: int):
         """Show the page text, extracting in the background if not cached.
 
-        The whole pipeline (OCR + adaptive layout engine) runs in
-        ``ExtractThread`` so the GUI never freezes on scanned PDFs.  The raw
-        markdown is cached per ``(page, OCR language)`` and the final text per
-        ``(page, OCR language, zones key)``: a repeat view (or a reopen with a
-        warm disk cache) is displayed instantly, and changing manual zones
-        only re-runs the layout engine (fast path, raw already cached).
+        The whole pipeline (backend extraction + adaptive layout engine) runs
+        in ``ExtractThread`` so the GUI never freezes on scanned PDFs.  The raw
+        markdown is cached per ``(page, backend+OCR language)`` and the final
+        text per ``(…, zones key)``: a repeat view (or a reopen with a warm disk
+        cache) is displayed instantly, and changing manual zones only re-runs
+        the layout engine (fast path, raw already cached).
         """
         if not self._pdf_path:
             return
         ocr_lang = _tess_lang_code(get_source_lang())
-        key = (page_num, ocr_lang, self._zones_key(page_num))
+        backend = _extract_backend_name()
+        cache_lang = _cache_lang_key(ocr_lang, backend)
+        key = (page_num, cache_lang, self._zones_key(page_num))
         cached = self._final_text_cache.get(key)
         if cached is not None:
             text, label, elapsed = cached
             self._last_result = (text, label, elapsed)
+            self._last_backend = _extract_backend_label(backend)
             self._last_elapsed = elapsed
             self._display_last_result()
             self._show_page_status(elapsed)
@@ -4006,7 +4069,8 @@ class MainWindow(QMainWindow):
             str(self._pdf_path), page_num, self._extract_generation, ocr_lang,
             exclude=tuple(self._excluded_zones.get(page_num, ())),
             include=tuple(self._inclusion_zones.get(page_num, ())),
-            raw=self._extraction_cache.get((page_num, ocr_lang)),
+            backend=backend,
+            raw=self._extraction_cache.get((page_num, cache_lang)),
         )
         thread.result_ready.connect(self._on_extraction_done)
         self._extract_thread = thread
@@ -4031,8 +4095,10 @@ class MainWindow(QMainWindow):
         if generation != self._extract_generation:
             return
         ocr_lang = _tess_lang_code(get_source_lang())
-        self._extraction_cache[(page_num, ocr_lang)] = raw
-        self._final_text_cache[(page_num, ocr_lang, self._zones_key(page_num))] = (
+        backend = _extract_backend_name()
+        cache_lang = _cache_lang_key(ocr_lang, backend)
+        self._extraction_cache[(page_num, cache_lang)] = raw
+        self._final_text_cache[(page_num, cache_lang, self._zones_key(page_num))] = (
             text, label, elapsed,
         )
         self._save_extraction_cache()
@@ -4044,6 +4110,7 @@ class MainWindow(QMainWindow):
     ):
         """Display a finished extraction (text + engine already computed)."""
         self._last_result = (text, label, elapsed)
+        self._last_backend = _extract_backend_label(_extract_backend_name())
         self._last_elapsed = elapsed
         self._display_last_result()
         self._show_page_status(elapsed)
@@ -4539,14 +4606,16 @@ class MainWindow(QMainWindow):
 
         ``label`` is a key suffix ("auto"/"manual"): it is resolved through
         T() at display time, so a language switch re-renders it correctly.
-        ``ocr`` is the OCR language derived from the source-language setting
-        ("🌐 Auto" when detection is automatic) and ``engine`` is the active
-        translation engine: both are resolved at display time too, so they
-        stay in sync with settings/language changes.
+        ``backend`` is the active extraction backend (PyMuPDF4LLM or Xberg,
+        experimental), ``ocr`` is the OCR language derived from the
+        source-language setting ("🌐 Auto" when detection is automatic) and
+        ``engine`` is the active translation engine: all are resolved at
+        display time, so they stay in sync with settings/language changes.
         """
         src = get_source_lang()
         return T(
             "header.line",
+            backend=self._last_backend,
             ms=f"{elapsed*1000:.1f}",
             chars=len(text),
             label=T(f"engine.label.{label}"),

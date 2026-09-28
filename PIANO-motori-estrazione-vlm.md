@@ -5,7 +5,8 @@ radice del repo (`PIANO-motori-estrazione-vlm.md`).
 Contesto di riferimento: repo `noesis-pdf-reader` (gemello, stessa architettura di
 `layout_engine.py`).
 
-Stato: **discussione / da decidere**. Nessuna implementazione avviata.
+Stato: **Fase 1 (Xberg) implementata sul branch `experimental`** — opt-in e
+disattivata di default; Fasi 2–4 non avviate.
 Questa bozza vive sul branch `experimental`; per abbandonarla e tornare a un
 repository pulito vedi `experimental/README.md`
 (`python experimental/abort_experiment.py --yes`).

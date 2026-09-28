@@ -8,6 +8,33 @@ Regola d'oro: ogni cosa che appartiene all'esperimento resta confinata qui.
 `main` deve continuare a essere il repository "lite" pulito (un solo motore:
 PyMuPDF/PyMuPDF4LLM + `layout_engine.py`).
 
+## Stato — Fase 1 (Xberg) implementata
+
+Il backend Xberg è **opt-in** e spento di default: il tier lite continua a usare
+PyMuPDF4LLM senza modifiche. Per attivarlo:
+
+```bash
+pip install -r requirements-xberg.txt          # Xberg (Rust + ONNX, no torch)
+NOESIS_EXTRACT_BACKEND=xberg ./run.sh          # oppure "extract_backend": "xberg" in config.json
+```
+
+Cosa fa la Fase 1:
+
+- `xberg_engine.py` — adapter isolato (import lazy, cache documento, fallback a
+  PyMuPDF4LLM se Xberg manca o fallisce);
+- `requirements-xberg.txt` — dipendenza opzionale, fuori dal tier lite;
+- `layout_engine.py` — il fix `reorder_columns` viene saltato per il backend
+  `Xberg` (forma B: niente doppio riordino);
+- `main.py` / `i18n.py` — selezione del backend via env/config e header che
+  mostra il backend attivo;
+- `tests/test_xberg_engine.py` — test dell'adapter con un modulo `xberg` finto;
+- `experimental/benchmark_xberg.py` — confronto Xberg vs PyMuPDF4LLM su PDF
+  reali (validazione del piano).
+
+Il rollback qui sotto annulla **anche** tutte queste modifiche, perché
+`main.py`, `i18n.py` e `layout_engine.py` sono tracciati e tornano allo stato di
+`main` con il checkout.
+
 ## Requisito: poter annullare tutto con un comando
 
 L'annullamento completo è implementato da
@@ -25,7 +52,8 @@ Cosa fa, in ordine:
 2. `git branch -D experimental` — elimina il branch sperimentale;
 3. `git clean -fd` — rimuove i file non tracciati introdotti dal piano
    (requirements dei motori, moduli nuovi, ecc.). **Non** usa `-x`, quindi
-   `.venv/` e le altre esclusioni di `.gitignore` restano intatte;
+   `.venv/` e le altre esclusioni di `.gitignore` restano intatte, e **esclude
+   i `*.pdf`** (sono dati dell'utente, non artefatti dell'esperimento);
 4. (opzionale) elimina le cache dei modelli scaricati;
 5. (opzionale) disinstalla i motori dal venv.
 
@@ -57,7 +85,7 @@ python experimental/abort_experiment.py --yes --purge-models --purge-venv
 ```bash
 git checkout main
 git branch -D experimental
-git clean -fd                       # NON usare -x: cancellerebbe .venv/
+git clean -fd -e '*.pdf'            # -e: NON cancellare i PDF; mai -x (.venv/)
 ```
 
 Le cache dei modelli vanno rimosse a mano:

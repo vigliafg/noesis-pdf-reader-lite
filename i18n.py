@@ -84,6 +84,7 @@ DEFAULTS: dict = {
     "src_lang": "auto",     # origine traduzione (TRANSLATION_LANGUAGES)
     "dst_lang": "it",       # destinazione traduzione (TRANSLATION_LANGUAGES, no auto)
     "engine": "google",     # motore di traduzione (TRANSLATION_ENGINES)
+    "extract_backend": "pymupdf4llm",  # backend estrazione (experimental: xberg)
     "zoom": 3.0,             # risoluzione base del render (0.5–4.0);
                            # lo zoom visibile è runtime (1.0 = adatta)
     "render_md": True,       # rendering Markdown on/off
@@ -477,11 +478,18 @@ _STRINGS: dict[str, dict[str, str]] = {
     },
     # ── extraction header / engine labels ───────────────────────────────────
     "header.line": {
-        "it": "── Backend: PyMuPDF4LLM ⚡  │  {ms} ms  │  {chars} caratteri  │  Fix: {label}  │  OCR: {ocr}  │  Trad: {engine} ──\n\n",
-        "en": "── Backend: PyMuPDF4LLM ⚡  │  {ms} ms  │  {chars} characters  │  Fix: {label}  │  OCR: {ocr}  │  Transl: {engine} ──\n\n",
-        "fr": "── Backend : PyMuPDF4LLM ⚡  │  {ms} ms  │  {chars} caractères  │  Correctifs : {label}  │  OCR : {ocr}  │  Trad. : {engine} ──\n\n",
-        "de": "── Backend: PyMuPDF4LLM ⚡  │  {ms} ms  │  {chars} Zeichen  │  Fix: {label}  │  OCR: {ocr}  │  Übers.: {engine} ──\n\n",
-        "es": "── Backend: PyMuPDF4LLM ⚡  │  {ms} ms  │  {chars} caracteres  │  Fix: {label}  │  OCR: {ocr}  │  Trad.: {engine} ──\n\n",
+        "it": "── Backend: {backend}  │  {ms} ms  │  {chars} caratteri  │  Fix: {label}  │  OCR: {ocr}  │  Trad: {engine} ──\n\n",
+        "en": "── Backend: {backend}  │  {ms} ms  │  {chars} characters  │  Fix: {label}  │  OCR: {ocr}  │  Transl: {engine} ──\n\n",
+        "fr": "── Backend : {backend}  │  {ms} ms  │  {chars} caractères  │  Correctifs : {label}  │  OCR : {ocr}  │  Trad. : {engine} ──\n\n",
+        "de": "── Backend: {backend}  │  {ms} ms  │  {chars} Zeichen  │  Fix: {label}  │  OCR: {ocr}  │  Übers.: {engine} ──\n\n",
+        "es": "── Backend: {backend}  │  {ms} ms  │  {chars} caracteres  │  Fix: {label}  │  OCR: {ocr}  │  Trad.: {engine} ──\n\n",
+    },
+    "engine.backend.pymupdf4llm": {
+        "it": "PyMuPDF4LLM ⚡", "en": "PyMuPDF4LLM ⚡", "fr": "PyMuPDF4LLM ⚡",
+        "de": "PyMuPDF4LLM ⚡", "es": "PyMuPDF4LLM ⚡",
+    },
+    "engine.backend.xberg": {
+        "it": "Xberg", "en": "Xberg", "fr": "Xberg", "de": "Xberg", "es": "Xberg",
     },
     "engine.label.auto": {
         "it": "Engine adattativo", "en": "Adaptive engine",
@@ -784,6 +792,8 @@ def _validate_config(raw: dict, defaults: dict) -> dict:
     dst = raw.get("dst_lang")
     if dst in TRANSLATION_LANGUAGES and dst != "auto":
         out["dst_lang"] = dst
+    if raw.get("extract_backend") in ("pymupdf4llm", "xberg"):
+        out["extract_backend"] = raw["extract_backend"]
     try:
         out["zoom"] = min(4.0, max(0.5, float(raw.get("zoom", out["zoom"]))))
     except (TypeError, ValueError):

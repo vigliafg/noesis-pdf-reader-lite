@@ -1,0 +1,12 @@
+# Motore di estrazione alternativo Xberg (sperimentale, branch experimental).
+#
+# Solo per valutazione: NON fa parte del tier "lite" e non è richiesto da
+# main.py. Xberg è Rust + ONNX Runtime CPU (nessun torch, nessuna GPU) e
+# richiede una CPU con AVX2.
+#
+#   pip install -r requirements-xberg.txt
+#
+# Modelli layout/tabelle opzionali: scaricati al primo uso in ~/.cache/xberg.
+# Per il caso "PDF nativamente digitali" il text layer basta; il layout ML
+# serve solo per reading order/tabelle difficili.
+xberg>=1.2.9
