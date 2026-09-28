@@ -6,3 +6,9 @@ __pycache__/
 build/
 dist/
 *.spec
+
+# Harness di valutazione (branch experimental)
+ha22.pdf
+ha22_*.pdf
+experimental/eval/out/
+experimental/eval/corpus.json

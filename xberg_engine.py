@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Adapter isolato per il motore di estrazione alternativo **Xberg**.
+"""Adapter isolato per il motore di estrazione alternativo **Xberg 1.2.9**.
 
 Questo modulo è **sperimentale** e vive sul branch ``experimental``: tutto
 l'esperimento "motori alternativi" è confinato qui e in pochi ganci in
@@ -9,12 +9,17 @@ l'esperimento "motori alternativi" è confinato qui e in pochi ganci in
 Caratteristiche:
 
 - nessuna dipendenza da PyQt e nessun import pesante a livello di modulo:
-  ``xberg`` (Rust + ONNX, ~155 MB) viene importato *lazy* alla prima chiamata,
-  quindi il tier "lite" resta leggero e un motore assente non rompe l'app;
-- estrazione **a livello documento** (l'API Xberg è documentale) con cache in
-  memoria per ``(path, size, mtime)`` e selezione della pagina;
-- il layout/reading order di Xberg è opzionale: il chiamante decide se
-  applicare sopra il ``layout_engine`` esistente (vedi ``layout_engine.py``).
+  ``xberg`` (Rust + ONNX, ~62 MB di wheel) viene importato *lazy* alla prima
+  chiamata, quindi il tier "lite" resta leggero e un motore assente non rompe
+  l'app;
+- API reale: ``xberg.extract`` è **asincrona** e ritorna un ``ExtractionResult``;
+  con ``PageConfig(extract_pages=True)`` espone ``results[0].pages`` (una lista
+  di ``PageContent`` con ``page_number`` 1-based e ``content`` Markdown);
+- estrazione **a livello documento** con cache in memoria per
+  ``(path, size, mtime)`` e selezione della pagina;
+- layout/tabelle opzionali (``LayoutDetectionConfig`` + ``use_layout_for_markdown``):
+  è lì il valore rispetto a PyMuPDF4LLM. I modelli ONNX vengono scaricati al
+  primo uso in ``~/.cache/xberg``.
 
 API pubblica::
 
@@ -77,8 +82,9 @@ def _module() -> Any:
 
 
 def is_available() -> bool:
-    """True se il pacchetto ``xberg`` è importabile (senza importarlo a fondo)."""
-    return _module() is not None
+    """True se il pacchetto ``xberg`` espone l'API attesa."""
+    m = _module()
+    return m is not None and callable(getattr(m, "extract", None))
 
 
 def version() -> str | None:
@@ -100,12 +106,13 @@ def last_error() -> str | None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _build_config() -> Any:
-    """Costruisce ``ExtractionConfig`` in modo difensivo (API in evoluzione).
+def _build_config(*, use_layout: bool = True, use_cache: bool = True) -> Any:
+    """Costruisce ``ExtractionConfig`` in modo difensivo.
 
-    Prova prima la configurazione con estrazione per pagina; in caso di
-    ``TypeError``/attributi mancanti degrada a Markdown di default.  Non solleva
-    mai: se ``ExtractionConfig`` non è disponibile torna ``None``.
+    - ``output_format="markdown"`` e ``pages=PageConfig(extract_pages=True)``
+      per avere il Markdown pagina per pagina;
+    - con ``use_layout`` attiva la layout detection (reading order + tabelle)
+      e ``use_layout_for_markdown``, più ``PdfConfig(reading_order=True)``.
     """
     m = _module()
     if m is None:
@@ -114,25 +121,36 @@ def _build_config() -> Any:
     if cfg_cls is None:
         return None
 
-    page_cfg = None
+    kwargs: dict[str, Any] = {"output_format": "markdown", "use_cache": use_cache}
     page_cls = getattr(m, "PageConfig", None)
     if page_cls is not None:
         try:
-            page_cfg = page_cls(extract_pages=True)
+            kwargs["pages"] = page_cls(extract_pages=True)
         except Exception:
-            page_cfg = None
+            pass
+    if use_layout:
+        layout_cls = getattr(m, "LayoutDetectionConfig", None)
+        if layout_cls is not None:
+            try:
+                kwargs["layout"] = layout_cls(strategy="always")
+                kwargs["use_layout_for_markdown"] = True
+            except Exception:
+                pass
+        pdf_cls = getattr(m, "PdfConfig", None)
+        if pdf_cls is not None:
+            try:
+                kwargs["pdf_options"] = pdf_cls(reading_order=True)
+            except Exception:
+                pass
 
-    attempts: list[dict] = []
-    if page_cfg is not None:
-        attempts.append({"output_format": "markdown", "pages": page_cfg})
-    attempts.append({"output_format": "markdown"})
-    attempts.append({})
-    for kwargs in attempts:
+    try:
+        return cfg_cls(**kwargs)
+    except Exception:
+        # Fallback minimale: solo Markdown, niente layout/pagine.
         try:
-            return cfg_cls(**kwargs)
+            return cfg_cls(output_format="markdown", use_cache=use_cache)
         except Exception:
-            continue
-    return None
+            return None
 
 
 def _run_async(coro: Any) -> Any:
@@ -166,44 +184,64 @@ def _page_text(page: Any) -> str:
 
 def _result_pages(result: Any) -> list[str | None]:
     """Converte un ``ExtractionResult`` in una lista di pagine Markdown."""
-    pages = getattr(result, "pages", None)
-    if pages is None and isinstance(result, dict):
-        pages = result.get("pages")
-    if pages:
-        return [_page_text(p) for p in pages]
+    results = getattr(result, "results", None)
+    if result is None:
+        raise XbergExtractionError("risultato Xberg vuoto")
 
-    content = getattr(result, "content", None)
-    if content is None and isinstance(result, dict):
-        content = result.get("content")
-    if not isinstance(content, str):
-        raise XbergExtractionError("risultato Xberg senza 'content' testuale")
-    # Fallback: separatore di pagina classico; se assente, un'unica pagina.
-    return content.split("\f")
+    first = None
+    if results:
+        first = results[0]
+    elif hasattr(result, "content"):
+        first = result
+
+    if first is not None:
+        pages = getattr(first, "pages", None)
+        if pages:
+            by_number: dict[int, str] = {}
+            for pc in pages:
+                try:
+                    number = int(getattr(pc, "page_number", 0) or 0)
+                except (TypeError, ValueError):
+                    number = 0
+                by_number[number] = _page_text(pc)
+            highest = max(by_number) if by_number else 0
+            if highest:
+                return [by_number.get(i + 1) for i in range(highest)]
+
+        content = getattr(first, "content", None)
+        if isinstance(content, str):
+            return content.split("\f")
+
+    errors = getattr(result, "errors", None)
+    raise XbergExtractionError(f"risultato Xberg senza pagine/ contenuto (errors={errors!r})")
 
 
 def _call_extract(path: str, config: Any) -> Any:
-    """Invoca l'API sincrona o asincrona di Xberg, con o senza config."""
+    """Invoca ``xberg.extract`` (async) sull'input URI del file."""
     m = _module()
     if m is None:
         raise XbergNotAvailable("pacchetto 'xberg' non installato")
 
-    def _invoke(fn):
-        return fn(path, config=config) if config is not None else fn(path)
+    extract_fn = getattr(m, "extract", None)
+    input_cls = getattr(m, "ExtractInput", None)
+    if not callable(extract_fn):
+        raise XbergNotAvailable("Xberg senza 'extract'")
 
-    sync_fn = getattr(m, "extract_file_sync", None)
-    if callable(sync_fn):
-        return _invoke(sync_fn)
+    if input_cls is not None:
+        inp = input_cls(kind="uri", uri=path, mime_type="application/pdf")
+        coro = extract_fn(inp, config)
+    else:  # firma alternativa: extract(uri, config)
+        coro = extract_fn(path, config)
 
-    async_fn = getattr(m, "extract_file", None)
-    if callable(async_fn):
-        return _run_async(_invoke(async_fn))
-
-    raise XbergNotAvailable("Xberg senza extract_file/extract_file_sync")
+    if asyncio.iscoroutine(coro):
+        return _run_async(coro)
+    return coro
 
 
-def _extract_document(path: str) -> list[str | None]:
+def _extract_document(path: str, *, use_layout: bool, use_cache: bool) -> list[str | None]:
     """Estrae l'intero documento in pagine Markdown (una sola volta)."""
-    return _result_pages(_call_extract(path, _build_config()))
+    config = _build_config(use_layout=use_layout, use_cache=use_cache)
+    return _result_pages(_call_extract(path, config))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -211,13 +249,13 @@ def _extract_document(path: str) -> list[str | None]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _cache_key(path: str) -> tuple:
+def _cache_key(path: str, use_layout: bool) -> tuple:
     p = Path(path)
     try:
         st = p.stat()
-        return (str(p.resolve()), st.st_size, st.st_mtime_ns)
+        return (str(p.resolve()), st.st_size, st.st_mtime_ns, use_layout)
     except OSError:
-        return (str(p), 0, 0)
+        return (str(p), 0, 0, use_layout)
 
 
 def clear_cache() -> None:
@@ -226,20 +264,22 @@ def clear_cache() -> None:
         _cache.clear()
 
 
-def extract_page(path: str, page_num: int) -> str | None:
+def extract_page(
+    path: str, page_num: int, *, use_layout: bool = True, use_cache: bool = True
+) -> str | None:
     """Markdown della pagina ``page_num`` (0-based) via Xberg.
 
     Ritorna ``None`` se Xberg non è disponibile o se la pagina richiesta non è
     recuperabile: il chiamante deve quindi degradare al backend di default.
-    L'estrazione dell'intero documento è cachata per ``(path, size, mtime)``,
-    così le pagine successive dello stesso PDF sono immediate.
+    L'estrazione dell'intero documento è cachata per ``(path, size, mtime,
+    use_layout)``, così le pagine successive dello stesso PDF sono immediate.
     """
     global _last_error
     if not is_available():
         _last_error = "xberg non installato"
         return None
 
-    key = _cache_key(path)
+    key = _cache_key(path, use_layout)
     with _cache_lock:
         pages = _cache.get(key)
         if pages is not None:
@@ -247,7 +287,7 @@ def extract_page(path: str, page_num: int) -> str | None:
 
     if pages is None:
         try:
-            pages = _extract_document(path)
+            pages = _extract_document(path, use_layout=use_layout, use_cache=use_cache)
         except Exception as exc:  # noqa: BLE001 — degrada, non crasha
             _last_error = f"{type(exc).__name__}: {exc}"
             pages = []
@@ -257,7 +297,7 @@ def extract_page(path: str, page_num: int) -> str | None:
             while len(_cache) > _CACHE_MAX:
                 _cache.popitem(last=False)
 
-    if 0 <= page_num < len(pages):
+    if 0 <= page_num < len(pages) and pages[page_num] is not None:
         _last_error = None
         return pages[page_num]
     return None
