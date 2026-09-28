@@ -209,6 +209,134 @@ def _apply_spacing(md: str, page, profile: LayoutProfile, exclude: Sequence[tupl
     return _spacing_fixes(md)
 
 
+# ── cleanup del markdown (Pack 1) ───────────────────────────────────────────
+# Un unico fix con quattro passate pure: header/footer di stampa, heading,
+# liste, corsivi. Conservativo: agisce solo su pattern riconoscibili.
+
+_HEADING_RE = re.compile(r"^(#{1,6})\s*(.*)$")
+_CAPTION_HEADING_RE = re.compile(
+    r"^#{1,6}\s*\**\s*(table|fig|figure|box|exhibit|chart)\b", re.IGNORECASE
+)
+_STANDALONE_NUM_RE = re.compile(r"^\s*\**\s*\d{1,4}\s*\**\s*$")
+
+
+def _norm_noise(text: str) -> str:
+    """Normalizza una riga per confrontare md e testo di pagina (header/footer)."""
+    return re.sub(r"\s+", " ", re.sub(r"[*_`~]", "", text)).strip().lower()
+
+
+def _margin_noise(page) -> set[str]:
+    """Stringhe che compaiono nei margini alto/basso della pagina (header/footer)."""
+    if page is None:
+        return set()
+    try:
+        height = page.rect.height
+        blocks = page.get_text("dict")["blocks"]
+    except Exception:
+        return set()
+    top, bottom = 0.08 * height, 0.92 * height
+    found: set[str] = set()
+    for blk in blocks:
+        if blk.get("type") != 0:
+            continue
+        for line in blk["lines"]:
+            y0, y1 = line["bbox"][1], line["bbox"][3]
+            if y1 <= top or y0 >= bottom:
+                text = "".join(s["text"] for s in line["spans"])
+                norm = _norm_noise(text)
+                if norm:
+                    found.add(norm)
+    return found
+
+
+def _strip_running_headers(md: str, page) -> str:
+    """Rimuove header/footer di stampa e numeri di pagina isolati."""
+    candidates = _margin_noise(page)
+    lines = md.split("\n")
+    kept: list[str] = []
+    for line in lines:
+        norm = _norm_noise(line)
+        if norm and norm in candidates and len(line) < 200:
+            continue
+        kept.append(line)
+    # Numeri di pagina isolati in testa/coda (pymupdf4llm li sposta talvolta).
+    non_empty = [i for i, ln in enumerate(kept) if ln.strip()]
+    if non_empty:
+        for idx in (non_empty[0], non_empty[-1]):
+            if _STANDALONE_NUM_RE.match(kept[idx]):
+                kept[idx] = ""
+    return "\n".join(kept)
+
+
+def _normalize_headings(md: str) -> str:
+    """Unisce titoli spezzati, elimina artefatti, retrocede le didascalie."""
+    md = md.replace("~~", "").replace("■", "")
+    lines = md.split("\n")
+    out: list[str] = []
+    for line in lines:
+        if _CAPTION_HEADING_RE.match(line):
+            line = re.sub(r"^#{1,6}\s*", "", line)  # didascalia, non heading
+        m = _HEADING_RE.match(line)
+        if m and out:
+            # Guarda l'ultima riga NON vuota: i titoli spezzati sono separati
+            # da una riga vuota nell'output di pymupdf4llm.
+            j = len(out) - 1
+            while j >= 0 and out[j].strip() == "":
+                j -= 1
+            pm = _HEADING_RE.match(out[j]) if j >= 0 else None
+            if pm and len(pm.group(1)) == len(m.group(1)):
+                prev_text = pm.group(2).rstrip()
+                cur_text = m.group(2).strip()
+                starts_like_continuation = (
+                    cur_text[:1] in "([" or (cur_text and cur_text.isupper())
+                )
+                if (
+                    starts_like_continuation
+                    and len(cur_text) < 80
+                    and not prev_text.endswith((".", "!", "?", ":", ";"))
+                ):
+                    out[j] = out[j].rstrip() + " " + cur_text
+                    continue
+        out.append(line)
+    return "\n".join(out)
+
+
+def _repair_lists(md: str) -> str:
+    """Converte i bullet inline e ricuce i bullet di continuazione."""
+    md = re.sub(r"\s•\s", "\n- ", md)
+    lines = md.split("\n")
+    out: list[str] = []
+    for line in lines:
+        if line.startswith("- ") and out:
+            j = len(out) - 1
+            while j >= 0 and out[j].strip() == "":
+                j -= 1
+            if j >= 0 and out[j].startswith("- "):
+                prev = out[j].rstrip()
+                rest = line[2:].lstrip()
+                if (
+                    rest[:1].islower()
+                    and not prev.endswith((".", "!", "?", ":", ";"))
+                ):
+                    out[j] = prev + " " + rest
+                    continue
+        out.append(line)
+    return "\n".join(out)
+
+
+def _normalize_emphasis(md: str) -> str:
+    """Mette uno spazio dopo l'abbreviazione nei corsivi (``_S.pyogenes_``)."""
+    return re.sub(r"(?<=[_*])([A-Z])\.(?=[a-z])", r"\1. ", md)
+
+
+def _apply_cleanup(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
+    md = _strip_running_headers(md, page)
+    md = _normalize_headings(md)
+    md = _repair_lists(md)
+    md = _normalize_emphasis(md)
+    return md
+
+
 def _when_dehyphenate(p: LayoutProfile, b: str) -> bool:
     return b == "Docling 🧠"
 
@@ -258,6 +386,13 @@ FIX_REGISTRY: Sequence[Fix] = (
         35,
         _when_reorder_columns_title,
         _apply_reorder_columns_title,
+    ),
+    Fix(
+        "cleanup_markdown",
+        "Pulizia: header/footer di stampa, heading, liste, corsivi",
+        50,
+        lambda p, b: True,
+        _apply_cleanup,
     ),
     Fix(
         "spacing",

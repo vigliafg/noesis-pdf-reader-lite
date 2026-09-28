@@ -31,6 +31,10 @@ from layout_engine import (  # noqa: E402
     FIX_REGISTRY,
     LayoutProfile,
     _load_overrides,
+    _normalize_emphasis,
+    _normalize_headings,
+    _repair_lists,
+    _strip_running_headers,
     apply_plan,
     plan_fixes,
     profile_page,
@@ -157,19 +161,19 @@ class ProfilePageTests(unittest.TestCase):
 class PlanFixesTests(unittest.TestCase):
     def test_auto_two_columns_pymupdf4llm(self):
         plan = plan_fixes(_profile(2, overlap=True), "PyMuPDF4LLM ⚡", mode="auto")
-        self.assertEqual(_ids(plan), ["reorder_columns", "spacing"])
+        self.assertEqual(_ids(plan), ["reorder_columns", "cleanup_markdown", "spacing"])
 
     def test_auto_two_columns_docling(self):
         plan = plan_fixes(_profile(2, overlap=True), "Docling 🧠", mode="auto")
-        self.assertEqual(_ids(plan), ["dehyphenate", "split_glued", "spacing"])
+        self.assertEqual(_ids(plan), ["dehyphenate", "split_glued", "cleanup_markdown", "spacing"])
 
     def test_auto_single_column(self):
         plan = plan_fixes(_profile(1), "PyMuPDF4LLM ⚡", mode="auto")
-        self.assertEqual(_ids(plan), ["spacing"])
+        self.assertEqual(_ids(plan), ["cleanup_markdown", "spacing"])
 
     def test_auto_two_columns_without_overlap_no_reorder(self):
         plan = plan_fixes(_profile(2, overlap=False), "PyMuPDF4LLM ⚡", mode="auto")
-        self.assertEqual(_ids(plan), ["spacing"])
+        self.assertEqual(_ids(plan), ["cleanup_markdown", "spacing"])
 
     def test_manual_mode_returns_single_fix(self):
         # mode = fix id applies that fix regardless of `when`.
@@ -184,7 +188,7 @@ class PlanFixesTests(unittest.TestCase):
             _profile(2, overlap=True), "PyMuPDF4LLM ⚡",
             overrides={"disable": ["spacing"]},
         )
-        self.assertEqual(_ids(plan), ["reorder_columns"])
+        self.assertEqual(_ids(plan), ["reorder_columns", "cleanup_markdown"])
 
     def test_override_custom_rule_replaces_default_plan(self):
         overrides = {
@@ -202,7 +206,7 @@ class PlanFixesTests(unittest.TestCase):
             ]
         }
         plan = plan_fixes(_profile(2, overlap=True), "PyMuPDF4LLM ⚡", overrides=overrides)
-        self.assertEqual(_ids(plan), ["reorder_columns", "spacing"])
+        self.assertEqual(_ids(plan), ["reorder_columns", "cleanup_markdown", "spacing"])
 
 
 class ApplyPlanTests(unittest.TestCase):
@@ -227,6 +231,54 @@ class ApplyPlanTests(unittest.TestCase):
         md = apply_plan("**134**and pathogen", page, profile, plan)
         self.assertIn("**134** and pathogen", md)
         doc.close()
+
+
+class CleanupMarkdownTests(unittest.TestCase):
+    """Pack 1: header/footer, heading, liste, corsivi (fix ``cleanup_markdown``)."""
+
+    def test_strip_running_headers_and_page_number(self):
+        doc, page = _new_page()
+        page.insert_text((50, 20), "CHAPTER 18 Endocrine System", fontsize=9)
+        page.insert_text((50, 800), "656", fontsize=9)
+        page.insert_textbox(pymupdf.Rect(50, 120, 520, 400), "Body text here.", fontsize=10)
+        md = "CHAPTER 18 Endocrine System\n\nBody text here.\n\n656"
+        out = _strip_running_headers(md, page)
+        self.assertNotIn("CHAPTER", out)
+        self.assertNotIn("656", out)
+        self.assertIn("Body text here.", out)
+        doc.close()
+
+    def test_normalize_headings_merges_split_title(self):
+        md = "### ■ **ABIOTROPHIA** AND\n\n### (NUTRITIONALLY VARIANT STREPTOCOCCI)"
+        out = _normalize_headings(md)
+        self.assertIn("**ABIOTROPHIA** AND (NUTRITIONALLY VARIANT STREPTOCOCCI)", out)
+        self.assertEqual(out.count("###"), 1)
+
+    def test_normalize_headings_demotes_table_caption(self):
+        out = _normalize_headings("# **TABLE 46-10** TOPICS")
+        self.assertFalse(out.startswith("#"))
+        self.assertTrue(out.startswith("**TABLE 46-10**"))
+
+    def test_normalize_headings_strips_strikethrough_and_box_marker(self):
+        out = _normalize_headings("## **~~TREATMENT~~** ■")
+        self.assertNotIn("~~", out)
+        self.assertNotIn("■", out)
+
+    def test_repair_lists_inline_bullet_and_continuation(self):
+        md = (
+            "- Several scoring systems have been developed to help predict\n\n"
+            "- short- term mortality and need for ICU admission: • PSI score"
+        )
+        out = _repair_lists(md)
+        self.assertIn(
+            "- Several scoring systems have been developed to help predict "
+            "short- term mortality and need for ICU admission:",
+            out,
+        )
+        self.assertIn("\n- PSI score", out)
+
+    def test_normalize_emphasis_adds_space_after_abbrev(self):
+        self.assertEqual(_normalize_emphasis("_S.pyogenes_ is"), "_S. pyogenes_ is")
 
 
 class OverridesFileTests(unittest.TestCase):
