@@ -163,19 +163,19 @@ class ProfilePageTests(unittest.TestCase):
 class PlanFixesTests(unittest.TestCase):
     def test_auto_two_columns_pymupdf4llm(self):
         plan = plan_fixes(_profile(2, overlap=True), "PyMuPDF4LLM ⚡", mode="auto")
-        self.assertEqual(_ids(plan), ["reorder_columns", "cleanup_markdown", "spacing"])
+        self.assertEqual(_ids(plan), ["reorder_columns", "cleanup_markdown", "uncomment_picture_text", "spacing"])
 
     def test_auto_two_columns_docling(self):
         plan = plan_fixes(_profile(2, overlap=True), "Docling 🧠", mode="auto")
-        self.assertEqual(_ids(plan), ["dehyphenate", "split_glued", "cleanup_markdown", "spacing"])
+        self.assertEqual(_ids(plan), ["dehyphenate", "split_glued", "cleanup_markdown", "uncomment_picture_text", "spacing"])
 
     def test_auto_single_column(self):
         plan = plan_fixes(_profile(1), "PyMuPDF4LLM ⚡", mode="auto")
-        self.assertEqual(_ids(plan), ["cleanup_markdown", "spacing"])
+        self.assertEqual(_ids(plan), ["cleanup_markdown", "uncomment_picture_text", "spacing"])
 
     def test_auto_two_columns_without_overlap_no_reorder(self):
         plan = plan_fixes(_profile(2, overlap=False), "PyMuPDF4LLM ⚡", mode="auto")
-        self.assertEqual(_ids(plan), ["cleanup_markdown", "spacing"])
+        self.assertEqual(_ids(plan), ["cleanup_markdown", "uncomment_picture_text", "spacing"])
 
     def test_manual_mode_returns_single_fix(self):
         # mode = fix id applies that fix regardless of `when`.
@@ -190,7 +190,7 @@ class PlanFixesTests(unittest.TestCase):
             _profile(2, overlap=True), "PyMuPDF4LLM ⚡",
             overrides={"disable": ["spacing"]},
         )
-        self.assertEqual(_ids(plan), ["reorder_columns", "cleanup_markdown"])
+        self.assertEqual(_ids(plan), ["reorder_columns", "cleanup_markdown", "uncomment_picture_text"])
 
     def test_override_custom_rule_replaces_default_plan(self):
         overrides = {
@@ -208,7 +208,7 @@ class PlanFixesTests(unittest.TestCase):
             ]
         }
         plan = plan_fixes(_profile(2, overlap=True), "PyMuPDF4LLM ⚡", overrides=overrides)
-        self.assertEqual(_ids(plan), ["reorder_columns", "cleanup_markdown", "spacing"])
+        self.assertEqual(_ids(plan), ["reorder_columns", "cleanup_markdown", "uncomment_picture_text", "spacing"])
 
 
 class ApplyPlanTests(unittest.TestCase):
@@ -329,7 +329,7 @@ class CleanupMarkdownTests(unittest.TestCase):
             _profile(1), "PyMuPDF4LLM ⚡",
             overrides={"disable": ["cleanup_markdown"]},
         )
-        self.assertEqual(_ids(plan), ["spacing"])
+        self.assertEqual(_ids(plan), ["uncomment_picture_text", "spacing"])
 
 
 def _time_cleanup(md, page, profile=None) -> float:

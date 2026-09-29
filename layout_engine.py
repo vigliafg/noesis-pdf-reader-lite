@@ -345,6 +345,32 @@ def _normalize_emphasis(md: str) -> str:
     return re.sub(r"(?<=[_*])([A-Z])\.(?=[a-z])", r"\1. ", md)
 
 
+# ── figure (Pack 3) ─────────────────────────────────────────────────────────
+# pymupdf4llm racchiude il testo dentro le figure (etichette di mappe/grafici)
+# in un commento HTML: nel rendering Markdown sparisce. Lo si rende visibile
+# come blocco citazione, così resta distinguibile dal corpo.
+
+_PICTURE_TEXT_RE = re.compile(
+    r"<!--\s*Start of picture text\s*-->(?P<body>.*?)"
+    r"<!--\s*End of picture text\s*-->",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def _uncomment_picture_text_md(md: str) -> str:
+    def _to_quote(m: "re.Match[str]") -> str:
+        body = m.group("body").strip("\n").strip()
+        if not body:
+            return ""
+        return "\n".join(f"> {ln}" if ln.strip() else ">" for ln in body.split("\n"))
+
+    return _PICTURE_TEXT_RE.sub(_to_quote, md)
+
+
+def _apply_uncomment_picture_text(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
+    return _uncomment_picture_text_md(md)
+
+
 # ── tabelle (Pack 2) ────────────────────────────────────────────────────────
 # Tre fix puri sul markdown + (per il rebuild) ``page.find_tables()``. Sono
 # conservativi: se la struttura non è chiara non toccano nulla (meglio un
@@ -678,6 +704,13 @@ FIX_REGISTRY: Sequence[Fix] = (
         50,
         lambda p, b: True,
         _apply_cleanup,
+    ),
+    Fix(
+        "uncomment_picture_text",
+        "Figure: rende visibile il testo dentro le figure (era un commento HTML)",
+        55,
+        lambda p, b: True,
+        _apply_uncomment_picture_text,
     ),
     Fix(
         "rebuild_tables",
