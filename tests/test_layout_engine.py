@@ -15,6 +15,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 
 # Make the single-file `main` module importable from the project root.
@@ -329,6 +330,71 @@ class CleanupMarkdownTests(unittest.TestCase):
             overrides={"disable": ["cleanup_markdown"]},
         )
         self.assertEqual(_ids(plan), ["spacing"])
+
+
+def _time_cleanup(md, page, profile=None) -> float:
+    """Wall-clock seconds for one ``_apply_cleanup`` pass (T2.3)."""
+    start = time.perf_counter()
+    _apply_cleanup(md, page, profile)
+    return time.perf_counter() - start
+
+
+class CleanupPerformanceTests(unittest.TestCase):
+    """T2.3 — guard rail on the cost of the Pack 1 cleanup.
+
+    Measured baseline (this machine, PyMuPDF 1.28, Python 3.14):
+
+    * the four pure passes (``_strip_running_headers`` filtering,
+      ``_normalize_headings``, ``_repair_lists``, ``_normalize_emphasis``) cost
+      ~2.9 ms on a ~50 KB dense synthetic page — but only ~1 ms on a real
+      corpus page of 5–8 KB (pa23);
+    * passing a real ``page`` adds ``_margin_noise`` → ``page.get_text("dict")``
+      (~7–8 ms/page on pa23): that is PyMuPDF re-extracting text the profiler
+      already read, **not** the regexes.
+
+    The thresholds are ~10x the measured value so shared/slow CI runners do not
+    flake; the test catches a real regression (an accidentally quadratic pass),
+    not normal jitter.
+    """
+
+    @staticmethod
+    def _dense_markdown() -> str:
+        parts: list[str] = []
+        for i in range(60):
+            parts.append(f"## Section heading number {i} with several words")
+            parts.append("Body text paragraph with enough words. " * 20)
+            parts.append("- bullet one with **bold** and _S.pyogenes_ inside")
+            parts.append("- bullet two with ~~strike~~ and a • inline bullet here")
+            parts.append("| Col A | Col B | Col C |")
+            parts.append("| --- | --- | --- |")
+            for r in range(6):
+                parts.append(f"| value {r} | other {i}.{r} | 1,{r}00 |")
+        return "\n\n".join(parts)
+
+    def test_regex_passes_stay_within_guard_threshold(self):
+        md = self._dense_markdown()
+        self.assertGreater(len(md), 40_000)  # the fixture is dense on purpose
+        best = min(_time_cleanup(md, None) for _ in range(3))
+        self.assertLess(
+            best,
+            0.05,
+            f"cleanup regex passes too slow: {best * 1000:.1f} ms for {len(md)} bytes",
+        )
+
+    def test_cleanup_with_page_stays_within_guard_threshold(self):
+        doc, page = _new_page()
+        page.insert_text((50, 20), "CHAPTER 18 Endocrine System", fontsize=9)
+        page.insert_text((50, 800), "656", fontsize=9)
+        page.insert_textbox(pymupdf.Rect(50, 120, 520, 400), "Body text here.", fontsize=10)
+        profile = profile_page(page)
+        md = self._dense_markdown()
+        best = min(_time_cleanup(md, page, profile) for _ in range(3))
+        self.assertLess(
+            best,
+            0.2,
+            f"cleanup with page too slow: {best * 1000:.1f} ms",
+        )
+        doc.close()
 
 
 class OverridesFileTests(unittest.TestCase):

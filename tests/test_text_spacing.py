@@ -133,6 +133,86 @@ class CollectBlocksSpacingTests(unittest.TestCase):
         self.assertEqual(text.replace("**", "").replace("### ", ""), "word next")
 
 
+class InclusionOrderSpacingTests(unittest.TestCase):
+    """T2.1 — inclusion zones must not lose the spaces of the source lines.
+
+    ``_inclusion_order_markdown`` rebuilds the page as a whitelist ordered by
+    zone number. It goes through the very same ``_collect_lines`` /
+    ``_trim_edge_spaces`` / ``_block_to_md`` path as the automatic reorder, so
+    the word-spacing fix must hold here too (the zones are the "green" manual
+    tool; a regression would silently glue words in the extracted text).
+    """
+
+    @staticmethod
+    def _line(texts, x0, y0, x1, y1):
+        return {"bbox": (x0, y0, x1, y1), "spans": [_span(t) for t in texts]}
+
+    @classmethod
+    def _block(cls, lines, bbox):
+        return {"type": 0, "bbox": bbox, "lines": lines}
+
+    def test_zone_preserves_whitespace_spans(self):
+        blk = self._block(
+            [self._line(["they", " ", "increase", " ", "with"], 0, 100, 100, 110)],
+            (0, 100, 100, 110),
+        )
+        out = main._inclusion_order_markdown(_StubPage([blk]), [(0, 90, 120, 120)])
+        self.assertIn("they increase with", out)
+
+    def test_zone_keeps_geometric_gap_space(self):
+        line = {
+            "bbox": (0, 100, 100, 110),
+            "spans": [_span("they", x0=0.0, x1=20.0), _span("increase", x0=24.0, x1=60.0)],
+        }
+        blk = self._block([line], (0, 100, 100, 110))
+        out = main._inclusion_order_markdown(_StubPage([blk]), [(0, 90, 120, 120)])
+        self.assertIn("they increase", out)
+
+    def test_zones_order_beats_document_order(self):
+        left = self._block(
+            [self._line(["Left column text"], 0, 100, 100, 110)],
+            (0, 100, 100, 110),
+        )
+        right = self._block(
+            [self._line(["Right column text"], 300, 100, 400, 110)],
+            (300, 100, 400, 110),
+        )
+        page = _StubPage([left, right])
+        fwd = main._inclusion_order_markdown(
+            page, [(0, 90, 120, 120), (280, 90, 420, 120)]
+        )
+        self.assertLess(fwd.index("Left column text"), fwd.index("Right column text"))
+        rev = main._inclusion_order_markdown(
+            page, [(280, 90, 420, 120), (0, 90, 120, 120)]
+        )
+        self.assertLess(rev.index("Right column text"), rev.index("Left column text"))
+
+    def test_consecutive_lines_of_same_block_stay_joined(self):
+        blk = self._block(
+            [
+                self._line(["obesity"], 0, 100, 100, 110),
+                self._line(["related risk"], 0, 112, 100, 122),
+            ],
+            (0, 100, 100, 122),
+        )
+        out = main._inclusion_order_markdown(_StubPage([blk]), [(0, 90, 120, 130)])
+        self.assertEqual(out, "obesity related risk")
+
+    def test_exclude_wins_over_include(self):
+        blk = self._block(
+            [
+                self._line(["keep this line"], 0, 100, 100, 110),
+                self._line(["drop this line"], 0, 112, 100, 122),
+            ],
+            (0, 100, 100, 122),
+        )
+        out = main._inclusion_order_markdown(
+            _StubPage([blk]), [(0, 90, 120, 130)], exclude=[(0, 111, 120, 123)]
+        )
+        self.assertIn("keep this line", out)
+        self.assertNotIn("drop this line", out)
+
+
 # ── gold test su PDF reali (skip se assenti) ─────────────────────────────────
 
 _GOLD_DIR = os.environ.get(
