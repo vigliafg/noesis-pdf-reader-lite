@@ -563,6 +563,25 @@ class ColumnAwareTests(unittest.TestCase):
         self.assertLess(md.index("Gamma entry two."), md.index("Delta entry one."))
         doc.close()
 
+    def test_prose_background_rect_is_not_a_box(self):
+        # Some pages paint the whole column with a light fill. That rectangle
+        # must NOT be rendered as a one-column table (which broke word wrapping
+        # on pa23/p303 and ce24/p489): the prose stays as paragraphs.
+        doc, page = _new_page()
+        bg = pymupdf.Rect(50, 100, 300, 600)
+        page.draw_rect(bg, color=None, fill=(0.93, 0.93, 0.95))
+        text = (
+            "This is running prose that wraps over several lines and must stay "
+            "as ordinary paragraphs, not become a single column table with the "
+            "words broken across the cells of the grid."
+        )
+        page.insert_textbox(pymupdf.Rect(55, 110, 295, 590), text, fontsize=10)
+
+        md = _column_aware_markdown(page, move_title=False)
+        self.assertIn("running prose", md)
+        self.assertNotIn("| This is running prose", md)
+        doc.close()
+
     def test_sidebar_box_rendered_as_markdown_table(self):
         # A bordered box (sidebar) must be rendered as a markdown table, not
         # flattened into the body text with glued bullets. find_tables() does

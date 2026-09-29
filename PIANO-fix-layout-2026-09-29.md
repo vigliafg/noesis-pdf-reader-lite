@@ -170,3 +170,47 @@ pa19, pa23, su18, su19) tra `main` pre-Pack 2 e questa proposta: nessuna perdita
 di contenuto visibile; le uniche differenze sono miglioramenti (parole incollate
 ricomposte, celle vuote rimosse, tabelle malformate ricostruite) e artefatti di
 apice (`streptococci` + `<sup>b</sup>` → `streptococcib`).
+
+---
+
+## 7. Seguito — correttezza misurata e box (2026-09-29, seconda passata)
+
+### Metrica (correzione importante)
+La prima misura di "recall" era **inquinata**: la normalizzazione usava
+`<[^>]+>`, che su testi con `pH <5.5` / `>10 g` rimuoveva tutto fino al `>`
+successivo, gonfiando le "parole mancanti". Corretta in
+`</?[a-zA-Z][a-zA-Z0-9]*[^>]*>` (solo veri tag HTML). Con la metrica corretta:
+
+| | recall contenuto | parole mancanti | glue | spazi/100 |
+|---|---|---|---|---|
+| RAW PyMuPDF4LLM | 99.50% | 241 | 124 | 14.02 |
+| ENGINE (dopo i fix) | **99.64%** | **174** | **113** | ~baseline |
+
+Il motore è **al livello del baseline o leggermente sopra**, e le uniche due
+pagine con perdita reale sono le stesse del raw (una scansione illeggibile e un
+blocco che il raw stesso non estrae).
+
+### Fix dei box
+1. **Titoli di box tagliati dai margini**: `_margin_noise` prendeva per header di
+   pagina qualsiasi riga corta nel bordo alto/basso, compresa la continuazione di
+   un titolo di box (`or Maldigestion`, `box 3`). Ora un candidato deve **iniziare
+   con maiuscola o cifra** (i veri header sì; le continuazioni di box no).
+2. **Sfondi di colonna scambiati per box**: alcune pagine dipingono l'intera
+   colonna con un rettangolo pieno; `_detect_boxes` lo rendeva una tabella a una
+   colonna, spezzando le parole (pa23/p303, ce24/p489). Aggiunto
+   `_looks_like_prose`: un rettangolo il cui testo è **prosa** (≥50% di righe con
+   ≥8 parole) non è un box esplicativo e resta testo normale. I box/tabelle veri
+   (righe corte, elenchi) restano invariati.
+
+Effetto: pa23/p303 passa da ~143 righe-tabella a 0; su 57 pagine recall 99.50%
+→ 99.64%, glue 124 → 113, nessuna pagina con delta grave.
+
+### Test
+- `test_margin_noise_ignores_lowercase_box_title_continuation`
+- `test_prose_background_rect_is_not_a_box`
+- suite completa: **216 OK**.
+
+### Ancora aperto
+- co23/303 e ha22/1235 **non** erano perdite reali (erano un artefatto della
+  metrica sbagliata): con la metrica corretta il testo c'è tutto.
+- Restano i limiti della §6 (didascalie perse dal reorder, `link_figures`, T5).
