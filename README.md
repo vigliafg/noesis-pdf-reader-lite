@@ -11,7 +11,13 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   markdown (destra).
 - Engine adattativo sempre attivo (riordino colonne, tabelle, box, legende,
   de-duplicazione titoli, pulizia di header/footer e titoli, spaziature) — il
-  piano viene scelto automaticamente per ogni pagina.
+  piano viene scelto automaticamente per ogni pagina. I fix sono raggruppati in
+  "pack": **Pack 1** pulizia markdown (header/footer, heading, liste, corsivi),
+  **Pack 2** tabelle (griglia ricostruita da `find_tables`, didascalie
+  `**TABLE x**` su riga propria, celle vuote/colonne fantasma rimosse e valori
+  numerici riallineati), **Pack 3** figure (testo dentro le figure visibile,
+  non più commento HTML). Ogni fix è attivabile/disattivabile da
+  `fix_rules.json`.
 - Navigazione (prec/succ, spin, zoom), indice (TOC), toggle Markdown.
 - Tab testo: Originale / Traduzione / 🖼️ Immagini. L'Originale mostra un
   unico testo: l'output del motore adattativo (auto) oppure, quando ci sono
@@ -83,9 +89,18 @@ resta nel repo ma non viene pubblicato sul sito.
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-> I test di regressione sui PDF reali puntano al repo padre
-> (`../noesis-pdf-reader/`); vengono saltati automaticamente se i file non
-> sono presenti.
+I test girano su due livelli:
+
+- **unit/sintetici** (pymupdf genera le pagine al volo) e **end-to-end
+  sintetici** (una pagina a due colonne generata, che esercita
+  `pymupdf4llm.to_markdown` → engine): girano **sempre, anche in CI**;
+- **gold sui PDF reali**: vengono **saltati** se i file non ci sono. Il corpus
+  sta fuori dal repo; puntare `NOESIS_GOLD_PDF_DIR` alla cartella dei PDF
+  (default: `../noesis-pdf-cloner-service/pdfs`) oppure lasciare i PDF nella
+  radice del progetto.
+
+Ogni push e ogni PR esegue la suite headless in CI
+(`.github/workflows/tests.yml`, `ubuntu-latest` + `QT_QPA_PLATFORM=offscreen`).
 
 ## Build delle release (GitHub Actions)
 
