@@ -823,6 +823,14 @@ def _load_overrides(path: str) -> dict:
 _OPS = {"eq": lambda a, b: a == b, "gte": lambda a, b: a >= b, "lte": lambda a, b: a <= b}
 
 
+def is_fix_disabled(fix_id: str) -> bool:
+    """True when ``fix_id`` is listed in ``fix_rules.json`` → ``disable``."""
+    try:
+        return fix_id in set(_load_overrides(str(_OVERRIDE_PATH)).get("disable", []))
+    except Exception:
+        return False
+
+
 def _rule_matches(when: dict, profile: LayoutProfile, backend: str) -> bool:
     """Valuta un predicato ``when`` limitato a campi noti del profilo/backend."""
     for field, cond in when.items():

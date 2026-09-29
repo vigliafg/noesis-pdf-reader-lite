@@ -243,3 +243,40 @@ in x col box e scarta i titoli fatti di sole cifre.
 - unit: caption in margine, titolo sopra box in margine, `_box_title` vs numero
   di pagina; gold co23/p931 e ha22/p2240.
 - suite completa: **221 OK**.
+
+---
+
+## 9. Figure come "corpo unico + didascalia" (Pack 3b)
+
+Problema segnalato: una figura non arriva come corpo + didascalia, ma
+**smontata** in pezzi sciolti (testo interno/etichette + didascalia), perché
+PyMuPDF4LLM non emette il corpo della figura (zero `![](...)`) e lascia solo il
+testo interno come commento HTML (poi reso citazione).
+
+### Soluzione (implementata)
+- `_figure_regions(page)`: per ogni didascalia `FIG/FIGURE n` individua la
+  regione grafica sopra di essa usando `page.cluster_drawings()` (funziona anche
+  per le figure **vettoriali**, dove `get_image_info()` è vuoto) + le immagini
+  embedded, con filtri per righe/sfondi.
+- `_render_figure`: renderizza la regione in PNG (`_region_image`, riusa la
+  logica della cattura manuale) nella cartella immagini del documento
+  (`page_XXXX_fig_N.png`).
+- `_link_figures`: inserisce `![figura n](file://…)` **prima della didascalia**;
+  il testo interno alla figura (blocco citazione) viene tolto **solo** se è
+  dentro la regione renderizzata (così non è duplicato), altrimenti resta.
+- L'engine riceve `figures_dir`; l'app passa la sua cartella immagini e, a
+  estrazione finita, aggiunge le figure della pagina alla **gallery**.
+- Disattivabile da `fix_rules.json` (`disable: ["link_figures"]`).
+
+### Verifica
+- pa23/p602: grafico reso, `FIG. 14.10` dopo l'immagine, legenda non duplicata.
+- ha22/p1230: mappa resa, `FIGURE 148-1` dopo l'immagine.
+- Nessun falso positivo su pagine senza didascalia (`ce24/p489`, `co23/p301`).
+- Costo: la scansione grafica parte **solo** se c'è una didascalia `FIG n`.
+- Test: `tests/test_figures_link.py` (4 unit + 2 gold); suite **227 OK**.
+
+### Ancora aperto
+- `link_figures` non copre i casi in cui la didascalia non è `FIG n` (es.
+  "Figure" senza numero) o è lontana dalla figura (> 80 pt).
+- Resta **T5** (dedup header/footer tra pagine, tabelle multi-pagina, heading
+  dal TOC).

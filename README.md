@@ -15,9 +15,10 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   "pack": **Pack 1** pulizia markdown (header/footer, heading, liste, corsivi),
   **Pack 2** tabelle (griglia ricostruita da `find_tables`, didascalie
   `**TABLE x**` su riga propria, celle vuote/colonne fantasma rimosse e valori
-  numerici riallineati), **Pack 3** figure (testo dentro le figure visibile,
-  non più commento HTML). Ogni fix è attivabile/disattivabile da
-  `fix_rules.json`.
+  numerici riallineati), **Pack 3** figure (testo dentro le figure visibile e,
+  quando c'è una didascalia `FIG n`, la figura viene **renderizzata come corpo
+  unico + didascalia**: `![figura n](file://…)` e ingresso nella gallery 🖼️).
+  Ogni fix è attivabile/disattivabile da `fix_rules.json`.
 - Navigazione (prec/succ, spin, zoom), indice (TOC), toggle Markdown.
 - Tab testo: Originale / Traduzione / 🖼️ Immagini. L'Originale mostra un
   unico testo: l'output del motore adattativo (auto) oppure, quando ci sono
