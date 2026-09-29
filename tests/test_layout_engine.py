@@ -274,6 +274,20 @@ class CleanupMarkdownTests(unittest.TestCase):
         self.assertEqual(_strip_running_headers(md, page), md)
         doc.close()
 
+    def test_margin_noise_ignores_lowercase_box_title_continuation(self):
+        # A box title wrapped across two lines near the top margin: its second
+        # line ("or Maldigestion") starts lowercase and must NOT be taken for a
+        # running header (otherwise the title is cut in half).
+        doc, page = _new_page()
+        page.insert_textbox(pymupdf.Rect(50, 40, 400, 52), "BOX 3 Systemic Diseases", fontsize=9)
+        page.insert_textbox(pymupdf.Rect(60, 50, 200, 60), "or Maldigestion", fontsize=8)
+        page.insert_textbox(pymupdf.Rect(50, 150, 520, 400), "Body text here.", fontsize=10)
+        md = "**BOX 3** Systemic Diseases\n\nor Maldigestion\n\nBody text here."
+        out = _strip_running_headers(md, page)
+        self.assertIn("or Maldigestion", out)
+        self.assertIn("Body text here.", out)
+        doc.close()
+
     def test_normalize_headings_merges_split_title(self):
         md = "### ■ **ABIOTROPHIA** AND\n\n### (NUTRITIONALLY VARIANT STREPTOCOCCI)"
         out = _normalize_headings(md)

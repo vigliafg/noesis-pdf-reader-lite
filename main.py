@@ -670,6 +670,33 @@ def _dedup_boxes(boxes: list[dict]) -> list[dict]:
     return kept
 
 
+def _looks_like_prose(page, rect: tuple) -> bool:
+    """True when the text in ``rect`` is running prose, not a sidebar/box.
+
+    Some pages paint the *columns* with a light background rectangle: the whole
+    column is then inside a "closed filled rect" and ``_detect_boxes`` would
+    turn every paragraph into a single-column markdown table (breaking word
+    wrapping). Real sidebars/tables have short lines (labels, list items); a
+    column of prose has long lines (>= 8 words). Only reject when most lines
+    are long, so a box of bullets is still treated as a box.
+    """
+    try:
+        d = page.get_text("dict", clip=pymupdf.Rect(rect))
+    except Exception:
+        return False
+    lengths: list[int] = []
+    for blk in d.get("blocks", []):
+        if blk.get("type") != 0:
+            continue
+        for line in blk["lines"]:
+            words = " ".join(s["text"] for s in line["spans"]).split()
+            if words:
+                lengths.append(len(words))
+    if len(lengths) < 4:
+        return False
+    return sum(1 for n in lengths if n >= 8) >= 0.5 * len(lengths)
+
+
 def _detect_boxes(page, page_width: float, table_regions: list[tuple], exclude: tuple = ()) -> list[dict]:
     """Detect bordered boxes (sidebars) and render them as markdown tables.
 
@@ -704,6 +731,12 @@ def _detect_boxes(page, page_width: float, table_regions: list[tuple], exclude: 
             continue
         text = page.get_text(clip=r).strip()
         if not text:
+            continue
+        # A light background rectangle behind a whole column contains prose:
+        # it is not a sidebar. Without this, the whole column becomes a
+        # one-column table and word wrapping is destroyed (pa23/p303,
+        # ce24/p489).
+        if _looks_like_prose(page, rect):
             continue
         # Skip trivial boxes: a lone page number / short label is not a sidebar.
         n_lines = len([ln for ln in text.splitlines() if ln.strip()])

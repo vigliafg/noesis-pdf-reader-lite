@@ -248,6 +248,15 @@ def _margin_noise(page) -> set[str]:
             y0, y1 = line["bbox"][1], line["bbox"][3]
             if y1 <= top or y0 >= bottom:
                 text = "".join(s["text"] for s in line["spans"])
+                stripped = text.lstrip()
+                # Un header/footer di stampa inizia con maiuscola o cifra
+                # ("CHAPTER 18 …", "656", "HEART FAILURE…"). Una continuazione
+                # di titolo di box come "or Maldigestion" o i frammenti di
+                # corpo che cadono nella banda dei margini iniziano minuscoli:
+                # non devono diventare candidati, altrimenti il box viene
+                # tagliato a metà.
+                if not stripped or not (stripped[0].isupper() or stripped[0].isdigit()):
+                    continue
                 norm = _norm_noise(text)
                 if norm and len(norm) <= 120 and len(norm.split()) <= 15:
                     found.add(norm)
