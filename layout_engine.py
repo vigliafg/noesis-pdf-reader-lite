@@ -231,12 +231,20 @@ _HEADING_RE = re.compile(r"^(#{1,6})\s*(.*)$")
 _CAPTION_HEADING_RE = re.compile(
     r"^#{1,6}\s*\**\s*(table|fig|figure|box|exhibit|chart)\b", re.IGNORECASE
 )
-_STANDALONE_NUM_RE = re.compile(r"^\s*\**\s*\d{1,4}\s*\**\s*$")
+_STANDALONE_NUM_RE = re.compile(r"^\s*(?:#{1,6}\s*|[-*+]\s+|\d+\.\s+)*\**\s*\d{1,4}\s*\**\s*$")
+
+#: Prefisso markdown (heading, lista, numero) da ignorare nel confronto con il
+#: testo di pagina: ``## ENDOCRINE DISORDERS`` e ``- 1123`` sono ancora
+#: l'header/il numero di pagina, il ``#``/``-`` è solo la forma che ha preso
+#: nel markdown. Senza questo la riga "travestita" non veniva riconosciuta.
+_MD_PREFIX_RE = re.compile(r"^\s*(?:#{1,6}\s*|[-*+]\s+|\d+\.\s+)*")
 
 
 def _norm_noise(text: str) -> str:
     """Normalizza una riga per confrontare md e testo di pagina (header/footer)."""
-    return re.sub(r"\s+", " ", re.sub(r"[*_`~]", "", text)).strip().lower()
+    s = re.sub(r"[*_`~]", "", text)
+    s = _MD_PREFIX_RE.sub("", s)
+    return re.sub(r"\s+", " ", s).strip().lower()
 
 
 #: Didascalia numerata ("TABLE 2 …", "FIG. 14.10 …"): è contenuto, non un
@@ -409,7 +417,33 @@ def _is_noise_line(line: str, candidates: set[str]) -> bool:
         m = re.match(pat, line)
         if m and _norm_noise(m.group(1)) in candidates:
             return True
-    return False
+    # Il reorder può anche fondere due pezzi di header in una sola riga
+    # ("CHAPTER 221" + "Medical Issues in Pregnancy"). La riga è rumore se
+    # l'intero testo si scompone in ≥2 candidati (spezzandola per candidati).
+    return _covers_candidates(norm, candidates)
+
+
+def _covers_candidates(norm: str, candidates: set[str]) -> bool:
+    """True se ``norm`` è interamente coperto da ≥2 candidati in sequenza."""
+    if not norm or len(norm) > 120 or len(norm.split()) > 15:
+        return False
+    s, used = norm, 0
+    while s:
+        best = ""
+        for c in candidates:
+            if c and s.startswith(c) and len(c) > len(best):
+                best = c
+        if best:
+            s = s[len(best):].lstrip()
+            used += 1
+            continue
+        m = re.match(r"^\d{1,4}\b\s*", s)  # numero di pagina nel mezzo
+        if m:
+            s = s[m.end():].lstrip()
+            used += 1
+            continue
+        return False
+    return used >= 2
 
 
 def _strip_running_headers(md: str, page) -> str:
@@ -433,33 +467,196 @@ def _normalize_headings(md: str) -> str:
     lines = md.split("\n")
     out: list[str] = []
     for line in lines:
+        # Glifo decorativo isolato (``### »`` / ``- ›``): è il bullet di un box
+        # promosso a heading dal renderer, non un titolo. Non porta testo.
+        if _is_decor_line(line):
+            continue
         if _CAPTION_HEADING_RE.match(line):
             line = re.sub(r"^#{1,6}\s*", "", line)  # didascalia, non heading
         m = _HEADING_RE.match(line)
-        if m and out:
+        bm = _BOLD_ONLY_RE.match(line) if not m else None
+        if (m or bm) and out:
             # Guarda l'ultima riga NON vuota: i titoli spezzati sono separati
             # da una riga vuota nell'output di pymupdf4llm.
             j = len(out) - 1
             while j >= 0 and out[j].strip() == "":
                 j -= 1
             pm = _HEADING_RE.match(out[j]) if j >= 0 else None
-            if pm and len(pm.group(1)) == len(m.group(1)):
+            same_level = (len(pm.group(1)) == len(m.group(1))) if (pm and m) else True
+            if pm and same_level:
                 prev_text = pm.group(2).rstrip()
-                cur_text = m.group(2).strip()
-                # Solo un titolo che riprende tra parentesi è chiaramente la
-                # continuazione di quello precedente (es. "ABIOTROPHIA AND" +
-                # "(NUTRITIONALLY VARIANT …)"). Niente euristica ALL-CAPS:
-                # fonderebbe titoli legittimi come "INTRODUCTION"/"METHODS".
-                starts_like_continuation = cur_text[:1] in "(["
+                cur_text = (m.group(2).strip() if m else bm.group("body").strip())
+                # La continuazione di un titolo è riconoscibile quando:
+                #  - inizia tra parentesi/in corsivo, oppure
+                #  - la riga precedente finisce con una parola di raccordo
+                #    ("... Therapy for" / "HYPOPARATHYROIDISM &"), oppure
+                #  - la continuazione inizia minuscola, oppure
+                #  - la precedente è un titolo "title case" lungo e la
+                #    continuazione è un frammento breve in title case
+                #    ("... Papillary Thyroid" + "Microcarcinoma").
+                # NON si fondono titoli tutti-maiuscoli distinti
+                # ("INTRODUCTION"/"METHODS", "TREATMENT"/"PROGNOSIS").
+                dangling = (
+                    _last_word(prev_text.strip().strip("*")) in _CONNECTORS
+                    or prev_text.strip().strip("*").rstrip().endswith(
+                        ("&", "/", "-", "–", "—"))
+                )
+                title_case_wrap = (
+                    len(prev_text.split()) >= 4
+                    and not prev_text.isupper()
+                    and not cur_text.isupper()
+                    and cur_text[:1].isupper()
+                    and len(cur_text.split()) <= 4
+                    # richiede un titolo numerato/sigle ("B. …", "1) …"):
+                    # evita di fondere due titoli distinti ("General
+                    # Considerations" + "Clinical Findings").
+                    and bool(_ENUM_PREFIX_RE.match(prev_text))
+                )
+                # Titolo MAIUSCOLO spezzato: "... RELATED MOOD" + "DISORDERS".
+                # Solo se la continuazione è un frammento brevissimo (≤2 parole)
+                # e non è un'etichetta di sezione autonoma.
+                allcaps_wrap = (
+                    prev_text.isupper() and cur_text.isupper()
+                    and len(prev_text.split()) >= 3
+                    and len(cur_text.split()) <= 2
+                    and _last_word(cur_text) not in _SECTION_STOP
+                )
+                # Una continuazione in grassetto non deve essere una didascalia.
+                cur_is_caption = bool(
+                    bm and _CAPTION_MARKER_RE.match(cur_text)
+                )
                 if (
-                    starts_like_continuation
+                    (cur_text[:1] in "([" or dangling
+                     or cur_text[:1].islower() or title_case_wrap or allcaps_wrap)
                     and len(cur_text) < 80
+                    and not cur_is_caption
+                    and not _CAPTION_HEADING_RE.match(line)
                     and not prev_text.endswith((".", "!", "?", ":", ";"))
                 ):
-                    out[j] = out[j].rstrip() + " " + cur_text
+                    out[j] = _join_heading(out[j], cur_text, inner_bold=bm is not None)
                     continue
         out.append(line)
     return "\n".join(out)
+
+
+def _join_heading(prev_line: str, cur_text: str, inner_bold: bool = False) -> str:
+    """Fonde due frammenti di titolo evitando ``**a** **b**`` ridondanti.
+
+    ``inner_bold``: la continuazione era una riga in grassetto, quindi il suo
+    testo va dentro i marcatori del titolo (``**… for**`` + ``**X**`` →
+    ``**… for X**``).
+    """
+    tail = prev_line.rstrip()
+    if tail.endswith("**") and inner_bold and "**" not in cur_text:
+        return tail[:-2].rstrip() + " " + cur_text.strip() + "**"
+    if tail.endswith("**") and cur_text.startswith("**") and cur_text.endswith("**"):
+        # entrambi in grassetto: si tiene un solo paio di marcatori
+        return tail[:-2].rstrip() + " " + cur_text[2:-2].strip() + "**"
+    if tail.endswith("**") and cur_text.startswith("**"):
+        return tail[:-2].rstrip() + " " + cur_text[2:].lstrip()
+    return tail + " " + cur_text
+
+
+#: Parole di raccordo: un titolo che finisce così è quasi sempre spezzato.
+_CONNECTORS = frozenset((
+    "for", "and", "of", "the", "with", "in", "on", "to", "a", "an", "or",
+    "from", "by", "at", "as", "into", "using", "versus", "vs", "without",
+    "after", "before", "during", "between", "including", "such",
+))
+
+#: Etichette di sezione che non sono mai la continuazione di un titolo: due
+#: titoli MAIUSCOLI adiacenti con queste parole restano separati.
+_SECTION_STOP = frozenset((
+    "treatment", "prognosis", "introduction", "methods", "summary",
+    "conclusion", "conclusions", "references", "further", "reading",
+    "overview", "prevention", "definition", "epidemiology",
+))
+
+#: Prefisso di titolo numerato/sigla ("B. …", "1) …", "(a) …").
+_ENUM_PREFIX_RE = re.compile(r"^\**\s*(?:\(?[A-Za-z0-9]{1,3}[.)]|\([a-z]\))\s")
+
+#: Caratteri decorativi usati come bullet nei box (CMDT et al.).
+_DECOR_CHARS = "ºª»«›‹◆◇►▶◀◄▪▫■□◻◼●○◦‣·•∙⋅…†‡§¶–—―➤➔➜✓✔✗✘★☆"
+_DECOR_ONLY_RE = re.compile(r"^[" + re.escape(_DECOR_CHARS) + r"]+$")
+
+
+def _is_decor_line(line: str) -> bool:
+    """True per una riga fatta solo di glifi decorativi (nessun testo)."""
+    s = _MD_PREFIX_RE.sub("", line).strip()
+    return bool(s) and bool(_DECOR_ONLY_RE.match(s))
+
+
+def _drop_decor_lines(md: str) -> str:
+    """Toglie le righe fatte solo di bullet decorativi (``### »`` / ``- ›``).
+
+    Sono i glifi che pymupdf4llm promuove a heading quando un box colorato ha
+    un bullet come primo carattere: non portano testo, solo rumore.
+    """
+    return "\n".join(ln for ln in md.split("\n") if not _is_decor_line(ln))
+
+
+#: Glifo decorativo in testa a una riga con testo (``»** Titolo**``).
+_DECOR_LEAD_RE = re.compile(r"^\s*[" + re.escape(_DECOR_CHARS) + r"]+\s*")
+
+
+def _strip_leading_decor(md: str) -> str:
+    """Toglie un bullet decorativo in testa a una riga che ha comunque testo."""
+    out: list[str] = []
+    for ln in md.split("\n"):
+        new = _DECOR_LEAD_RE.sub("", ln, count=1)
+        out.append(new if new.strip() else ln)
+    return "\n".join(out)
+
+
+#: ``**MAIUSCOLO ...**`` seguito da prosa sulla stessa riga: il titolo
+#: maiuscolo è un heading che pymupdf ha incollato al paragrafo.
+_CAPS_FUSED_RE = re.compile(
+    r"^\s*(?P<md>\*{1,3})(?P<label>[A-Z0-9][A-Z0-9 ,/&()’'.:\-]{4,})\*{1,3}"
+    r"[ \t]+(?P<rest>\S.*)$"
+)
+
+
+def _normalize_caps_runins(md: str) -> str:
+    """Separa i titoletti MAIUSCOLI fusi col paragrafo successivo.
+
+    ``**HYPERTENSIVE DISORDERS OF PREGNANCY** The hypertensive …`` diventa un
+    titolo su riga propria (mantenuto in grassetto, senza inventare un livello
+    di heading) + paragrafo. Solo per label di **almeno due parole** tutte
+    maiuscole: un run-in di una parola (``**TREATMENT** testo``) o una normale
+    frase in grassetto (``**In pregnant women**, …``) non vengono toccati.
+    Le didascalie numerate (``**TABLE 12-3** …``) sono escluse.
+    """
+    out: list[str] = []
+    for line in md.split("\n"):
+        if not line.lstrip().startswith("*") or _CAPTION_HEADING_RE.match(line):
+            out.append(line)
+            continue
+        m = _CAPS_FUSED_RE.match(line)
+        if not m:
+            out.append(line)
+            continue
+        label, rest = m.group("label").rstrip(), m.group("rest")
+        # Almeno 2 parole tutte maiuscole, label breve, e il residuo che inizia
+        # con una maiuscola/cifra (una frase, non una continuazione minuscola).
+        if (
+            len(label.split()) < 2
+            or len(label) > 70
+            or re.search(r"[a-z]", label)
+            or _CAPTION_MARKER_RE.match(label)
+            or label.rstrip().endswith((",", ";", ":"))
+            or not (rest[:1].isupper() or rest[:1].isdigit() or rest[:1] in "([")
+        ):
+            out.append(line)
+            continue
+        out.append(f"**{label}**")
+        out.append("")
+        out.append(rest)
+    return "\n".join(out)
+
+
+def _last_word(text: str) -> str:
+    words = re.findall(r"[A-Za-z][A-Za-z.'\-]*", text)
+    return words[-1].lower().strip(".'-") if words else ""
 
 
 def _repair_lists(md: str) -> str:
@@ -481,7 +678,10 @@ def _repair_lists(md: str) -> str:
 
 def _normalize_emphasis(md: str) -> str:
     """Mette uno spazio dopo l'abbreviazione nei corsivi (``_S.pyogenes_``)."""
-    return re.sub(r"(?<=[_*])([A-Z])\.(?=[a-z])", r"\1. ", md)
+    md = re.sub(r"(?<=[_*])([A-Z])\.(?=[a-z])", r"\1. ", md)
+    # ``** testo**`` (spazio dopo l'apertura del grassetto): non rende in
+    # grassetto, si chiude lo spazio.
+    return re.sub(r"(^|\s)\*\*\s+(?=\S)", r"\1**", md)
 
 
 # ── figure (Pack 3) ─────────────────────────────────────────────────────────
@@ -685,6 +885,101 @@ def _normalize_table_captions_md(md: str) -> str:
     return md
 
 
+#: Riga interamente in grassetto: una didascalia può essere spezzata su più
+#: righe bold consecutive da pymupdf4llm.
+_BOLD_ONLY_RE = re.compile(r"^\s*\*{1,3}(?P<body>.+?)\*{1,3}\s*$")
+
+#: Marcatore di didascalia numerata dentro una riga (anche a metà riga).
+_CAPTION_MARKER_RE = re.compile(
+    r"\b(?P<label>table|tab\.?|fig(?:ure)?)\s*\.?\s*(?P<num>\d[\w.\-–]*)",
+    re.IGNORECASE,
+)
+
+
+def _merge_caption_fragments_md(md: str) -> str:
+    """Ricompone una didascalia spezzata su più righe in grassetto.
+
+    pymupdf4llm a volte spacca il titolo di tabella/figura su righe bold
+    consecutive, con pezzi ridondanti ("MEDICATIONS TO AVOID IN WOMEN OF" /
+    "CHILDBEARING AGE CONSIDERING" / "PREGNANCY" / "TABLE 221-3" / di nuovo il
+    titolo intero). Si fondono **solo** gruppi di righe interamente in grassetto
+    che contengono *un solo* marcatore di didascalia: il marcatore va in testa
+    e i frammenti che sono sotto-stringhe di un altro vengono scartati. Nessun
+    testo è inventato: si riusa quello presente.
+    """
+    lines = md.split("\n")
+    out: list[str] = []
+    i, n = 0, len(lines)
+    while i < n:
+        if not _BOLD_ONLY_RE.match(lines[i]):
+            out.append(lines[i])
+            i += 1
+            continue
+        group: list[tuple[int, str]] = []
+        j = i
+        markers: list[tuple[str, str]] = []
+        while j < n and len(group) < 8:
+            if not lines[j].strip():
+                j += 1
+                continue
+            bm = _BOLD_ONLY_RE.match(lines[j])
+            if not bm:
+                break
+            body = bm.group("body").strip()
+            merged = list(markers)
+            for mm in _CAPTION_MARKER_RE.finditer(body):
+                mk = (mm.group("label").lower().rstrip("."), mm.group("num"))
+                if mk not in merged:
+                    merged.append(mk)
+            if len(merged) > 1:
+                break  # un secondo marcatore: qui inizia un'altra didascalia
+            markers = merged
+            group.append((j, body))
+            j += 1
+            # Una didascalia con marcatore che termina con una frase/source
+            # completa ("… (Adapted from …)") chiude il gruppo: le righe bold
+            # successive appartengono a un'altra didascalia.
+            if (
+                markers
+                and len(group) >= 2
+                and len(body.split()) >= 4
+                and body.rstrip().endswith((".", ")", ":"))
+            ):
+                break
+        end = group[-1][0] if group else i
+        if len(group) < 2 or len(markers) != 1:
+            out.append(lines[i])
+            i += 1
+            continue
+        label, num = markers[0]
+        label = label.upper()  # "figure" -> "FIGURE" (la didascalia resta cercabile)
+        frags: list[str] = []
+        for _, body in group:
+            cleaned = _CAPTION_MARKER_RE.sub("", body, count=1)
+            cleaned = re.sub(r"\*+", "", cleaned).strip(" \t-–—:.")
+            cleaned = re.sub(r"\s+", " ", cleaned).strip()
+            if cleaned:
+                frags.append(cleaned)
+        kept: list[str] = []
+        norms = [_norm_noise(f) for f in frags]
+        for f, nf in zip(frags, norms):
+            if any(nf and nf != other and nf in other for other in norms):
+                continue  # frammento ridondante, incluso in un altro più completo
+            if nf and nf not in {_norm_noise(k) for k in kept}:
+                kept.append(f)
+        body = " ".join(kept).strip()
+        # Un gruppo di due sole righe in cui il titolo è di una parola è
+        # probabilmente il marcatore seguito da un titolo autonomo, non una
+        # didascalia spezzata: non si fonde.
+        if len(group) < 3 and len(body.split()) < 3:
+            out.append(lines[i])
+            i += 1
+            continue
+        out.append(f"**{label} {num}**" + (f" {body}" if body else ""))
+        i = end + 1
+    return "\n".join(out)
+
+
 def _clean_table_md(block: str) -> str:
     """Drop empty columns/trailing cells and realign a numeric last column.
 
@@ -700,7 +995,15 @@ def _clean_table_md(block: str) -> str:
         return block
     parsed = [_split_md_row(r) for r in rows]
     ncols = max(len(r) for r in parsed)
+    header_len = len(parsed[0])
     parsed = [r + [""] * (ncols - len(r)) for r in parsed]
+    # Intestazione più corta delle righe dati: pymupdf ha perso la cella vuota
+    # della prima colonna (colonna-etichetta, es. TABLE 221-5 con header a 4
+    # celle e righe a 5). Ripristino in TESTA, dove stava, così le colonne
+    # restano allineate. Con un header "fuso" (una sola cella su molte colonne)
+    # si ripiega sul padding in coda, che è la lettura giusta in quel caso.
+    if header_len >= 2 and ncols > header_len:
+        parsed[0] = [""] * (ncols - header_len) + parsed[0][:header_len]
     if ncols >= 2:
         parsed = _realign_numeric_column(parsed)
     keep = [c for c in range(ncols) if any(r[c] for r in parsed)]
@@ -844,6 +1147,15 @@ def _when_rebuild_tables(p: LayoutProfile, b: str) -> bool:
     return p.has_tables and not (p.columns >= 2 and p.columns_overlap)
 
 
+#: ``### `` senza testo seguito da una riga in grassetto: il titolo è rimasto
+#: vuoto e il testo è finito nella riga sotto (``### `` + ``**FURTHER READING**``).
+_EMPTY_HEADING_RE = re.compile(r"(?m)^(#{1,6})[ \t]*\n+(?=[ \t]*\*\*)")
+
+
+def _join_empty_headings(md: str) -> str:
+    return _EMPTY_HEADING_RE.sub(r"\1 ", md)
+
+
 #: Blocchi di codice fenced: il cleanup non deve toccarne il contenuto.
 _FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
 
@@ -859,7 +1171,15 @@ def _apply_cleanup(md: str, page, profile: LayoutProfile, exclude: Sequence[tupl
         return f"\x00FENCE{len(fenced) - 1}\x00"
 
     md = _FENCE_RE.sub(_stash, md)
+    if not is_fix_disabled("cleanup_glyph_lines"):
+        md = _drop_decor_lines(md)
+        md = _strip_leading_decor(md)
+    md = _join_empty_headings(md)
     md = _normalize_headings(md)
+    if not is_fix_disabled("cleanup_caps_runins"):
+        md = _normalize_caps_runins(md)
+    if not is_fix_disabled("cleanup_caption_fragments"):
+        md = _merge_caption_fragments_md(md)
     md = _repair_lists(md)
     md = _normalize_emphasis(md)
     for i, block in enumerate(fenced):

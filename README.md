@@ -21,7 +21,16 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   In più, passate a **livello documento**: header/footer deduplicati per
   frequenza tra pagine e gerarchia dei titoli allineata all'indice (`get_toc`).
   I box esplicativi sono resi come **liste/paragrafi** (non tabelle a una
-  colonna). Ogni fix è attivabile/disattivabile da `fix_rules.json`.
+  colonna). **Pack 4** leggibilità: header/numeri di pagina non trapelano più
+  anche se il markdown li "traveste" (`## HEADER`, `- 1123`), i bullet
+  decorativi dei box non diventano titoli (`### »`), i titoli spezzati su due
+  righe vengono ricomposti, i titoletti MAIUSCOLI fusi col paragrafo vengono
+  separati, la cella-header vuota delle tabelle viene ripristinata in testa, le
+  didascalie spezzate su più righe ricomposte e il testo interno alle figure è
+  tolto quando la figura diventa un'immagine. Ogni fix è
+  attivabile/disattivabile da `fix_rules.json` (chiavi: `cleanup_markdown`,
+  `cleanup_glyph_lines`, `cleanup_caps_runins`, `cleanup_caption_fragments`,
+  `fix_empty_cells`, `normalize_table_captions`, `link_figures`, `spacing`, …).
 - Navigazione (prec/succ, spin, zoom), indice (TOC), toggle Markdown.
 - Tab testo: Originale / Traduzione / 🖼️ Immagini. L'Originale mostra un
   unico testo: l'output del motore adattativo (auto) oppure, quando ci sono
