@@ -213,4 +213,33 @@ Effetto: pa23/p303 passa da ~143 righe-tabella a 0; su 57 pagine recall 99.50%
 ### Ancora aperto
 - co23/303 e ha22/1235 **non** erano perdite reali (erano un artefatto della
   metrica sbagliata): con la metrica corretta il testo c'è tutto.
-- Restano i limiti della §6 (didascalie perse dal reorder, `link_figures`, T5).
+- Restano i limiti della §6 (`link_figures`, T5).
+
+---
+
+## 8. Didascalie perse — risolte (terza passata)
+
+Le didascalie che sparivano (`co23/p931` TABLE 2, `ha22/p2240` TABLE 294-1)
+non erano colpa del `reorder`: cadevano nella **fascia del margine alto** e
+`_margin_noise` le scambiava per running header, quindi `_strip_running_headers`
+le cancellava.
+
+Fix in `layout_engine._margin_noise` (tre guardie, tutte conservative):
+1. il candidato header deve iniziare con **maiuscola o cifra** (le continuazioni
+   di titolo di box iniziano minuscole);
+2. **niente didascalie**: una riga `TABLE|FIG|BOX|… n` è contenuto
+   (`_CAPTION_MARGIN_RE`);
+3. **niente titoli sopra un box/tabella**: `_is_title_above` protegge la riga
+   immediatamente sopra un box rilevato (`ha22/p2240 "Transudative Pleural
+   Effusions"`). Il calcolo usa solo `get_drawings` (≈11 ms), **non**
+   `find_tables` (≈1 s/pagina): le didascalie di tabella sono già coperte dal
+   punto 2.
+
+Inoltre `main._box_title` non prende più un **numero di pagina** nel margine
+laterale come titolo del box (era "2199" su ha22/p2240): richiede sovrapposizione
+in x col box e scarta i titoli fatti di sole cifre.
+
+### Test
+- unit: caption in margine, titolo sopra box in margine, `_box_title` vs numero
+  di pagina; gold co23/p931 e ha22/p2240.
+- suite completa: **221 OK**.

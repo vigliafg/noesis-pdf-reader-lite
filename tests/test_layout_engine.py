@@ -274,6 +274,37 @@ class CleanupMarkdownTests(unittest.TestCase):
         self.assertEqual(_strip_running_headers(md, page), md)
         doc.close()
 
+    def test_caption_in_top_margin_is_not_stripped(self):
+        # Didascalia a filo del margine alto: è contenuto, non un running header
+        # (co23/p931 "TABLE 2 …" veniva cancellata).
+        doc, page = _new_page()
+        page.insert_textbox(
+            pymupdf.Rect(50, 10, 450, 30), "TABLE 2 Pneumonia Severity Index", fontsize=9
+        )
+        page.insert_textbox(pymupdf.Rect(50, 150, 520, 400), "Body text here.", fontsize=10)
+        md = "TABLE 2 Pneumonia Severity Index\n\nBody text here."
+        out = _strip_running_headers(md, page)
+        self.assertIn("TABLE 2 Pneumonia Severity Index", out)
+        self.assertIn("Body text here.", out)
+        doc.close()
+
+    def test_section_title_above_box_in_margin_is_not_stripped(self):
+        # Titolo di sezione del box appena sopra il rettangolo, in fascia
+        # margine (ha22/p2240 "Transudative Pleural Effusions").
+        doc, page = _new_page()
+        page.insert_textbox(
+            pymupdf.Rect(50, 45, 400, 58), "Transudative Pleural Effusions", fontsize=9
+        )
+        box = pymupdf.Rect(50, 60, 520, 200)
+        page.draw_rect(box, color=(0, 0, 0), width=1)
+        page.insert_textbox(pymupdf.Rect(55, 65, 515, 80), "Box item one", fontsize=9)
+        page.insert_textbox(pymupdf.Rect(55, 85, 515, 100), "Box item two", fontsize=9)
+        page.insert_textbox(pymupdf.Rect(55, 105, 515, 120), "Box item three", fontsize=9)
+        md = "Transudative Pleural Effusions\n\n| Box item one |\n| --- |\n| Box item two |"
+        out = _strip_running_headers(md, page)
+        self.assertIn("Transudative Pleural Effusions", out)
+        doc.close()
+
     def test_margin_noise_ignores_lowercase_box_title_continuation(self):
         # A box title wrapped across two lines near the top margin: its second
         # line ("or Maldigestion") starts lowercase and must NOT be taken for a

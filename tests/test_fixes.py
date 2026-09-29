@@ -27,6 +27,7 @@ import main  # noqa: E402
 from main import (  # noqa: E402
     _MD_EXTENSIONS,
     _block_to_md,
+    _box_title,
     _collect_blocks,
     _column_aware_markdown,
     _detect_column_split,
@@ -580,6 +581,22 @@ class ColumnAwareTests(unittest.TestCase):
         md = _column_aware_markdown(page, move_title=False)
         self.assertIn("running prose", md)
         self.assertNotIn("| This is running prose", md)
+        doc.close()
+
+    def test_box_title_ignores_side_page_number(self):
+        # A page number in the side margin sits above the box but is not its
+        # title (ha22/p2240: the box title was "2199").
+        doc, page = _new_page()
+        page.insert_textbox(pymupdf.Rect(50, 120, 250, 200), "Left text above.", fontsize=10)
+        box = pymupdf.Rect(320, 90, 520, 220)
+        page.draw_rect(box, color=(0, 0, 0), width=1)
+        page.insert_textbox(pymupdf.Rect(325, 95, 515, 120), "Box item one", fontsize=9)
+        page.insert_textbox(pymupdf.Rect(325, 125, 515, 150), "Box item two", fontsize=9)
+        page.insert_textbox(pymupdf.Rect(325, 155, 515, 180), "Box item three", fontsize=9)
+        page.insert_textbox(pymupdf.Rect(575, 60, 605, 78), "2199", fontsize=8)  # right margin
+
+        title, _ = _box_title(page, tuple(box))
+        self.assertNotEqual(title, "2199")
         doc.close()
 
     def test_sidebar_box_rendered_as_markdown_table(self):

@@ -225,7 +225,42 @@ def _norm_noise(text: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[*_`~]", "", text)).strip().lower()
 
 
-def _margin_noise(page) -> set[str]:
+#: Didascalia numerata ("TABLE 2 …", "FIG. 14.10 …"): è contenuto, non un
+#: header di pagina. Le didascalie di tabelle/box stanno spesso a filo del
+#: margine alto e senza questo filtro venivano cancellate come running header.
+_CAPTION_MARGIN_RE = re.compile(
+    r"^\**\s*(?:table|fig(?:ure)?|box|exhibit|chart)\s*\.?\s*\d",
+    re.IGNORECASE,
+)
+
+
+def _content_regions_below(page, exclude: Sequence[tuple] = ()) -> list[tuple]:
+    """Box della pagina (rect): per non scambiare i loro titoli per header.
+
+    Solo ``get_drawings`` (via ``_detect_boxes``), **senza** ``find_tables``:
+    quest'ultimo costa ~1 s/pagina e qui serve solo una banda ``y`` approssimata
+    (le didascalie delle tabelle sono comunque protette da ``_CAPTION_MARGIN_RE``).
+    """
+    try:
+        from main import _detect_boxes  # lazy: evita import circolare
+
+        return [b["rect"] for b in _detect_boxes(page, page.rect.width, [])]
+    except Exception:
+        return []
+
+
+def _is_title_above(line_x0: float, line_x1: float, y1: float, regions: list[tuple]) -> bool:
+    """True se la riga è il titolo/didascalia di un box o tabella che inizia subito sotto."""
+    for r in regions:
+        if not (-2 <= r[1] - y1 <= 25):
+            continue
+        overlap = min(line_x1, r[2]) - max(line_x0, r[0])
+        if overlap >= 0.5 * max(1.0, min(line_x1 - line_x0, r[2] - r[0])):
+            return True
+    return False
+
+
+def _margin_noise(page, exclude: Sequence[tuple] = ()) -> set[str]:
     """Stringhe che compaiono nei margini alto/basso della pagina (header/footer).
 
     Solo righe **brevi** (gli header/footer lo sono): una riga lunga di corpo
@@ -240,6 +275,7 @@ def _margin_noise(page) -> set[str]:
     except Exception:
         return set()
     top, bottom = 0.08 * height, 0.92 * height
+    regions = _content_regions_below(page, exclude)
     found: set[str] = set()
     for blk in blocks:
         if blk.get("type") != 0:
@@ -257,6 +293,10 @@ def _margin_noise(page) -> set[str]:
                 # tagliato a metà.
                 if not stripped or not (stripped[0].isupper() or stripped[0].isdigit()):
                     continue
+                if _CAPTION_MARGIN_RE.match(stripped):
+                    continue  # didascalia di tabella/box: contenuto, non header
+                if _is_title_above(line["bbox"][0], line["bbox"][2], y1, regions):
+                    continue  # titolo di sezione sopra un box/tabella
                 norm = _norm_noise(text)
                 if norm and len(norm) <= 120 and len(norm.split()) <= 15:
                     found.add(norm)

@@ -547,15 +547,20 @@ def _box_to_md(text: str) -> str:
 def _box_title(page, rect: tuple, exclude: tuple = ()) -> tuple[str, tuple | None]:
     """Text block directly above a box (same x-range) → (title, bbox or None)."""
     x0, y0, x1, y1 = rect
+    box_w = x1 - x0
     for b in _collect_blocks(page, exclude):
         if not (b["y1"] <= y0 and b["y1"] >= y0 - 30):
             continue
-        if not (b["x0"] >= x0 - 40 and b["x1"] <= x1 + 40):
+        # Il titolo deve stare sopra il box e condividerne la x: un numero di
+        # pagina nel margine laterale (es. "2199") non è il titolo del box.
+        overlap = min(b["x1"], x1) - max(b["x0"], x0)
+        if overlap < 0.5 * max(1.0, min(box_w, b["x1"] - b["x0"])):
             continue
         t = " ".join(s["text"] for line in b["lines"] for s in line)
         t = re.sub(r"\s+", " ", t).strip()
-        if t:
-            return t, (b["x0"], b["y0"], b["x1"], b["y1"])
+        if not t or re.fullmatch(r"[\d\s.,–-]+", t):
+            continue  # solo un numero di pagina
+        return t, (b["x0"], b["y0"], b["x1"], b["y1"])
     return "", None
 
 
