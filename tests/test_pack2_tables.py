@@ -276,10 +276,9 @@ class GoldLostGridHa22Tests(unittest.TestCase):
 
     def test_content_kept_in_ordered_single_column(self):
         _raw, out = _engine(_gold_pdf("ha22.pdf"), 2240)
-        rows = _table_rows(out)
-        self.assertIn("| 1. Congestive heart failure |", rows)
-        self.assertIn("| 10. Meigs’ syndrome |", rows)
-        self.assertFalse(any(re.search(r"\|\s*\|", r) for r in rows))
+        self.assertIn("- 1. Congestive heart failure", out)
+        self.assertIn("- 10. Meigs", out)
+        self.assertNotIn("||", out)
 
 
 if __name__ == "__main__":

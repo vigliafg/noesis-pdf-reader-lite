@@ -45,7 +45,8 @@ class UncommentPictureTextTests(unittest.TestCase):
         )
         out = _uncomment_picture_text_md(md)
         self.assertNotIn("<!--", out)
-        self.assertIn("> Legend text here<br>1.0 1.3", out)
+        self.assertIn("> Legend text here", out)
+        self.assertIn("> 1.0 1.3", out)
         self.assertIn("**FIGURE 1** caption", out)
 
     def test_multiline_body_each_line_quoted(self):
