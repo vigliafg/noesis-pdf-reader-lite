@@ -379,8 +379,14 @@ def _margin_noise(page, exclude: Sequence[tuple] = ()) -> set[str]:
         if _is_title_above(x0, x1, y1, regions):
             continue  # titolo di sezione sopra un box/tabella
         norm = _norm_noise(text)
-        if norm and len(norm) <= 120 and len(norm.split()) <= 15:
-            found.add(norm)
+        if not (norm and len(norm) <= 120 and len(norm.split()) <= 15):
+            continue
+        # Una frase di prosa a filo pagina (nota/legenda con punto finale) è
+        # contenuto, non un header/footer di stampa: gli header non sono frasi.
+        # Meglio lasciare un footer di troppo (cosmetico) che cancellare testo.
+        if norm.endswith(".") and len(norm.split()) >= 6:
+            continue
+        found.add(norm)
     # Frequenza tra pagine: un header/footer che ricorre su più pagine è chrome
     # di pagina anche quando la singola pagina non lo riconosce (T5.1).
     found |= _document_noise(page)

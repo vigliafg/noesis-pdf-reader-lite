@@ -126,13 +126,16 @@ def _engine(pdf, page_no, dest):
 
 @unittest.skipUnless(_gold_pdf("pa23.pdf"), "pa23.pdf non presente (gold figure)")
 class GoldFigurePa23Tests(unittest.TestCase):
-    def test_chart_linked_and_legend_not_duplicated(self):
+    def test_chart_linked_with_caption_and_legend_below(self):
         with tempfile.TemporaryDirectory() as d:
             out, _ = _engine(_gold_pdf("pa23.pdf"), 602, Path(d))
             self.assertRegex(out, r"!\[figura 1\]\(file://")
-            self.assertIn("FIG. 14.10", out)
-            # legend was inside the rendered region → removed, not duplicated
-            self.assertNotIn("> INCUBATION", out)
+            legend = out.index("> INCUBATION")
+            caption = out.index("FIG. 14.10")
+            image = out.index("![figura 1]")
+            # corpo-immagine, poi didascalia, poi la legenda attaccata sotto
+            self.assertLess(image, caption)
+            self.assertLess(caption, legend)
             self.assertEqual(len(list(Path(d).glob("*.png"))), 1)
 
 
