@@ -468,27 +468,52 @@ metriche in `/tmp/opencode/arb/{base,now,now50}.json`, markdown in
 
 ---
 
-## §13 — Piano di domani (2026-09-30): test rimandati
+## §13 — Piano di domani (2026-09-30): test su 150 pagine nuove
 
-Dettaglio completo nell'handoff: `HANDOFF-pack4-leggibilita-2026-09-30.md`.
-
-**Contesto**: i 7 fix del Pack 4 sono implementati e con test unitari verdi; la
-validazione finale (arbitraggio) non è terminata perché il run di baseline
-dell'arbitro è risultato patologicamente lento su questa macchina (4 core) —
-killato dopo 1h43m senza output.
+**Obiettivo**: validare l'engine attuale (dopo il merge del Pack 4) su un corpus
+**nuovo di 150 pagine** estratte dal corpus degli 8 PDF, con **valutazione
+automatica (checklist + punteggio)** e **arbitraggio visivo** fatto dall'agente
+(modello con visione): è l'agente a decidere se il markdown è leggibile in senso
+naturale.
 
 ### Task
 | # | Task | Note |
 |---|---|---|
-| D1 | Prospectare pagine lente (`diag_slow.py`) e rendere l'arbitro robusto: `python -u`, timeout per pagina, 1 PDF per batch, `_document_noise` una volta per file | log: `/tmp/opencode/diag_slow.log` |
-| D2 | Run **baseline** (`arbiter.py base`) + **dopo** (`arbiter.py now`) sulle **29 pagine** (`/tmp/opencode/pack2/vis_pages.json`) | confronto con `compare.py` |
-| D3 | **Arbitraggio visivo** prima/dopo di un campione rappresentativo (modello con visione) | render con `render_pages.py` |
-| D4 | Run su **50 pagine nuove** (`/tmp/opencode/pack4/corpus50.json`, già pronto) | stessa checklist |
-| D5 | Compilare il **verdetto** in §12: metriche per-difetto + voto finale di leggibilità e accettabilità | rubrica in handoff |
-| D6 | Se ci sono regressioni: fix mirato + test; altrimenti commit/PR del Pack 4 | come i pack precedenti |
+| E1 | Generare il corpus di **150 pagine** (random + significative, escluse tutte quelle già usate: corpus2 80, 5 viste, vis_pages 24, corpus50 50) | script `select_corpus150.py`; salvare in `/tmp/opencode/pack5/corpus150.json` |
+| E2 | Eseguire l'**arbitro** (`arbiter.py pack150 corpus150.json`) e raccogliere metriche per-difetto + punteggio | usare `python -u`; una riga per pagina |
+| E3 | **Arbitraggio visivo** dell'agente su un campione rappresentativo (≈20 pagine: 2 colonne, box, tabelle, figure, indice/riferimenti): render PNG + confronto col markdown | `render_pages.py` |
+| E4 | Compilare il **verdetto**: metriche, difetti residui, giudizio di leggibilità (voto 1-100) e accettabilità | sezione nuova §14 |
+| E5 | Se emergono difetti: fix mirato + test; altrimenti ok | follow-up |
+
+### Metodo di valutazione (doppio)
+1. **Automatica** — checklist dell'arbitro: header/pagina trapelati, glifi-heading,
+   titoli spezzati, maiuscole fuse, tabelle disallineate, didascalie frammentate,
+   figure mancanti, `glue`, `�`.
+2. **Visiva (arbitro = agente)** — su un campione: ordine di lettura, fedeltà al
+   senso della pagina, distinguibilità di box/figure/tabelle, fluidità di lettura.
+
+### Comandi
+```bash
+cd /home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite
+# E1 — genera il corpus
+.venv/bin/python /tmp/opencode/select_corpus150.py
+# E2 — arbitro sulle 150 pagine (engine attuale)
+.venv/bin/python -u /tmp/opencode/arbiter.py pack150 /tmp/opencode/pack5/corpus150.json
+# E3 — render del campione per l'arbitraggio visivo
+.venv/bin/python /tmp/opencode/render_pages.py /tmp/opencode/vis5 /tmp/opencode/pack5/sample.json
+```
+Artefatti: `/tmp/opencode/arb/pack150.json`, `/tmp/opencode/arb/pack150.md/`,
+`/tmp/opencode/vis5/*.png`.
 
 ### Accettazione
 - Header/pagina, glifi-heading, titoli spezzati, maiuscole fuse, didascalie
-  frammentate → ~0; tabelle allineate; figure linkate.
-- Nessun aumento di `glue`/`fffd`, nessuna perdita di contenuto (diff a campione).
-- Voto atteso **≥ 92/100** se i difetti sistematici spariscono.
+  frammentate → ~0; tabelle allineate; figure linkate dove presenti.
+- Nessuna regressione su `glue`/`fffd`; nessuna perdita di contenuto (diff a
+  campione sul testo di pagina).
+- **Punteggio atteso ≥ 98/100**; sotto questa soglia: elencare i difetti e
+  pianificare i fix.
+
+### Nota
+Il confronto "prima/dopo" non serve se non ci sono regressioni: il riferimento è
+quanto già validato in §12 (29 pagine 96.0→99.4; 50 pagine 99.0).
+
