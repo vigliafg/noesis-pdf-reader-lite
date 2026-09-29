@@ -438,6 +438,14 @@ def _block_to_md(block: dict, as_column: bool) -> str:
 # "Table 5.6 Lysosomal Storage Diseases") — not a column header.
 _CAPTION_RE = re.compile(r"^\s*(table|fig(?:ure)?|box|exhibit|chart)\b", re.IGNORECASE)
 
+# Stricter variant used to keep a *numbered* caption row that spans the whole
+# table width (ce24/p489 "TABLE 46-10 | TOPICS THAT SHOULD…"): requiring a
+# digit after the marker avoids promoting a normal "| Table | Chairs |" header
+# to a caption.
+_CAPTION_NUMBERED_RE = re.compile(
+    r"^\s*\**\s*(?:table|fig(?:ure)?|box|exhibit|chart)\s*\d", re.IGNORECASE
+)
+
 
 def _table_to_md(page, table) -> str:
     """Render a pymupdf table as a markdown table using clean per-cell text."""
@@ -489,6 +497,14 @@ def _table_to_md(page, table) -> str:
             len(first) < max_cells
             and (x1 - x0) >= 0.9 * tw
             and bool(_CAPTION_RE.match(caption_text))
+        )
+        or (
+            # Numbered caption that spans the full width even when it fills
+            # every column (ce24/p489 "TABLE 46-10 | TOPICS …"): without this
+            # the two-cell caption becomes the table header and the all-empty
+            # second column is kept as a phantom column.
+            (x1 - x0) >= 0.9 * tw
+            and bool(_CAPTION_NUMBERED_RE.match(caption_text))
         )
     )
     if is_caption:

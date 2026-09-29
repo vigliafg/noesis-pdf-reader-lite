@@ -345,6 +345,260 @@ def _normalize_emphasis(md: str) -> str:
     return re.sub(r"(?<=[_*])([A-Z])\.(?=[a-z])", r"\1. ", md)
 
 
+# ── tabelle (Pack 2) ────────────────────────────────────────────────────────
+# Tre fix puri sul markdown + (per il rebuild) ``page.find_tables()``. Sono
+# conservativi: se la struttura non è chiara non toccano nulla (meglio un
+# difetto cosmetico che perdere contenuto).
+
+#: Blocco tabella in markdown: riga d'intestazione, separatore, righe dati.
+_MD_TABLE_RE = re.compile(
+    r"^[ \t]*\|[^\n]*\|[ \t]*\n"
+    r"[ \t]*\|[\s:|-]+\|[ \t]*\n"
+    r"(?:[ \t]*\|[^\n]*\|[ \t]*(?:\n|$))+",
+    re.MULTILINE,
+)
+
+#: Riga di didascalia di tabella, con eventuale ``#``/grassetto e numero.
+#: Solo ``TABLE``: le didascalie delle figure (``**FIGURE 148-1 …**``) sono
+#: frasi in grassetto e vanno lasciate intatte.
+_TABLE_CAPTION_RE = re.compile(
+    r"^\s*(?:#{1,6}\s*)?\**\s*"
+    r"(?P<label>table)\s*(?P<num>\d[\w.\-–]*)"
+    r"\**\s*(?P<rest>.*)$",
+    re.IGNORECASE,
+)
+
+_FENCE_PROTECT_RE = re.compile(r"```.*?```", re.DOTALL)
+
+
+def _split_md_row(line: str) -> list[str]:
+    """Cells of a markdown table row (leading/trailing pipes stripped)."""
+    s = line.strip()
+    if s.startswith("|"):
+        s = s[1:]
+    if s.endswith("|"):
+        s = s[:-1]
+    return [c.strip() for c in s.split("|")]
+
+
+def _is_separator_row(row: list[str]) -> bool:
+    return bool(row) and all(re.fullmatch(r":?-{3,}:?", c or "") for c in row)
+
+
+def _caption_from_block(block: str) -> str:
+    """Caption text of a markdown table's first row, "" when there is none.
+
+    Only *marker* rows count (``TABLE 2 …``): a plain single-cell first row of
+    a table that is genuinely one column must not become a caption.
+    """
+    rows = [ln for ln in block.split("\n") if ln.strip()]
+    if not rows:
+        return ""
+    cells = [c for c in _split_md_row(rows[0]) if c]
+    text = re.sub(r"\s+", " ", " ".join(cells).replace("**", "")).strip()
+    if _TABLE_CAPTION_RE.match(text):
+        return text
+    return ""
+
+
+def _normalize_table_captions_md(md: str) -> str:
+    """Force ``**TABLE x** …`` captions on their own line, never a heading.
+
+    Only lines that *start* with a numbered marker become captions, and only
+    when what follows is empty or starts like a title (uppercase/digit); a body
+    sentence such as ``Table 2 shows that …`` is left untouched. Table rows and
+    fenced code are skipped.
+    """
+    fenced: list[str] = []
+
+    def _stash(m: "re.Match[str]") -> str:
+        fenced.append(m.group(0))
+        return f"\x00PFENCE{len(fenced) - 1}\x00"
+
+    md = _FENCE_PROTECT_RE.sub(_stash, md)
+
+    out: list[str] = []
+    for line in md.split("\n"):
+        if line.lstrip().startswith("|"):
+            out.append(line)
+            continue
+        # pymupdf leaves control bytes (e.g. \x07) around box/bullet glyphs;
+        # they break the caption match and are not text.
+        clean = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", " ", line)
+        m = _TABLE_CAPTION_RE.match(clean)
+        if m:
+            label = f"{m.group('label').upper()} {m.group('num')}"
+            rest = m.group("rest").strip().strip("*").strip()
+            if rest[:1].isupper() or rest[:1].isdigit() or rest[:1] in "([—–:-":
+                out.append(f"**{label}**" + (f" {rest}" if rest else ""))
+                continue
+        out.append(line)
+
+    md = "\n".join(out)
+    for i, block in enumerate(fenced):
+        md = md.replace(f"\x00PFENCE{i}\x00", block)
+    return md
+
+
+def _clean_table_md(block: str) -> str:
+    """Drop empty columns/trailing cells and realign a numeric last column.
+
+    Conservative: a column is removed only when it is empty in **every** row
+    (header included), so no text can be lost. Trailing empty cells are dropped
+    because markdown rows may be shorter than the header; ``||`` runs are thus
+    gone. Finally, when the last column is numeric in the rows that do have a
+    value, a value that pymupdf merged into the previous cell (a trailing
+    ``+30``/``-10`` token) is moved back into that column.
+    """
+    rows = [ln for ln in block.split("\n") if ln.strip()]
+    if len(rows) < 2:
+        return block
+    parsed = [_split_md_row(r) for r in rows]
+    ncols = max(len(r) for r in parsed)
+    parsed = [r + [""] * (ncols - len(r)) for r in parsed]
+    if ncols >= 2:
+        parsed = _realign_numeric_column(parsed)
+    keep = [c for c in range(ncols) if any(r[c] for r in parsed)]
+    if not keep:
+        return block
+    out: list[str] = []
+    for row in parsed:
+        if _is_separator_row(row):
+            out.append("| " + " | ".join("---" for _ in keep) + " |")
+            continue
+        cells = [row[c] for c in keep]
+        while len(cells) > 1 and not cells[-1]:
+            cells.pop()
+        out.append("| " + " | ".join(cells) + " |")
+    return "\n".join(out)
+
+
+#: Valore numerico "spostabile": segno esplicito + cifre (es. "+30", "-10").
+_NUMERIC_CELL_RE = re.compile(r"^[+\-]\s?\d+(?:[.,]\d+)?$")
+_TRAILING_NUMERIC_RE = re.compile(r"^(.*?)\s+([+\-]\s?\d+(?:[.,]\d+)?)$")
+
+
+def _realign_numeric_column(parsed: list[list[str]]) -> list[list[str]]:
+    """Move a ``+30``/``-10`` merged into the previous cell back to the last column.
+
+    Only when the last column is numeric in most rows that have a value there
+    (learned from the well-formed rows) and the moved token carries an explicit
+    sign — so a plain ``… in years10`` inside the text is left alone. Never
+    loses text: the token is moved, not dropped.
+    """
+    last = len(parsed[0]) - 1
+    data_rows = [r for i, r in enumerate(parsed) if i > 0 and not _is_separator_row(r)]
+    filled = [r[last] for r in data_rows if r[last]]
+    if len(filled) < 2:
+        return parsed
+    numeric = sum(bool(_NUMERIC_CELL_RE.match(v)) for v in filled)
+    if numeric < 0.6 * len(filled):
+        return parsed
+    for row in parsed:
+        if _is_separator_row(row) or row[last]:
+            continue
+        m = _TRAILING_NUMERIC_RE.match(row[last - 1])
+        if m and m.group(1).strip():
+            row[last - 1] = m.group(1).strip()
+            row[last] = m.group(2).replace(" ", "")
+    return parsed
+
+
+def _fix_empty_cells_md(md: str) -> str:
+    return _MD_TABLE_RE.sub(lambda m: _clean_table_md(m.group(0)), md)
+
+
+def _table_needs_rebuild(block: str) -> bool:
+    """True when pymupdf4llm's table is malformed enough to rebuild it.
+
+    Rebuilding a table that pymupdf4llm rendered fine can *degrade* it (e.g.
+    find_tables merges the header row into the first data row and the header is
+    lost — co23/p301 TABLE 4). So the grid is rebuilt only when the markdown
+    shows a real defect: an adjacent empty cell (``||``) or rows with a
+    different number of cells (caption glued in, columns truncated).
+    """
+    rows = [ln for ln in block.split("\n") if ln.strip()]
+    if len(rows) < 2:
+        return False
+    if any(re.search(r"\|\s*\|", r) for r in rows):
+        return True
+    return len({len(_split_md_row(r)) for r in rows}) > 1
+
+
+def _rebuild_tables_md(md: str, page, exclude: Sequence[tuple] = ()) -> str:
+    """Replace malformed markdown tables with grids rebuilt from ``find_tables``.
+
+    Only when the number of markdown tables matches the number of data tables
+    detected on the page (same reading order): any mismatch means we cannot map
+    them safely, so the text is returned unchanged. Tables that are already
+    well-formed are left untouched. A caption that lived in the original block
+    is re-attached if the rebuilt grid does not already carry one
+    (``find_tables`` sometimes starts below the caption row).
+    """
+    from main import _table_to_md  # lazy: evita import circolare
+
+    if page is None:
+        return md
+    tables = _data_tables(page, exclude)
+    if not tables:
+        return md
+    # find_tables() order is not guaranteed top-to-bottom; the markdown tables
+    # are in reading order, so sort the page tables the same way before zipping
+    # (otherwise a caption ends up attached to the wrong grid).
+    tables = sorted(tables, key=lambda t: (t.bbox[1], t.bbox[0]))
+    matches = list(_MD_TABLE_RE.finditer(md))
+    if len(matches) != len(tables):
+        return md
+
+    out: list[str] = []
+    last = 0
+    for m, table in zip(matches, tables):
+        block = m.group(0)
+        out.append(md[last:m.start()])
+        last = m.end()
+        if not _table_needs_rebuild(block):
+            out.append(block)  # pymupdf4llm's table is fine: keep it
+            continue
+        rebuilt = _table_to_md(page, table)
+        if not rebuilt:
+            out.append(block)
+            continue
+        caption = _caption_from_block(block)
+        if caption and not rebuilt.lstrip().startswith("**"):
+            rebuilt = f"**{caption}**\n\n{rebuilt}"
+        out.append(rebuilt)
+    out.append(md[last:])
+    return "".join(out)
+
+
+def _apply_rebuild_tables(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
+    return _rebuild_tables_md(md, page, exclude)
+
+
+def _apply_normalize_captions(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
+    return _normalize_table_captions_md(md)
+
+
+def _apply_fix_empty_cells(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
+    return _fix_empty_cells_md(md)
+
+
+def _when_has_tables(p: LayoutProfile, b: str) -> bool:
+    return p.has_tables
+
+
+def _when_rebuild_tables(p: LayoutProfile, b: str) -> bool:
+    """Rebuild only when the reorder did **not** already rebuild the page.
+
+    On a two-column overlapping layout ``reorder_columns`` regenerates the
+    whole page (tables included) from ``find_tables``; running the rebuild
+    again on that markdown can pair a caption with the wrong grid when the
+    reading order differs from the page's top-to-bottom order. The text-level
+    fixes (captions, empty cells) stay active everywhere.
+    """
+    return p.has_tables and not (p.columns >= 2 and p.columns_overlap)
+
+
 #: Blocchi di codice fenced: il cleanup non deve toccarne il contenuto.
 _FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
 
@@ -424,6 +678,27 @@ FIX_REGISTRY: Sequence[Fix] = (
         50,
         lambda p, b: True,
         _apply_cleanup,
+    ),
+    Fix(
+        "rebuild_tables",
+        "Tabelle: griglia ricostruita da find_tables al posto di pymupdf4llm",
+        60,
+        _when_rebuild_tables,
+        _apply_rebuild_tables,
+    ),
+    Fix(
+        "normalize_table_captions",
+        "Tabelle: didascalie **TABLE x** … su riga propria (mai heading)",
+        62,
+        _when_has_tables,
+        _apply_normalize_captions,
+    ),
+    Fix(
+        "fix_empty_cells",
+        "Tabelle: via le celle vuote adiacenti, colonne fantasma rimosse",
+        64,
+        _when_has_tables,
+        _apply_fix_empty_cells,
     ),
     Fix(
         "spacing",
