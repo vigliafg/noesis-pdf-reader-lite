@@ -340,6 +340,24 @@ class CleanupMarkdownTests(unittest.TestCase):
         self.assertIn("Body text here.", out)
         doc.close()
 
+    def test_sentence_like_margin_line_is_not_stripped(self):
+        # A prose note at the page bottom (ends with a period) is content, not a
+        # printing footer: co23/p1564 "Page numbers followed by f indicate …".
+        doc, page = _new_page()
+        page.insert_textbox(
+            pymupdf.Rect(50, 800, 545, 820),
+            "Page numbers followed by f indicate figure, by t table, and b box.",
+            fontsize=8,
+        )
+        page.insert_textbox(pymupdf.Rect(50, 150, 520, 400), "Body text here.", fontsize=10)
+        md = (
+            "Body text here.\n\n"
+            "Page numbers followed by f indicate figure, by t table, and b box."
+        )
+        out = _strip_running_headers(md, page)
+        self.assertIn("Page numbers followed", out)
+        doc.close()
+
     def test_section_title_above_box_in_margin_is_not_stripped(self):
         # Titolo di sezione del box appena sopra il rettangolo, in fascia
         # margine (ha22/p2240 "Transudative Pleural Effusions").

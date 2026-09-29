@@ -312,3 +312,52 @@ a un eventuale "esporta/copia l'intero documento".
 ### Verifica
 - Suite: **232 OK** (17 gold skip). CI verde.
 - Corpus 57 pagine: recall 99.63% (≈ invariato), glue 113 vs 124 del raw.
+
+---
+
+## 11. Valutazione indipendente su corpus nuovo (80 pagine)
+
+Corpus **diverso** dai precedenti: 10 pagine consecutive scelte a caso (pagina
+> 200) da ognuno degli 8 PDF (`ha22 1768-1777`, `ce24 2581-2590`,
+`co23 1564-1573`, `cu25 1149-1158`, `pa19 502-511`, `pa23 647-656`,
+`su18 322-331`, `su19 1700-1709`). Confronto con il **text layer del PDF**,
+più il motore **pre-fix** (commit `c24a173`).
+
+| | recall contenuto | precisione | glue | righe tab. malformate | spazi/100 | figure linkate |
+|---|---|---|---|---|---|---|
+| RAW PyMuPDF4LLM | 99.55% | 98.36% | 244 | 12 | 13.97 | 0 |
+| ENGINE **pre-fix** | 97.54% | 98.27% | 533 | 42 | 13.01 | 0 |
+| ENGINE **ora** | **99.72%** | **99.33%** | **241** | **0** | 13.58 | **37** |
+
+- `�` (U+FFFD): raw 3 su 1 pagina → **0**.
+- Peggior delta per pagina vs raw: **≤ 4 parole** (numeri di pagina e parole
+  incollate risolte), su 5 pagine su 80.
+
+### Difetti ancora rilevati (arbitro esigente)
+1. **Over-tabling dei box**: 3/80 pagine (es. `ce24/2584`) rendono un box/elenco
+   come tabella a 1 colonna (88 righe-tabella vs 21 del raw). Nessuna perdita di
+   contenuto (recall 99.7%), ma la leggibilità ne risente.
+2. **Legenda figure**: il testo interno alla figura resta sotto l'immagine come
+   citazione, con i suoi `<br>` letterali. Voluto (scelta "tieni la legenda"),
+   ma il rendering non è pulitissimo.
+3. Delta residui minimi (≤4 parole su 5 pagine), tutti numeri di pagina o
+   parole incollate risolte.
+
+### Fix aggiuntivi emersi da questo corpus
+- **Nota di prosa a filo pagina** (`co23/p1564` "Page numbers followed by f
+  indicate figure…"): veniva cancellata come footer. Ora una riga di margine che
+  è una **frase** (finisce con `.` e ha ≥6 parole) non è più un candidato
+  header/footer.
+- **Legenda figura tenuta**: `_link_figures` non rimuove più la legenda, la
+  sposta **sotto la didascalia** (corpo-immagine → didascalia → legenda), come
+  da scelta dell'utente.
+
+### Punteggio (rubric, 1-100)
+Pesi: recall 50, precisione 15, glue/integrità spazi 15, tabelle 10, figure 5,
+penalità formattazione fino a 5.
+
+| | voto |
+|---|---|
+| RAW PyMuPDF4LLM | **≈ 89** |
+| ENGINE pre-fix | **≈ 63** |
+| ENGINE ora | **≈ 96** |

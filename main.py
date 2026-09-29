@@ -869,10 +869,6 @@ def _render_figure(page, rect: tuple, dest_dir, page_num: int, index: int) -> st
         return None
 
 
-def _words(text: str) -> set[str]:
-    return set(re.findall(r"\w+", text.lower()))
-
-
 def _link_figures(md: str, page, dest_dir, page_num: int) -> str:
     """Inserisce il corpo-immagine accanto alla didascalia di ogni figura.
 
@@ -903,20 +899,22 @@ def _link_figures(md: str, page, dest_dir, page_num: int) -> str:
                 break
         if idx is None:
             continue
-        insert_at = idx
+        legend = None
         k = idx - 1
         while k >= 0 and not lines[k].strip():
             k -= 1
         if k >= 0 and lines[k].lstrip().startswith(">"):
-            try:
-                inside = _words(page.get_textbox(pymupdf.Rect(fig["rect"])))
-            except Exception:
-                inside = set()
-            quote = _words(lines[k])
-            if inside and quote and len(quote & inside) / len(quote) >= 0.6:
-                lines[k] = ""  # legenda ora dentro l'immagine
-            insert_at = k
-        lines.insert(insert_at, f"![figura {i}]({uri})")
+            ks = k
+            while ks - 1 >= 0 and lines[ks - 1].lstrip().startswith(">"):
+                ks -= 1
+            legend = "\n".join(lines[ks:k + 1])
+            del lines[ks:k + 1]
+            idx -= (k + 1 - ks)
+        # corpo-immagine, poi la didascalia, poi il testo interno attaccato sotto
+        lines.insert(idx, f"![figura {i}]({uri})")
+        if legend:
+            lines.insert(idx + 2, "")
+            lines.insert(idx + 3, legend)
     return "\n".join(lines)
 
 
