@@ -758,6 +758,162 @@ def _detect_boxes(page, page_width: float, table_regions: list[tuple], exclude: 
     return _dedup_boxes(boxes)
 
 
+# ── figure linking: "corpo unico + didascalia" ──────────────────────────────
+# PyMuPDF4LLM non emette il corpo della figura: lascia solo il testo interno
+# (etichette/legenda) e la didascalia come blocchi separati, quindi nel markdown
+# la figura appare smontata. Qui si individua la regione grafica sopra la
+# didascalia (cluster vettoriali + immagini embedded), la si renderizza in un PNG
+# e si inserisce `![figura n](uri)` accanto alla didascalia.
+
+_FIGURE_CAPTION_RE = re.compile(r"^\s*\**\s*fig(?:ure)?\.?\s*\d", re.IGNORECASE)
+
+
+def _bbox_mostly_inside(b: tuple, r: tuple) -> bool:
+    area = (b[2] - b[0]) * (b[3] - b[1])
+    if area <= 0:
+        return False
+    return _rect_overlap_area(b, r) / area >= 0.5
+
+
+def _figure_candidates(page) -> list[tuple]:
+    """Graphic regions of the page: vector clusters + embedded image bboxes."""
+    out: list[tuple] = []
+    try:
+        for r in page.cluster_drawings():
+            out.append((r.x0, r.y0, r.x1, r.y1))
+    except Exception:
+        pass
+    try:
+        for info in page.get_image_info():
+            b = info.get("bbox")
+            if b:
+                out.append(tuple(b))
+    except Exception:
+        pass
+    pw, ph = page.rect.width, page.rect.height
+    kept: list[tuple] = []
+    for r in out:
+        w, h = r[2] - r[0], r[3] - r[1]
+        if w < 40 or h < 25:
+            continue  # troppo piccolo
+        if w > 0.97 * pw and h > 0.97 * ph:
+            continue  # sfondo di pagina
+        if h < 10 and w > 0.5 * pw:
+            continue  # riga orizzontale
+        if w < 12 and h > 0.5 * ph:
+            continue  # riga verticale
+        kept.append(r)
+    return kept
+
+
+def _figure_regions(page, exclude: tuple = ()) -> list[dict]:
+    """Regioni-figura: i cluster grafici sopra ogni didascalia ``FIG n``."""
+    if not _has_pymupdf or page is None:
+        return []
+    candidates = _figure_candidates(page)
+    if not candidates:
+        return []
+    figures: list[dict] = []
+    for blk in _collect_blocks(page, exclude):
+        text = " ".join(s["text"] for line in blk["lines"] for s in line)
+        text = re.sub(r"\s+", " ", text).strip()
+        if not _FIGURE_CAPTION_RE.match(text):
+            continue
+        caption = (blk["x0"], blk["y0"], blk["x1"], blk["y1"])
+        sel = []
+        for c in candidates:
+            if not (c[3] <= caption[1] + 2 and caption[1] - c[3] <= 80):
+                continue  # deve stare sopra la didascalia, vicino
+            if min(c[2], caption[2]) - max(c[0], caption[0]) <= 0:
+                continue  # colonna diversa
+            sel.append(c)
+        if not sel:
+            continue
+        figures.append(
+            {
+                "rect": (
+                    min(c[0] for c in sel), min(c[1] for c in sel),
+                    max(c[2] for c in sel), max(c[3] for c in sel),
+                ),
+                "caption": text,
+                "caption_rect": caption,
+            }
+        )
+    return figures
+
+
+def _render_figure(page, rect: tuple, dest_dir, page_num: int, index: int) -> str | None:
+    """Renderizza la regione-figura in un PNG e ne ritorna il ``file://`` URI."""
+    doc = getattr(page, "parent", None)
+    if doc is None or not _has_pymupdf or dest_dir is None:
+        return None
+    pad = 2.0
+    clip = pymupdf.Rect(rect[0] - pad, rect[1] - pad, rect[2] + pad, rect[3] + pad)
+    res = _region_image(doc, page_num, clip, 3.0)
+    if res is None:
+        return None
+    data, ext = res
+    try:
+        dest_dir = Path(dest_dir)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        path = dest_dir / f"page_{page_num + 1:04d}_fig_{index}.{ext}"
+        path.write_bytes(data)
+        return path.resolve().as_uri()
+    except Exception:
+        return None
+
+
+def _words(text: str) -> set[str]:
+    return set(re.findall(r"\w+", text.lower()))
+
+
+def _link_figures(md: str, page, dest_dir, page_num: int) -> str:
+    """Inserisce il corpo-immagine accanto alla didascalia di ogni figura.
+
+    Il testo interno alla figura (blocco citazione) viene tolto **solo** se è
+    dentro la regione renderizzata, così non resta duplicato; altrimenti è
+    lasciato. Nessun contenuto viene eliminato senza essere nell'immagine.
+    """
+    if not _has_pymupdf or page is None or dest_dir is None:
+        return md
+    if layout_engine.is_fix_disabled("link_figures"):
+        return md
+    if not re.search(r"(?im)^\s*\**\s*fig(?:ure)?\.?\s*\d", md):
+        return md  # nessuna didascalia di figura: nessuna scansione grafica
+    regions = _figure_regions(page)
+    if not regions:
+        return md
+    lines = md.split("\n")
+    for i, fig in enumerate(regions, 1):
+        uri = _render_figure(page, fig["rect"], dest_dir, page_num, i)
+        if not uri:
+            continue
+        key = re.sub(r"\W+", " ", fig["caption"]).strip().lower()
+        idx = None
+        for j, ln in enumerate(lines):
+            norm = re.sub(r"\W+", " ", ln).strip().lower()
+            if norm.startswith(key[:30]) and key[:30]:
+                idx = j
+                break
+        if idx is None:
+            continue
+        insert_at = idx
+        k = idx - 1
+        while k >= 0 and not lines[k].strip():
+            k -= 1
+        if k >= 0 and lines[k].lstrip().startswith(">"):
+            try:
+                inside = _words(page.get_textbox(pymupdf.Rect(fig["rect"])))
+            except Exception:
+                inside = set()
+            quote = _words(lines[k])
+            if inside and quote and len(quote & inside) / len(quote) >= 0.6:
+                lines[k] = ""  # legenda ora dentro l'immagine
+            insert_at = k
+        lines.insert(insert_at, f"![figura {i}]({uri})")
+    return "\n".join(lines)
+
+
 def _column_aware_markdown(page, move_title: bool = False, exclude: tuple = ()) -> str:
     """Reconstruct a page in correct reading order.
 
@@ -1370,7 +1526,8 @@ def _extract_pymupdf4llm(
 
 
 def _apply_engine_on_page(
-    page, text: str, exclude: tuple = (), include: tuple = ()
+    page, text: str, exclude: tuple = (), include: tuple = (),
+    figures_dir=None, page_num: int = 0,
 ) -> tuple[str, str]:
     """Apply the adaptive layout engine to ``text`` using a pymupdf page.
 
@@ -1382,30 +1539,45 @@ def _apply_engine_on_page(
     ``(text, label)`` where label is "auto" or "manual".  This is CPU-bound
     (profile_page analyzes the page) and slow on scanned PDFs, so callers
     run it off the GUI thread.
+
+    When ``figures_dir`` is given, figures are rendered to PNG there and linked
+    next to their caption ("corpo unico + didascalia").
     """
     label = "manual" if (include or exclude) else "auto"
     try:
         if include:
-            return _inclusion_order_markdown(page, include, exclude=exclude) or text, label
-        profile = layout_engine.profile_page(page, exclude=exclude)
-        plan = layout_engine.plan_fixes(profile, "PyMuPDF4LLM ⚡", mode="auto")
-        if exclude:
-            cleaned = _column_aware_markdown(page, exclude=exclude) or text
-            plan = [f for f in plan if f.id != "reorder_columns"]
-            return layout_engine.apply_plan(cleaned, page, profile, plan) or cleaned, label
-        return layout_engine.apply_plan(text, page, profile, plan) or text, label
+            result = _inclusion_order_markdown(page, include, exclude=exclude) or text
+        else:
+            profile = layout_engine.profile_page(page, exclude=exclude)
+            plan = layout_engine.plan_fixes(profile, "PyMuPDF4LLM ⚡", mode="auto")
+            if exclude:
+                cleaned = _column_aware_markdown(page, exclude=exclude) or text
+                plan = [f for f in plan if f.id != "reorder_columns"]
+                result = layout_engine.apply_plan(cleaned, page, profile, plan) or cleaned
+            else:
+                result = layout_engine.apply_plan(text, page, profile, plan) or text
     except Exception:
         return text, label
+    if figures_dir is not None:
+        try:
+            result = _link_figures(result, page, figures_dir, page_num)
+        except Exception:
+            pass
+    return result, label
 
 
 def _apply_engine_standalone(
-    path: str, page_num: int, text: str, exclude: tuple = (), include: tuple = ()
+    path: str, page_num: int, text: str, exclude: tuple = (), include: tuple = (),
+    figures_dir=None,
 ) -> tuple[str, str]:
     """Apply the layout engine on a freshly opened document (background thread)."""
     label = "manual" if (include or exclude) else "auto"
     try:
         with pymupdf.open(path) as doc:
-            return _apply_engine_on_page(doc[page_num], text, exclude=exclude, include=include)
+            return _apply_engine_on_page(
+                doc[page_num], text, exclude=exclude, include=include,
+                figures_dir=figures_dir, page_num=page_num,
+            )
     except Exception:
         return text, label
 
@@ -2375,6 +2547,7 @@ class ExtractThread(QThread):
         exclude: tuple = (),
         include: tuple = (),
         raw: str | None = None,
+        figures_dir=None,
     ):
         super().__init__()
         self._path = path
@@ -2384,6 +2557,7 @@ class ExtractThread(QThread):
         self._exclude = exclude
         self._include = include
         self._raw = raw
+        self._figures_dir = figures_dir
 
     def run(self):
         t0 = time.perf_counter()
@@ -2396,6 +2570,7 @@ class ExtractThread(QThread):
         text, label = _apply_engine_standalone(
             self._path, self._page_num, raw,
             exclude=self._exclude, include=self._include,
+            figures_dir=self._figures_dir,
         )
         elapsed = time.perf_counter() - t0
         self.result_ready.emit(
@@ -4106,6 +4281,7 @@ class MainWindow(QMainWindow):
             exclude=tuple(self._excluded_zones.get(page_num, ())),
             include=tuple(self._inclusion_zones.get(page_num, ())),
             raw=self._extraction_cache.get((page_num, ocr_lang)),
+            figures_dir=str(self._get_images_dir()),
         )
         thread.result_ready.connect(self._on_extraction_done)
         self._extract_thread = thread
@@ -4146,6 +4322,22 @@ class MainWindow(QMainWindow):
         self._last_elapsed = elapsed
         self._display_last_result()
         self._show_page_status(elapsed)
+        self._load_page_figures(page_num)
+
+    def _load_page_figures(self, page_num: int):
+        """Add the auto-rendered figures of a page to the gallery (dedup)."""
+        try:
+            images_dir = self._get_images_dir()
+        except Exception:
+            return
+        added = False
+        for path in sorted(images_dir.glob(f"page_{page_num + 1:04d}_fig_*.png")):
+            uri = path.resolve().as_uri()
+            if uri not in self._current_images:
+                self._current_images.append(uri)
+                added = True
+        if added:
+            self.text_panel.show_images(self._current_images, activate=False)
 
     def _display_last_result(self):
         """Re-display the stored extraction (header only if enabled).
