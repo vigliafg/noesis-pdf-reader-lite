@@ -27,7 +27,9 @@ Uso tipico (da ``main.py``)::
 from __future__ import annotations
 
 import json
+import os
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -48,6 +50,7 @@ class LayoutProfile:
     has_references: bool              # entry numerate "1." "2." in >=2 colonne
     has_index: bool                   # >=3 colonne e righe con numeri-pagina
     body_blocks: int                  # blocchi di testo fuori dalle tabelle
+    has_toc: bool = False             # il documento ha un indice (get_toc)
 
 
 def _data_tables(page, exclude: Sequence[tuple] = ()) -> list:
@@ -99,6 +102,16 @@ def _block_text(b: dict) -> str:
 # Pattern "termine, PAGINA" tipico di una voce d'indice: virgola + numero di
 # pagina (anche intervallo "1125–1126" e suffissi "f"/"b"/"t").
 _INDEX_ENTRY_RE = re.compile(r",\s*\d{1,4}(?:[–\-]\d{1,4})?[a-z]?\b")
+
+
+def _has_toc(page) -> bool:
+    doc = getattr(page, "parent", None)
+    if doc is None:
+        return False
+    try:
+        return bool(doc.get_toc())
+    except Exception:
+        return False
 
 
 def profile_page(page, exclude: Sequence[tuple] = ()) -> LayoutProfile:
@@ -167,6 +180,7 @@ def profile_page(page, exclude: Sequence[tuple] = ()) -> LayoutProfile:
         has_references=has_references,
         has_index=has_index,
         body_blocks=len(body),
+        has_toc=_has_toc(page),
     )
 
 
@@ -260,6 +274,85 @@ def _is_title_above(line_x0: float, line_x1: float, y1: float, regions: list[tup
     return False
 
 
+def _iter_margin_lines(page):
+    """Yield ``(text, x0, x1, y1)`` for the lines in the top/bottom margin band."""
+    try:
+        height = page.rect.height
+        blocks = page.get_text("dict")["blocks"]
+    except Exception:
+        return
+    top, bottom = 0.08 * height, 0.92 * height
+    for blk in blocks:
+        if blk.get("type") != 0:
+            continue
+        for line in blk["lines"]:
+            y0, y1 = line["bbox"][1], line["bbox"][3]
+            if y1 <= top or y0 >= bottom:
+                yield (
+                    "".join(s["text"] for s in line["spans"]),
+                    line["bbox"][0], line["bbox"][2], y1,
+                )
+
+
+_DOC_NOISE_CACHE: dict = {}
+
+
+def _doc_noise_key(doc) -> tuple:
+    name = getattr(doc, "name", "") or ""
+    try:
+        st = os.stat(name) if name else None
+        sig = (st.st_size, int(st.st_mtime)) if st is not None else (0, 0)
+    except Exception:
+        sig = (0, 0)
+    return (name, len(doc), sig, 0 if name else id(doc))
+
+
+def _document_noise(page, min_pages: int = 3, max_samples: int = 25) -> set[str]:
+    """Running headers/footers of the whole document (repeated across pages).
+
+    A short string that shows up in the top/bottom margin of several pages is
+    page chrome, not content — even when it is not all-caps or a single page
+    misses it. Sampled (spread over the document) and cached per file, because
+    the app re-opens the document for every page extraction.
+    """
+    doc = getattr(page, "parent", None)
+    if doc is None:
+        return set()
+    try:
+        n = len(doc)
+    except Exception:
+        return set()
+    if n < min_pages:
+        return set()
+    key = _doc_noise_key(doc)
+    cacheable = bool(getattr(doc, "name", ""))
+    if cacheable:
+        cached = _DOC_NOISE_CACHE.get(key)
+        if cached is not None:
+            return cached
+        if len(_DOC_NOISE_CACHE) > 32:
+            _DOC_NOISE_CACHE.clear()
+    samples = min(max_samples, n)
+    idxs = sorted({int(i * (n - 1) / max(1, samples - 1)) for i in range(samples)})
+    counts: Counter = Counter()
+    for i in idxs:
+        try:
+            pg = doc[i]
+        except Exception:
+            continue
+        for text, _x0, _x1, _y1 in _iter_margin_lines(pg):
+            s = text.lstrip()
+            if not s or _CAPTION_MARGIN_RE.match(s):
+                continue  # vuota o didascalia: mai header
+            norm = _norm_noise(text)
+            if norm and len(norm) <= 120 and len(norm.split()) <= 15:
+                counts[norm] += 1
+    noise = {s for s, c in counts.items() if c >= min_pages}
+    if cacheable:
+        _DOC_NOISE_CACHE[key] = noise
+    return noise
+
+
 def _margin_noise(page, exclude: Sequence[tuple] = ()) -> set[str]:
     """Stringhe che compaiono nei margini alto/basso della pagina (header/footer).
 
@@ -269,37 +362,28 @@ def _margin_noise(page, exclude: Sequence[tuple] = ()) -> set[str]:
     """
     if page is None:
         return set()
-    try:
-        height = page.rect.height
-        blocks = page.get_text("dict")["blocks"]
-    except Exception:
-        return set()
-    top, bottom = 0.08 * height, 0.92 * height
     regions = _content_regions_below(page, exclude)
     found: set[str] = set()
-    for blk in blocks:
-        if blk.get("type") != 0:
+    for text, x0, x1, y1 in _iter_margin_lines(page):
+        stripped = text.lstrip()
+        # Un header/footer di stampa inizia con maiuscola o cifra
+        # ("CHAPTER 18 …", "656", "HEART FAILURE…"). Una continuazione
+        # di titolo di box come "or Maldigestion" o i frammenti di
+        # corpo che cadono nella banda dei margini iniziano minuscoli:
+        # non devono diventare candidati, altrimenti il box viene
+        # tagliato a metà.
+        if not stripped or not (stripped[0].isupper() or stripped[0].isdigit()):
             continue
-        for line in blk["lines"]:
-            y0, y1 = line["bbox"][1], line["bbox"][3]
-            if y1 <= top or y0 >= bottom:
-                text = "".join(s["text"] for s in line["spans"])
-                stripped = text.lstrip()
-                # Un header/footer di stampa inizia con maiuscola o cifra
-                # ("CHAPTER 18 …", "656", "HEART FAILURE…"). Una continuazione
-                # di titolo di box come "or Maldigestion" o i frammenti di
-                # corpo che cadono nella banda dei margini iniziano minuscoli:
-                # non devono diventare candidati, altrimenti il box viene
-                # tagliato a metà.
-                if not stripped or not (stripped[0].isupper() or stripped[0].isdigit()):
-                    continue
-                if _CAPTION_MARGIN_RE.match(stripped):
-                    continue  # didascalia di tabella/box: contenuto, non header
-                if _is_title_above(line["bbox"][0], line["bbox"][2], y1, regions):
-                    continue  # titolo di sezione sopra un box/tabella
-                norm = _norm_noise(text)
-                if norm and len(norm) <= 120 and len(norm.split()) <= 15:
-                    found.add(norm)
+        if _CAPTION_MARGIN_RE.match(stripped):
+            continue  # didascalia di tabella/box: contenuto, non header
+        if _is_title_above(x0, x1, y1, regions):
+            continue  # titolo di sezione sopra un box/tabella
+        norm = _norm_noise(text)
+        if norm and len(norm) <= 120 and len(norm.split()) <= 15:
+            found.add(norm)
+    # Frequenza tra pagine: un header/footer che ricorre su più pagine è chrome
+    # di pagina anche quando la singola pagina non lo riconosce (T5.1).
+    found |= _document_noise(page)
     return found
 
 
@@ -418,6 +502,83 @@ def _uncomment_picture_text_md(md: str) -> str:
 
 def _apply_uncomment_picture_text(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
     return _uncomment_picture_text_md(md)
+
+
+# ── gerarchia heading dal TOC (T5.3) ────────────────────────────────────────
+# I livelli dei titoli nel markdown si deducono dalla dimensione del font e
+# possono sbagliare. Il TOC del documento (`doc.get_toc()`) dà la gerarchia
+# reale: se un titolo compare nel TOC alla pagina corrente, si allinea il
+# numero di `#`. Conservativo: si toccano solo titoli già riconosciuti come
+# heading o righe che combaciano *esattamente* con una voce del TOC.
+
+def _toc_level_for(norm: str, wanted: dict[str, int]) -> int:
+    if not norm:
+        return 0
+    if norm in wanted:
+        return wanted[norm]
+    for title, lvl in wanted.items():
+        if len(title) >= 12 and (
+            norm.startswith(title) or title.startswith(norm)
+        ) and abs(len(title) - len(norm)) <= 40:
+            return lvl
+    return 0
+
+
+def _toc_headings_md(md: str, page) -> str:
+    doc = getattr(page, "parent", None)
+    if doc is None:
+        return md
+    try:
+        toc = doc.get_toc()
+        pageno = page.number + 1
+    except Exception:
+        return md
+    wanted: dict[str, int] = {}
+    for entry in toc:
+        if len(entry) < 3:
+            continue
+        level, title, pno = entry[0], entry[1], entry[2]
+        if pno != pageno:
+            continue
+        norm = _norm_noise(title)
+        if norm:
+            wanted[norm] = max(1, min(6, int(level)))
+    if not wanted:
+        return md
+
+    fenced: list[str] = []
+
+    def _stash(m: "re.Match[str]") -> str:
+        fenced.append(m.group(0))
+        return f"\x00TFENCE{len(fenced) - 1}\x00"
+
+    md = _FENCE_PROTECT_RE.sub(_stash, md)
+    out: list[str] = []
+    for line in md.split("\n"):
+        m = _HEADING_RE.match(line)
+        if m:
+            lvl = _toc_level_for(_norm_noise(m.group(2)), wanted)
+            if lvl:
+                out.append("#" * lvl + " " + m.group(2).strip())
+                continue
+        elif not line.lstrip().startswith("|"):
+            norm = _norm_noise(line)
+            if norm in wanted and len(norm.split()) <= 15 and len(norm) <= 120:
+                out.append("#" * wanted[norm] + " " + line.strip().strip("*").strip())
+                continue
+        out.append(line)
+    md = "\n".join(out)
+    for i, block in enumerate(fenced):
+        md = md.replace(f"\x00TFENCE{i}\x00", block)
+    return md
+
+
+def _apply_toc_headings(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
+    return _toc_headings_md(md, page)
+
+
+def _when_toc(p: LayoutProfile, b: str) -> bool:
+    return p.has_toc
 
 
 # ── tabelle (Pack 2) ────────────────────────────────────────────────────────
@@ -760,6 +921,13 @@ FIX_REGISTRY: Sequence[Fix] = (
         55,
         lambda p, b: True,
         _apply_uncomment_picture_text,
+    ),
+    Fix(
+        "toc_headings",
+        "Gerarchia heading allineata al TOC del documento",
+        58,
+        _when_toc,
+        _apply_toc_headings,
     ),
     Fix(
         "rebuild_tables",

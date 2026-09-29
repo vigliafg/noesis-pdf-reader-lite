@@ -235,6 +235,58 @@ class ApplyPlanTests(unittest.TestCase):
         doc.close()
 
 
+class DocumentNoiseTests(unittest.TestCase):
+    """T5.1 — header/footer ripetuti tra pagine (doc-level)."""
+
+    def _doc(self, header=lambda i: "harrison's principles of internal medicine"):
+        doc = pymupdf.open()
+        for i in range(5):
+            p = doc.new_page(width=595, height=842)
+            p.insert_text((50, 20), header(i), fontsize=8)
+            p.insert_textbox(
+                pymupdf.Rect(50, 120, 520, 400), f"Body on page {i}.", fontsize=10
+            )
+        return doc
+
+    def test_repeated_lowercase_header_is_document_noise(self):
+        doc = self._doc()
+        noise = layout_engine._document_noise(doc[0])
+        self.assertIn("harrison's principles of internal medicine", noise)
+        md = "harrison's principles of internal medicine\n\nBody on page 2."
+        out = _strip_running_headers(md, doc[2])
+        self.assertNotIn("harrison's", out)
+        self.assertIn("Body on page 2.", out)
+        doc.close()
+
+    def test_one_off_margin_line_is_not_document_noise(self):
+        doc = self._doc(header=lambda i: f"Unique title {i}")
+        noise = layout_engine._document_noise(doc[0])
+        self.assertNotIn("unique title 0", noise)
+        doc.close()
+
+
+class TocHeadingsTests(unittest.TestCase):
+    """T5.3 — gerarchia heading allineata al TOC."""
+
+    def test_levels_follow_toc(self):
+        doc = pymupdf.open()
+        page = doc.new_page(width=595, height=842)
+        page.insert_textbox(pymupdf.Rect(50, 120, 520, 400), "body", fontsize=10)
+        doc.set_toc([[1, "Introduction", 1], [2, "Methods", 1], [3, "Results", 1]])
+        out = layout_engine._toc_headings_md(
+            "# Introduction\n\n## Results\n\nbody", doc[0]
+        )
+        self.assertTrue(out.startswith("# Introduction"))
+        self.assertIn("### Results", out)
+        doc.close()
+
+    def test_no_toc_returns_unchanged(self):
+        doc, page = _new_page()
+        md = "# Introduction\n\n## Methods"
+        self.assertEqual(layout_engine._toc_headings_md(md, page), md)
+        doc.close()
+
+
 class CleanupMarkdownTests(unittest.TestCase):
     """Pack 1: header/footer, heading, liste, corsivi (fix ``cleanup_markdown``)."""
 

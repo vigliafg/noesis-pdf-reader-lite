@@ -72,6 +72,22 @@ class FigureRegionTests(unittest.TestCase):
         self.assertEqual(_figure_regions(page), [])
         doc.close()
 
+    def test_numberless_caption_is_detected(self):
+        # "Figure: …" / "Figure A …" are captions too, but a body sentence
+        # ("Figure shows that …") is not.
+        doc, page = _new_page()
+        page.draw_rect(pymupdf.Rect(60, 60, 550, 260), color=(0, 0, 0), fill=(0.9, 0.9, 0.9))
+        for i in range(4):
+            page.draw_rect(
+                pymupdf.Rect(80 + i * 100, 150, 140 + i * 100, 250),
+                color=(0, 0, 0), fill=(0.4, 0.6, 0.8),
+            )
+        page.insert_textbox(
+            pymupdf.Rect(60, 270, 550, 300), "Figure: a schematic diagram.", fontsize=9
+        )
+        self.assertTrue(_figure_regions(page))
+        doc.close()
+
 
 class LinkFiguresTests(unittest.TestCase):
     def test_image_inserted_before_caption_and_png_saved(self):
