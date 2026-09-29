@@ -294,6 +294,23 @@ class GoldCleanupTests(unittest.TestCase):
             norm,
         )
 
+    @unittest.skipUnless(_gold_pdf("co23.pdf"), "co23.pdf non presente")
+    def test_top_margin_table_caption_is_kept(self):
+        # co23/p931: "TABLE 2 Pneumonia Severity Index" sits at the top margin
+        # and used to be stripped as a running header.
+        raw, text = self._run(_gold_pdf("co23.pdf"), 931)
+        self.assertIn("TABLE 2", raw)
+        self.assertIn("Pneumonia Severity Index", text)
+
+    @unittest.skipUnless(_gold_pdf("ha22.pdf"), "ha22.pdf non presente")
+    def test_box_caption_and_section_title_are_kept(self):
+        # ha22/p2240: the box caption and its first section title sit above the
+        # box in the top margin and used to be stripped.
+        raw, text = self._run(_gold_pdf("ha22.pdf"), 2240)
+        self.assertIn("TABLE 294-1", raw)
+        self.assertIn("Differential Diagnoses of Pleural Effusions", text)
+        self.assertIn("Transudative Pleural Effusions", text)
+
 
 if __name__ == "__main__":
     unittest.main()
