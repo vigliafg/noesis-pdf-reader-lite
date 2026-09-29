@@ -599,11 +599,11 @@ class ColumnAwareTests(unittest.TestCase):
         self.assertNotEqual(title, "2199")
         doc.close()
 
-    def test_sidebar_box_rendered_as_markdown_table(self):
-        # A bordered box (sidebar) must be rendered as a markdown table, not
-        # flattened into the body text with glued bullets. find_tables() does
-        # not detect a single bordered rectangle, so the box path (get_drawings)
-        # has to catch it.
+    def test_sidebar_box_rendered_as_list(self):
+        # A bordered box (sidebar) is a list of items, not a data table: it is
+        # rendered as bullets (a single-column table put "|" on every line and
+        # hurt readability). find_tables() does not detect a bordered rectangle,
+        # so the box path (get_drawings) has to catch it.
         doc, page = _new_page()
         page.insert_textbox(pymupdf.Rect(50, 120, 250, 200), "Left text above.", fontsize=10)
         page.insert_textbox(pymupdf.Rect(50, 500, 250, 580), "Left text below.", fontsize=10)
@@ -615,10 +615,10 @@ class ColumnAwareTests(unittest.TestCase):
         page.insert_textbox(pymupdf.Rect(325, 155, 515, 180), "Box item three", fontsize=9)
 
         md = _column_aware_markdown(page, move_title=False)
-        self.assertIn("| Box item one |", md)
-        self.assertIn("| --- |", md)
-        self.assertIn("| Box item two |", md)
-        self.assertIn("| Box item three |", md)
+        self.assertIn("- Box item one", md)
+        self.assertIn("- Box item two", md)
+        self.assertIn("- Box item three", md)
+        self.assertNotIn("| Box item one |", md)
         # Box content must not be duplicated as plain body text.
         self.assertEqual(md.count("Box item one"), 1)
         self.assertEqual(md.count("Box item two"), 1)
@@ -647,8 +647,8 @@ class ColumnAwareTests(unittest.TestCase):
 
         md = _column_aware_markdown(page, move_title=False)
         self.assertIn("**BOX 9.2 Title of the Example Box Continues**", md)
-        self.assertIn("| Box item one |", md)
-        self.assertIn("| Box item two |", md)
+        self.assertIn("- Box item one", md)
+        self.assertIn("- Box item two", md)
         # Title emitted exactly once: as the heading, not also as a strip table.
         self.assertEqual(md.count("BOX 9.2"), 1)
         self.assertNotIn("| BOX 9.2 Title of the", md)
@@ -806,14 +806,14 @@ class RosenPdfRegressionTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.doc.close()
 
-    def test_page_59_sidebar_box_rendered_as_table(self):
-        # The "BOX 3.2" sidebar must come out as a markdown table (as
-        # pymupdf4llm renders it), not as glued plain-text bullets.
+    def test_page_59_sidebar_box_rendered_as_list(self):
+        # The "BOX 3.2" sidebar must come out as readable items, not as glued
+        # plain-text bullets nor as a single-column table.
         md = _column_aware_markdown(self.doc[58], move_title=False)
         self.assertIn("BOX 3.2", md)
         self.assertIn("Ill appearance or altered mental status", md)
-        self.assertIn("| --- |", md)
         self.assertIn("Heart rate >100 beats/min", md)
+        self.assertNotIn("| Ill appearance", md)
 
     def test_page_3032_box_title_not_duplicated_by_strip_box(self):
         # The title of BOX E15.4 sits in a thin border strip of its own; it

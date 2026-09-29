@@ -351,6 +351,24 @@ più il motore **pre-fix** (commit `c24a173`).
 - **Legenda figura tenuta**: `_link_figures` non rimuove più la legenda, la
   sposta **sotto la didascalia** (corpo-immagine → didascalia → legenda), come
   da scelta dell'utente.
+- **Box come liste, non tabelle a 1 colonna**: `_box_to_md` ricuce le righe
+  andate a capo, rende i sottotitoli in MAIUSCOLO come `**grassetto**` e gli
+  item come `- bullet` (paragrafi se il box è prosa). L'over-tabling sparisce:
+  su 80 pagine le righe-tabella passano da **362 a 160** (raw: 165), e
+  `ce24/p2584` da 88 a 6.
+
+### Risultati aggiornati (dopo questi fix)
+| | recall | precisione | glue | tab. malformate | righe-tabella | figure | `�` |
+|---|---|---|---|---|---|---|---|
+| RAW | 99.55% | 98.36% | 244 | 12 | 165 | 0 | 3 |
+| ENGINE ora | **99.72%** | **99.33%** | **241** | **0** | **160** | **37** | **0** |
+
+### Difetti ancora rilevati (arbitro esigente)
+1. ~~Over-tabling dei box~~ → **risolto** (righe-tabella pari al raw).
+2. Legenda figure: il testo interno resta sotto l'immagine come citazione
+   multi-riga (i `<br>` ora sono a-capo veri, non HTML letterale).
+3. Delta residui minimi (≤4 parole su 5 pagine), numeri di pagina e parole
+   incollate risolte.
 
 ### Punteggio (rubric, 1-100)
 Pesi: recall 50, precisione 15, glue/integrità spazi 15, tabelle 10, figure 5,
@@ -360,4 +378,4 @@ penalità formattazione fino a 5.
 |---|---|
 | RAW PyMuPDF4LLM | **≈ 89** |
 | ENGINE pre-fix | **≈ 63** |
-| ENGINE ora | **≈ 96** |
+| ENGINE ora | **≈ 98** |

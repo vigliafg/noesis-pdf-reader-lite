@@ -530,18 +530,52 @@ def _table_to_md(page, table) -> str:
 
 
 def _box_to_md(text: str) -> str:
-    """Render a box's text as a single-column markdown table (first line = header)."""
-    lines = []
+    """Render a box/sidebar (a flat list of lines) as a list, not a table.
+
+    A bordered box is not a data table: its text is a list of short items
+    (bullets, labels) or a few wrapped paragraphs. Rendering it as a
+    single-column markdown table (a row per line) put ``|`` on every line and
+    hurt readability (over-tabling). So:
+    - wrapped lines are re-joined into units (a continuation starts lowercase
+      and the previous line has no final punctuation, or the previous line ends
+      with a hyphen);
+    - short ALL-CAPS units become bold sub-headings;
+    - when most units are short the box is a list → ``- item`` bullets;
+    - a box made of long units is prose → paragraphs.
+    """
+    raw: list[str] = []
     for ln in text.splitlines():
         ln = re.sub(r"[\x07\t]+", " ", ln)
         ln = re.sub(r"\s+", " ", ln).strip()
         if ln:
-            lines.append(ln)
-    if not lines:
+            raw.append(ln)
+    if not raw:
         return ""
-    out = [f"| {lines[0]} |", "| --- |"]
-    out += [f"| {ln} |" for ln in lines[1:]]
-    return "\n".join(out)
+    units: list[str] = []
+    for ln in raw:
+        if units:
+            prev = units[-1]
+            if prev.endswith("-"):
+                units[-1] = prev[:-1] + ln
+                continue
+            if not re.search(r"[.:;!?]$", prev) and ln[:1].islower():
+                units[-1] = prev + " " + ln
+                continue
+        units.append(ln)
+    n_short = sum(1 for u in units if len(u.split()) <= 12)
+    listy = n_short >= max(1, (len(units) + 1) // 2)
+    if not listy:
+        return "\n\n".join(units)  # prosa: paragrafi
+    parts: list[str] = []
+    for u in units:
+        if u.isupper() and len(u.split()) <= 8:
+            if parts:
+                parts.append("")
+            parts.append(f"**{u}**")
+            parts.append("")
+        else:
+            parts.append("- " + re.sub(r"^[•·]\s*", "", u))
+    return "\n".join(parts).strip("\n")
 
 
 def _box_title(page, rect: tuple, exclude: tuple = ()) -> tuple[str, tuple | None]:

@@ -501,6 +501,9 @@ def _uncomment_picture_text_md(md: str) -> str:
         body = m.group("body").strip("\n").strip()
         if not body:
             return ""
+        # I <br> di pymupdf sono a-capo di riga: meglio un blocco citazione
+        # multi-riga che tag HTML letterali nel markdown.
+        body = re.sub(r"<br\s*/?>", "\n", body, flags=re.IGNORECASE)
         return "\n".join(f"> {ln}" if ln.strip() else ">" for ln in body.split("\n"))
 
     return _PICTURE_TEXT_RE.sub(_to_quote, md)
