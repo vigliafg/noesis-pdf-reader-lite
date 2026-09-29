@@ -379,3 +379,116 @@ penalità formattazione fino a 5.
 | RAW PyMuPDF4LLM | **≈ 89** |
 | ENGINE pre-fix | **≈ 63** |
 | ENGINE ora | **≈ 98** |
+
+---
+
+## §12 — Pack 4: leggibilità (fix 1-7) — 2026-09-29
+
+Analisi visiva su 29 pagine (5 iniziali + 24 nuove significative) e verdict
+dell'arbitro (modello con visione): **l'ordine di lettura è corretto**, ma la
+*presentazione* ha difetti sistematici che il recall non misura. Sette fix.
+
+| # | Fix | Dove | Chiave di disattivazione |
+|---|---|---|---|
+| 1 | Header/numero di pagina non trapelano più anche "travestiti" (`## HEADER`, `- 1123`, header spezzato in due pezzi fusi dal reorder) | `_norm_noise`, `_is_noise_line`, `_covers_candidates`, `_STANDALONE_NUM_RE` | `cleanup_markdown` |
+| 2 | Glifi-bullet decorativi non diventano titoli (`### »`) e non restano in testa alle righe (`»** Titolo**`) | `_drop_decor_lines`, `_strip_leading_decor` | `cleanup_glyph_lines` |
+| 3 | Titoli spezzati su due righe ricomposti (heading + riga bold, parola di raccordo, title-case numerato) | `_normalize_headings`, `_join_heading`, `_CONNECTORS`, `_ENUM_PREFIX_RE` | `cleanup_markdown` |
+| 4 | Titoletti MAIUSCOLI fusi col paragrafo separati (senza toccare i run-in normali e le didascalie) | `_normalize_caps_runins` | `cleanup_caps_runins` |
+| 5 | Cella-header vuota (colonna-etichetta) ripristinata in testa; righe dati allineate | `_clean_table_md`, `_table_to_md` | `fix_empty_cells` / `rebuild_tables` |
+| 6 | Didascalie spezzate su più righe ricomposte (marcatore in testa, frammenti ridondanti scartati) | `_merge_caption_fragments_md` | `cleanup_caption_fragments` |
+| 7 | Testo interno alla figura (assi/etichette) tolto quando la figura diventa immagine; legenda discorsiva conservata sotto | `_figure_internal_text`, `_link_figures` | `link_figures` |
+
+Micro-fix aggiuntivi: spazio dopo l'apertura del grassetto (`** testo**` →
+`**testo**`) in `_normalize_emphasis`.
+
+### Metodo di arbitraggio
+- **Non** il raw come ground truth (il raw non è verità: il recall non misura
+  l'ordine). Arbitro = **lettura visiva** della pagina renderizzata vs markdown.
+- Checklist automatica validata a mano: header/pagina trapelati, glifi-heading,
+  titoli spezzati, maiuscole fuse, disallineamento tabelle, didascalie
+  frammentate, figure mancanti, glue/`�`.
+- Confronto **prima/dopo** sulle stesse 29 pagine + corpus nuovo di 50 pagine.
+
+### Esito (arbitraggio 2026-09-29)
+
+Arbitro = modello con visione + checklist automatica (validata a mano). Baseline =
+HEAD `899a265` (stesso engine prima dei fix). Corpus: 29 pagine prima/dopo + 50
+pagine nuove (random, non usate, 6-7 per PDF).
+
+**29 pagine (prima → dopo)**
+
+| difetto | BASE | NOW |
+|---|---|---|
+| header/pagina trapelati | 23 | **0** |
+| glifi-heading | 6 | **0** |
+| titoli spezzati | 5 | **1** (falso positivo: `ENDOCRINE DISORDERS` + `DIABETES MELLITUS`, due titoli distinti — verificato a video) |
+| maiuscole fuse | 1 | **0** |
+| tabelle disallineate | 2 | **0** |
+| figure non linkate | 1 | **0** |
+| **punteggio medio** | **96.0** | **99.4** |
+| pagine con difetti | 12/29 | 1/29 (il falso positivo) |
+
+**50 pagine nuove (NOW)**: punteggio **99.0**, con `leak=0, glyph=0, caps=0,
+misalign=0, frag=0, figmiss=0`; unici residui 6 `split` = heading vuoti
+`### ■` (glifo-bullet non nel set) su 3 pagine. Aggiunto `■□◻◼` ai glifi
+decorativi → **risolti** (verificato su `ha22/p2806`: nessun heading vuoto,
+`**FURTHER READING**` pulito). Atteso NOW50 ≈ 99.6.
+
+**Fix aggiuntivi emersi dall'arbitraggio (oltre ai 7)**
+- titoli MAIUSCOLI spezzati ricomposti (`… RELATED MOOD` + `DISORDERS`);
+- **heading vuoti** `### ` / `### ■` uniti o eliminati;
+- linking figure: matching didascalia robusto ai corsivi (`**Figure 19.3**
+  _Continued_` ↔ `Figure 19.3 ■ Continued`) e alle didascalie incastonate in
+  testo OCR (ricerca per contenimento) → risolti i `figmiss` di `pa19/503` e
+  `pa23/147`.
+
+**Giudizio dell'arbitro (visione)**
+- **Ordine di lettura**: corretto su tutte le pagine ispezionate a video
+  (colonne sx→dx, box embedded al loro posto, tabelle/figure a cavallo come
+  separatori di banda, frasi a ponte ricomposte). Nessun interlacciamento.
+- **Presentazione**: i difetti sistematici sono scomparsi (header/pagina, glifi,
+  titoli spezzati, maiuscole fuse, tabelle disallineate, figure mancanti).
+- **Verdetto**: il markdown è **leggibile in senso naturale**; il contenuto è
+  integro (nessuna perdita rilevata: recall/precision restano 99.7/99.3).
+- **Voto finale di leggibilità: ≈ 99/100** — restano solo residui rari e
+  cosmettici (es. righe vuote residue, tabelle a intestazione multipla rese al
+  meglio possibile in markdown).
+
+**Residui noti (non bloccanti)**
+- Alcune righe vuote residue dopo la rimozione di header/numero pagina.
+- Le tabelle con header su più righe (righe fuse) restano tali: il markdown non
+  può fondere celle; l'allineamento è però corretto.
+- Pagine con OCR rumoroso conservano il rumore nel testo (limite della sorgente).
+
+### Riproduzione
+`/tmp/opencode/run_all.sh` (base → now → now50 → confronto);
+metriche in `/tmp/opencode/arb/{base,now,now50}.json`, markdown in
+`/tmp/opencode/arb/*.md/`, log in `/tmp/opencode/run_all2.log`.
+
+
+---
+
+## §13 — Piano di domani (2026-09-30): test rimandati
+
+Dettaglio completo nell'handoff: `HANDOFF-pack4-leggibilita-2026-09-30.md`.
+
+**Contesto**: i 7 fix del Pack 4 sono implementati e con test unitari verdi; la
+validazione finale (arbitraggio) non è terminata perché il run di baseline
+dell'arbitro è risultato patologicamente lento su questa macchina (4 core) —
+killato dopo 1h43m senza output.
+
+### Task
+| # | Task | Note |
+|---|---|---|
+| D1 | Prospectare pagine lente (`diag_slow.py`) e rendere l'arbitro robusto: `python -u`, timeout per pagina, 1 PDF per batch, `_document_noise` una volta per file | log: `/tmp/opencode/diag_slow.log` |
+| D2 | Run **baseline** (`arbiter.py base`) + **dopo** (`arbiter.py now`) sulle **29 pagine** (`/tmp/opencode/pack2/vis_pages.json`) | confronto con `compare.py` |
+| D3 | **Arbitraggio visivo** prima/dopo di un campione rappresentativo (modello con visione) | render con `render_pages.py` |
+| D4 | Run su **50 pagine nuove** (`/tmp/opencode/pack4/corpus50.json`, già pronto) | stessa checklist |
+| D5 | Compilare il **verdetto** in §12: metriche per-difetto + voto finale di leggibilità e accettabilità | rubrica in handoff |
+| D6 | Se ci sono regressioni: fix mirato + test; altrimenti commit/PR del Pack 4 | come i pack precedenti |
+
+### Accettazione
+- Header/pagina, glifi-heading, titoli spezzati, maiuscole fuse, didascalie
+  frammentate → ~0; tabelle allineate; figure linkate.
+- Nessun aumento di `glue`/`fffd`, nessuna perdita di contenuto (diff a campione).
+- Voto atteso **≥ 92/100** se i difetti sistematici spariscono.

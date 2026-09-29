@@ -519,6 +519,8 @@ def _table_to_md(page, table) -> str:
     # a caption row (or a merged header) must not truncate the data columns.
     ncols = max(len(r) for _, r in rows)
     header = [txt.replace("\n", " ") for _, _, txt in rows[0][1]]
+    if len(header) >= 2 and ncols > len(header):
+        header = [""] * (ncols - len(header)) + header  # cella-vuota di testa persa
     header = (header + [""] * ncols)[:ncols]
     out.append("| " + " | ".join(header) + " |")
     out.append("| " + " | ".join("---" for _ in range(ncols)) + " |")
@@ -903,18 +905,50 @@ def _render_figure(page, rect: tuple, dest_dir, page_num: int, index: int) -> st
         return None
 
 
+def _norm_text(s: str) -> str:
+    """Minuscolo, senza markdown/punteggiatura: per confrontare md e pagina."""
+    s = re.sub(r"[*_`~]", "", s)
+    return re.sub(r"\s+", " ", re.sub(r"\W+", " ", s)).strip().lower()
+
+
+def _figure_internal_text(page, fig) -> str:
+    """Testo interno alla regione-figura (etichette/assi/numeri), normalizzato.
+
+    Serve a togliere quelle righe dal markdown quando la figura è resa come
+    immagine: sono già visibili nel PNG, ripeterle è rumore.
+    """
+    x0, y0, x1, y1 = fig["rect"]
+    try:
+        d = page.get_text("dict", clip=pymupdf.Rect(x0 - 4, y0 - 4, x1 + 4, y1 + 4))
+    except Exception:
+        return ""
+    parts: list[str] = []
+    for blk in d.get("blocks", []):
+        if blk.get("type") != 0:
+            continue
+        for line in blk["lines"]:
+            t = _norm_text(" ".join(s["text"] for s in line["spans"]))
+            if t:
+                parts.append(t)
+    return " ".join(parts)
+
+
 def _link_figures(md: str, page, dest_dir, page_num: int) -> str:
     """Inserisce il corpo-immagine accanto alla didascalia di ogni figura.
 
-    Il testo interno alla figura (blocco citazione) viene tolto **solo** se è
-    dentro la regione renderizzata, così non resta duplicato; altrimenti è
-    lasciato. Nessun contenuto viene eliminato senza essere nell'immagine.
+    Il testo interno alla figura (etichette/assi, anche quando pymupdf4llm lo
+    emette come paragrafo) viene tolto **solo** se sta dentro la regione
+    renderizzata, così non resta duplicato col PNG. La legenda discorsiva
+    (blocco citazione) è conservata sotto l'immagine. Nessun contenuto viene
+    eliminato se non è dentro l'immagine.
     """
     if not _has_pymupdf or page is None or dest_dir is None:
         return md
     if layout_engine.is_fix_disabled("link_figures"):
         return md
-    if not re.search(r"(?im)^\s*\**\s*fig(?:ure)?\b\.?\s*(?:\d|[:\-–—])", md):
+    if not re.search(
+        r"(?im)^.{0,80}?\bfig(?:ure)?\.?\s*(?:\d|[:\-–—])", md
+    ):
         return md  # nessuna didascalia di figura: nessuna scansione grafica
     regions = _figure_regions(page)
     if not regions:
@@ -924,15 +958,47 @@ def _link_figures(md: str, page, dest_dir, page_num: int) -> str:
         uri = _render_figure(page, fig["rect"], dest_dir, page_num, i)
         if not uri:
             continue
-        key = re.sub(r"\W+", " ", fig["caption"]).strip().lower()
+        key = _norm_text(fig["caption"])
         idx = None
+        contains = None
         for j, ln in enumerate(lines):
-            norm = re.sub(r"\W+", " ", ln).strip().lower()
-            if norm.startswith(key[:30]) and key[:30]:
+            n = _norm_text(ln)
+            if key[:30] and n.startswith(key[:30]):
                 idx = j
                 break
+            # Didascalia incastonata in testo OCR/junk: la si trova per
+            # contenimento (fallback, usato solo se nessuna riga inizia con la
+            # didascalia).
+            if contains is None and len(key) >= 15 and key[:25] in n:
+                contains = j
+        if idx is None:
+            idx = contains
         if idx is None:
             continue
+        # Toglie il testo interno della figura (già nell'immagine). Non tocca
+        # la didascalia né le legende in blocco citazione.
+        internal = _figure_internal_text(page, fig)
+        if internal:
+            itokens = set(internal.split())
+            kept: list[str] = []
+            removed_before = 0
+            for k, ln in enumerate(lines):
+                if k == idx or ln.lstrip().startswith(">"):
+                    kept.append(ln)
+                    continue
+                n = _norm_text(ln)
+                if (
+                    2 <= len(n) <= 120
+                    and len(n.split()) <= 15
+                    and (n in internal or set(n.split()) <= itokens)
+                ):
+                    if k < idx:
+                        removed_before += 1
+                    continue
+                kept.append(ln)
+            if removed_before or len(kept) != len(lines):
+                lines = kept
+                idx -= removed_before
         legend = None
         k = idx - 1
         while k >= 0 and not lines[k].strip():
@@ -944,7 +1010,7 @@ def _link_figures(md: str, page, dest_dir, page_num: int) -> str:
             legend = "\n".join(lines[ks:k + 1])
             del lines[ks:k + 1]
             idx -= (k + 1 - ks)
-        # corpo-immagine, poi la didascalia, poi il testo interno attaccato sotto
+        # corpo-immagine, poi la didascalia, poi la legenda attaccata sotto
         lines.insert(idx, f"![figura {i}]({uri})")
         if legend:
             lines.insert(idx + 2, "")
