@@ -18,6 +18,8 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   numerici riallineati), **Pack 3** figure (testo dentro le figure visibile e,
   quando c'è una didascalia `FIG n`, la figura viene **renderizzata come corpo
   unico + didascalia**: `![figura n](file://…)` e ingresso nella gallery 🖼️).
+  In più, passate a **livello documento**: header/footer deduplicati per
+  frequenza tra pagine e gerarchia dei titoli allineata all'indice (`get_toc`).
   Ogni fix è attivabile/disattivabile da `fix_rules.json`.
 - Navigazione (prec/succ, spin, zoom), indice (TOC), toggle Markdown.
 - Tab testo: Originale / Traduzione / 🖼️ Immagini. L'Originale mostra un

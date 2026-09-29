@@ -765,7 +765,13 @@ def _detect_boxes(page, page_width: float, table_regions: list[tuple], exclude: 
 # didascalia (cluster vettoriali + immagini embedded), la si renderizza in un PNG
 # e si inserisce `![figura n](uri)` accanto alla didascalia.
 
-_FIGURE_CAPTION_RE = re.compile(r"^\s*\**\s*fig(?:ure)?\.?\s*\d", re.IGNORECASE)
+_FIGURE_CAPTION_RE = re.compile(
+    # "FIGURE 148-1", "FIG. 14.10", "Figure: scheme", "Figure A — schematic".
+    # Senza numero serve un separatore o una maiuscola dopo: una frase di corpo
+    # tipo "Figure shows that …" NON è una didascalia.
+    r"^\s*\**\s*fig(?:ure)?\b\.?\s*(?:\d|[:\-–—]|(?-i:[A-Z]))",
+    re.IGNORECASE,
+)
 
 
 def _bbox_mostly_inside(b: tuple, r: tuple) -> bool:
@@ -822,7 +828,7 @@ def _figure_regions(page, exclude: tuple = ()) -> list[dict]:
         caption = (blk["x0"], blk["y0"], blk["x1"], blk["y1"])
         sel = []
         for c in candidates:
-            if not (c[3] <= caption[1] + 2 and caption[1] - c[3] <= 80):
+            if not (c[3] <= caption[1] + 2 and caption[1] - c[3] <= 110):
                 continue  # deve stare sopra la didascalia, vicino
             if min(c[2], caption[2]) - max(c[0], caption[0]) <= 0:
                 continue  # colonna diversa
@@ -878,7 +884,7 @@ def _link_figures(md: str, page, dest_dir, page_num: int) -> str:
         return md
     if layout_engine.is_fix_disabled("link_figures"):
         return md
-    if not re.search(r"(?im)^\s*\**\s*fig(?:ure)?\.?\s*\d", md):
+    if not re.search(r"(?im)^\s*\**\s*fig(?:ure)?\b\.?\s*(?:\d|[:\-–—])", md):
         return md  # nessuna didascalia di figura: nessuna scansione grafica
     regions = _figure_regions(page)
     if not regions:

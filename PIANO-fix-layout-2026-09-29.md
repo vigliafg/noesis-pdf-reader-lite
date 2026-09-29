@@ -280,3 +280,35 @@ testo interno come commento HTML (poi reso citazione).
   "Figure" senza numero) o è lontana dalla figura (> 80 pt).
 - Resta **T5** (dedup header/footer tra pagine, tabelle multi-pagina, heading
   dal TOC).
+
+---
+
+## 10. Fix restanti (quarta passata)
+
+### T5.1 — header/footer per frequenza tra pagine ✅
+`_document_noise(page)` campiona le pagine del documento, conta le righe brevi
+nei margini e tiene quelle che ricorrono su ≥3 pagine: sono chrome di pagina
+anche se una singola pagina non le riconosce (es. header in minuscolo).
+`_margin_noise` unisce questo insieme a quello della pagina corrente. Cache per
+file (l'app riapre il documento a ogni pagina); ~1,5 s una volta per documento.
+
+### T5.3 — gerarchia heading dal TOC ✅
+Nuovo fix `toc_headings` (gated da `profile.has_toc`): per la pagina corrente
+legge `doc.get_toc()` e allinea il numero di `#` dei titoli a quello reale del
+TOC. Conservativo: tocca solo titoli già riconosciuti come heading o righe che
+combaciano esattamente con una voce; niente tabelle/code block.
+
+### Gap figure ✅
+`_FIGURE_CAPTION_RE` accetta anche didascalie **senza numero** (`Figure: …`,
+`Figure A …`) ma non frasi di corpo (`Figure shows that …`); la finestra sopra
+la didascalia passa da 80 a 110 pt.
+
+### T5.2 — tabelle multi-pagina ⬜ (non applicabile ora)
+Il merge di una tabella spezzata su più pagine ha senso solo su un documento
+concatenato; l'app estrae e mostra **una pagina alla volta** e non ha un
+export/concatenazione. Implementarlo ora sarebbe codice morto: da fare insieme
+a un eventuale "esporta/copia l'intero documento".
+
+### Verifica
+- Suite: **232 OK** (17 gold skip). CI verde.
+- Corpus 57 pagine: recall 99.63% (≈ invariato), glue 113 vs 124 del raw.
