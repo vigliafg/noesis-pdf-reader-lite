@@ -211,6 +211,24 @@ def _region_image(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+def _trim_edge_spaces(spans: list[dict]) -> list[dict]:
+    """Rimuove gli span di soli spazi ai bordi di una riga.
+
+    PyMuPDF spezza il testo in span anche sugli spazi (spesso span di soli
+    spazi: su pa23/p301 sono il 45% del totale). Scartarli incolla le parole
+    ("theyincreasewithareduction"), tenerli tutti lascia spazi inutili ai bordi
+    di riga. Qui si preservano gli spazi **interni** e si rifilano solo i bordi.
+    """
+    while spans and not spans[0]["text"].strip():
+        spans.pop(0)
+    while spans and not spans[-1]["text"].strip():
+        spans.pop()
+    if spans:
+        spans[0] = {**spans[0], "text": spans[0]["text"].lstrip()}
+        spans[-1] = {**spans[-1], "text": spans[-1]["text"].rstrip()}
+    return [s for s in spans if s["text"] != ""]
+
+
 def _collect_blocks(page, exclude: tuple = ()) -> list[dict]:
     """Extract text blocks (with per-span formatting) from a pymupdf page.
 
@@ -230,7 +248,7 @@ def _collect_blocks(page, exclude: tuple = ()) -> list[dict]:
             spans: list[dict] = []
             for s in line["spans"]:
                 t = s["text"]
-                if not t.strip():
+                if t == "":
                     continue
                 spans.append(
                     {
@@ -238,9 +256,12 @@ def _collect_blocks(page, exclude: tuple = ()) -> list[dict]:
                         "size": s["size"],
                         "bold": bool(s["flags"] & 16),
                         "italic": bool(s["flags"] & 2),
+                        "x0": s["bbox"][0],
+                        "x1": s["bbox"][2],
                     }
                 )
                 max_size = max(max_size, s["size"])
+            spans = _trim_edge_spaces(spans)
             if spans:
                 lines.append(spans)
         # De-hyphenate words split across a line break ("un-" + "common" →
@@ -356,16 +377,35 @@ def _block_to_md(block: dict, as_column: bool) -> str:
     lines: list[str] = []
     for line in block["lines"]:
         parts: list[str] = []
+        prev_x1: float | None = None
+        prev_text = ""
         for s in line:
             t = s["text"]
-            if s["bold"] and s["italic"]:
-                parts.append(f"***{t}***")
+            # Spazio codificato come gap tra due span (non come carattere):
+            # PyMuPDF a volte non emette lo spazio, va ricostruito dalla x.
+            prefix = ""
+            if (
+                t
+                and not t[:1].isspace()
+                and prev_text
+                and not prev_text[-1].isspace()
+                and prev_x1 is not None
+                and s.get("x0") is not None
+                and s["x0"] - prev_x1 > 0.8
+            ):
+                prefix = " "
+            if not t.strip():
+                parts.append(t)  # spazio interno: niente markdown
+            elif s["bold"] and s["italic"]:
+                parts.append(prefix + f"***{t}***")
             elif s["bold"]:
-                parts.append(f"**{t}**")
+                parts.append(prefix + f"**{t}**")
             elif s["italic"]:
-                parts.append(f"*{t}*")
+                parts.append(prefix + f"*{t}*")
             else:
-                parts.append(t)
+                parts.append(prefix + t)
+            prev_x1 = s.get("x1")
+            prev_text = t
         lines.append("".join(parts).strip())
 
     if not as_column:
@@ -377,7 +417,9 @@ def _block_to_md(block: dict, as_column: bool) -> str:
         level = 1
     elif size >= 12:
         level = 2
-    elif size >= 9.8 and any(s["bold"] for l in block["lines"] for s in l):
+    elif size >= 9.8 and any(
+        s["bold"] and s["text"].strip() for l in block["lines"] for s in l
+    ):
         level = 3
 
     if level == 0:
@@ -828,7 +870,7 @@ def _collect_lines(page) -> list[dict]:
             size = 0.0
             for s in line["spans"]:
                 t = s["text"]
-                if not t.strip():
+                if t == "":
                     continue
                 spans.append(
                     {
@@ -836,9 +878,12 @@ def _collect_lines(page) -> list[dict]:
                         "size": s["size"],
                         "bold": bool(s["flags"] & 16),
                         "italic": bool(s["flags"] & 2),
+                        "x0": s["bbox"][0],
+                        "x1": s["bbox"][2],
                     }
                 )
                 size = max(size, s["size"])
+            spans = _trim_edge_spaces(spans)
             if not spans:
                 continue
             x0, y0, x1, y1 = line["bbox"]

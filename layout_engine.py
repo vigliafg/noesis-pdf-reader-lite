@@ -209,6 +209,165 @@ def _apply_spacing(md: str, page, profile: LayoutProfile, exclude: Sequence[tupl
     return _spacing_fixes(md)
 
 
+# ── cleanup del markdown (Pack 1) ───────────────────────────────────────────
+# Un unico fix con quattro passate pure: header/footer di stampa, heading,
+# liste, corsivi. Conservativo: agisce solo su pattern riconoscibili.
+
+_HEADING_RE = re.compile(r"^(#{1,6})\s*(.*)$")
+_CAPTION_HEADING_RE = re.compile(
+    r"^#{1,6}\s*\**\s*(table|fig|figure|box|exhibit|chart)\b", re.IGNORECASE
+)
+_STANDALONE_NUM_RE = re.compile(r"^\s*\**\s*\d{1,4}\s*\**\s*$")
+
+
+def _norm_noise(text: str) -> str:
+    """Normalizza una riga per confrontare md e testo di pagina (header/footer)."""
+    return re.sub(r"\s+", " ", re.sub(r"[*_`~]", "", text)).strip().lower()
+
+
+def _margin_noise(page) -> set[str]:
+    """Stringhe che compaiono nei margini alto/basso della pagina (header/footer).
+
+    Solo righe **brevi** (gli header/footer lo sono): una riga lunga di corpo
+    che per caso entra nella banda dei margini non deve diventare un candidato,
+    altrimenti si rischierebbe di cancellare testo legittimo.
+    """
+    if page is None:
+        return set()
+    try:
+        height = page.rect.height
+        blocks = page.get_text("dict")["blocks"]
+    except Exception:
+        return set()
+    top, bottom = 0.08 * height, 0.92 * height
+    found: set[str] = set()
+    for blk in blocks:
+        if blk.get("type") != 0:
+            continue
+        for line in blk["lines"]:
+            y0, y1 = line["bbox"][1], line["bbox"][3]
+            if y1 <= top or y0 >= bottom:
+                text = "".join(s["text"] for s in line["spans"])
+                norm = _norm_noise(text)
+                if norm and len(norm) <= 120 and len(norm.split()) <= 15:
+                    found.add(norm)
+    return found
+
+
+def _is_noise_line(line: str, candidates: set[str]) -> bool:
+    """True se la riga è (o contiene solo) un header/footer di stampa."""
+    if not candidates or len(line) >= 200:
+        return False
+    norm = _norm_noise(line)
+    if norm and norm in candidates:
+        return True
+    # Il reorder può fondere il numero di pagina con l'header:
+    # "656 CHAPTER 18 Endocrine System" o "CHAPTER 18 … 656".
+    for pat in (
+        r"^\s*\**\s*\d{1,4}\s*\**\s+(.*)$",
+        r"^(.*?)\s+\**\s*\d{1,4}\s*\**\s*$",
+    ):
+        m = re.match(pat, line)
+        if m and _norm_noise(m.group(1)) in candidates:
+            return True
+    return False
+
+
+def _strip_running_headers(md: str, page) -> str:
+    """Rimuove header/footer di stampa e numeri di pagina isolati."""
+    candidates = _margin_noise(page)
+    kept: list[str] = [
+        line for line in md.split("\n") if not _is_noise_line(line, candidates)
+    ]
+    # Numeri di pagina isolati in testa/coda (pymupdf4llm li sposta talvolta).
+    non_empty = [i for i, ln in enumerate(kept) if ln.strip()]
+    if non_empty:
+        for idx in (non_empty[0], non_empty[-1]):
+            if _STANDALONE_NUM_RE.match(kept[idx]):
+                kept[idx] = ""
+    return "\n".join(kept)
+
+
+def _normalize_headings(md: str) -> str:
+    """Unisce titoli spezzati, elimina artefatti, retrocede le didascalie."""
+    md = md.replace("~~", "").replace("■", "")
+    lines = md.split("\n")
+    out: list[str] = []
+    for line in lines:
+        if _CAPTION_HEADING_RE.match(line):
+            line = re.sub(r"^#{1,6}\s*", "", line)  # didascalia, non heading
+        m = _HEADING_RE.match(line)
+        if m and out:
+            # Guarda l'ultima riga NON vuota: i titoli spezzati sono separati
+            # da una riga vuota nell'output di pymupdf4llm.
+            j = len(out) - 1
+            while j >= 0 and out[j].strip() == "":
+                j -= 1
+            pm = _HEADING_RE.match(out[j]) if j >= 0 else None
+            if pm and len(pm.group(1)) == len(m.group(1)):
+                prev_text = pm.group(2).rstrip()
+                cur_text = m.group(2).strip()
+                # Solo un titolo che riprende tra parentesi è chiaramente la
+                # continuazione di quello precedente (es. "ABIOTROPHIA AND" +
+                # "(NUTRITIONALLY VARIANT …)"). Niente euristica ALL-CAPS:
+                # fonderebbe titoli legittimi come "INTRODUCTION"/"METHODS".
+                starts_like_continuation = cur_text[:1] in "(["
+                if (
+                    starts_like_continuation
+                    and len(cur_text) < 80
+                    and not prev_text.endswith((".", "!", "?", ":", ";"))
+                ):
+                    out[j] = out[j].rstrip() + " " + cur_text
+                    continue
+        out.append(line)
+    return "\n".join(out)
+
+
+def _repair_lists(md: str) -> str:
+    """Converte i bullet inline (``• x``) in voci di lista.
+
+    Non tocca le righe di tabella markdown (``| … |``): un ``•`` dentro una
+    cella verrebbe trasformato in un a-capo e spezzerebbe la tabella. Non
+    ricuce i bullet di continuazione: ``- a`` / ``- b`` sono indistinguibili da
+    una continuazione, e fonderebbe liste legittime.
+    """
+    converted: list[str] = []
+    for line in md.split("\n"):
+        if line.lstrip().startswith("|"):
+            converted.append(line)
+        else:
+            converted.append(re.sub(r"\s•\s", "\n- ", line))
+    return "\n".join(converted)
+
+
+def _normalize_emphasis(md: str) -> str:
+    """Mette uno spazio dopo l'abbreviazione nei corsivi (``_S.pyogenes_``)."""
+    return re.sub(r"(?<=[_*])([A-Z])\.(?=[a-z])", r"\1. ", md)
+
+
+#: Blocchi di codice fenced: il cleanup non deve toccarne il contenuto.
+_FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
+
+
+def _apply_cleanup(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
+    md = _strip_running_headers(md, page)
+
+    # Protegge i blocchi di codice: dentro un fence `#`, `~~`, `•` sono letterali.
+    fenced: list[str] = []
+
+    def _stash(match: "re.Match[str]") -> str:
+        fenced.append(match.group(0))
+        return f"\x00FENCE{len(fenced) - 1}\x00"
+
+    md = _FENCE_RE.sub(_stash, md)
+    md = _normalize_headings(md)
+    md = _repair_lists(md)
+    md = _normalize_emphasis(md)
+    for i, block in enumerate(fenced):
+        md = md.replace(f"\x00FENCE{i}\x00", block)
+    return md
+
+
 def _when_dehyphenate(p: LayoutProfile, b: str) -> bool:
     return b == "Docling 🧠"
 
@@ -258,6 +417,13 @@ FIX_REGISTRY: Sequence[Fix] = (
         35,
         _when_reorder_columns_title,
         _apply_reorder_columns_title,
+    ),
+    Fix(
+        "cleanup_markdown",
+        "Pulizia: header/footer di stampa, heading, liste, corsivi",
+        50,
+        lambda p, b: True,
+        _apply_cleanup,
     ),
     Fix(
         "spacing",

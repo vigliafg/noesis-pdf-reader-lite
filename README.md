@@ -10,8 +10,8 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
 - Vista affiancata: pagina renderizzata (sinistra) + testo estratto in
   markdown (destra).
 - Engine adattativo sempre attivo (riordino colonne, tabelle, box, legende,
-  de-duplicazione titoli, spaziature) — il piano viene scelto automaticamente
-  per ogni pagina.
+  de-duplicazione titoli, pulizia di header/footer e titoli, spaziature) — il
+  piano viene scelto automaticamente per ogni pagina.
 - Navigazione (prec/succ, spin, zoom), indice (TOC), toggle Markdown.
 - Tab testo: Originale / Traduzione / 🖼️ Immagini. L'Originale mostra un
   unico testo: l'output del motore adattativo (auto) oppure, quando ci sono

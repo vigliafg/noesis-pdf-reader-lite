@@ -6,3 +6,6 @@ __pycache__/
 build/
 dist/
 *.spec
+
+# PDF locali di test (grandi, non versionati)
+*.pdf
