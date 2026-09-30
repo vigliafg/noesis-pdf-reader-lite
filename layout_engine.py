@@ -114,6 +114,39 @@ def _has_toc(page) -> bool:
         return False
 
 
+#: Soglia minima di caratteri verticali perché una pagina sia "sideways".
+_SIDEWAYS_MIN_CHARS = 60
+
+
+def detect_sideways_rotation(page) -> int:
+    """Rotazione da applicare (0/90/270) se il testo è disegnato a 90°.
+
+    Alcune pagine landscape (tabelle grandi) hanno il testo ruotato di 90°
+    *senza* ``page.rotation``: pymupdf4llm le legge lungo l'asse sbagliato e
+    fonde/persé righe. Rilevata la direzione, ``page.set_rotation`` la
+    raddrizza. Ritorna 0 se la pagina è già orizzontale o prevalentemente tale.
+    """
+    if page is None:
+        return 0
+    horiz = vert = 0
+    dy_sum = 0.0
+    try:
+        for b in page.get_text("dict").get("blocks", []):
+            for ln in b.get("lines", []):
+                n = sum(len(s.get("text", "")) for s in ln.get("spans", []))
+                dx, dy = ln.get("dir", (1, 0))
+                if abs(dx) >= 0.7:
+                    horiz += n
+                elif abs(dy) >= 0.7:
+                    vert += n
+                    dy_sum += dy * n
+    except Exception:
+        return 0
+    if vert < _SIDEWAYS_MIN_CHARS or vert <= horiz:
+        return 0
+    return 90 if dy_sum < 0 else 270
+
+
 def profile_page(page, exclude: Sequence[tuple] = ()) -> LayoutProfile:
     """Misura il layout della pagina UNA volta (puro, deterministico).
 
@@ -208,9 +241,37 @@ def _apply_split_glued(md: str, page, profile: LayoutProfile, exclude: Sequence[
     return _split_cross_column_paragraphs(md, page)
 
 
+_RETAIN_TOKEN_RE = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ0-9]+")
+_FRAG_LINE_RE = re.compile(r"(?m)^[ \t]*[-*+•]?[ \t]*[0-9A-Za-z][.)]?[ \t]*$")
+
+
+def _content_retention(a: str, b: str) -> float:
+    """Frazione di termini (insiemi, case-insensitive) di ``a`` presenti in ``b``."""
+    ta = {t.lower() for t in _RETAIN_TOKEN_RE.findall(a) if len(t) >= 2}
+    tb = {t.lower() for t in _RETAIN_TOKEN_RE.findall(b) if len(t) >= 2}
+    return (len(ta & tb) / len(ta)) if ta else 1.0
+
+
+def _fragment_lines(s: str) -> int:
+    """Righe che sono un solo token ("- 2", "d", "1."): segnale di garble."""
+    return len(_FRAG_LINE_RE.findall(s))
+
+
 def _apply_reorder_columns(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
     from main import _column_aware_markdown
-    return _column_aware_markdown(page, move_title=False, exclude=exclude) or md
+    reordered = _column_aware_markdown(page, move_title=False, exclude=exclude) or md
+    # Rete di sicurezza: il riordino rigenera la pagina dai blocchi e può
+    # **perdere** contenuto (box/tabelle laterali) o introdurre righe-frammento
+    # (falsa tabella). Meglio conservare il raw (ordine eventualmente da
+    # sistemare) che perdere contenuto o degradarlo: si ripiega sul raw se
+    # (a) perde >15% dei termini oppure (b) aggiunge ≥5 righe-frammento.
+    if is_fix_disabled("reorder_guard"):
+        return reordered
+    if _content_retention(md, reordered) < 0.85:
+        return md
+    if _fragment_lines(reordered) > _fragment_lines(md) + 4:
+        return md
+    return reordered
 
 
 def _apply_reorder_columns_title(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
@@ -239,12 +300,69 @@ _STANDALONE_NUM_RE = re.compile(r"^\s*(?:#{1,6}\s*|[-*+]\s+|\d+\.\s+)*\**\s*\d{1
 #: nel markdown. Senza questo la riga "travestita" non veniva riconosciuta.
 _MD_PREFIX_RE = re.compile(r"^\s*(?:#{1,6}\s*|[-*+]\s+|\d+\.\s+)*")
 
+#: Running head "48 CHAPTER 1 Cellular structure and function" (numero pagina
+#: davanti al marcatore): è chrome di pagina, non un titolo di capitolo.
+_RUNNING_HEAD_RE = re.compile(
+    r"^\s*\**\s*\d{1,4}\s*\**\s+(?:chapter|part|section)\s+\d+\b", re.IGNORECASE
+)
+
 
 def _norm_noise(text: str) -> str:
     """Normalizza una riga per confrontare md e testo di pagina (header/footer)."""
-    s = re.sub(r"[*_`~]", "", text)
+    s = re.sub(r"<[^>]{0,40}>", "", text)  # tag HTML (<mark>, <sup>, <br>…)
+    s = re.sub(r"[*_`~]", "", s)
     s = _MD_PREFIX_RE.sub("", s)
-    return re.sub(r"\s+", " ", s).strip().lower()
+    s = re.sub(r"\s+", " ", s).strip().lower()
+    # header con apice: "Section II n" (get_text) vs "Section IIn" (md) → uguali
+    s = re.sub(r" (?=\w\b)", "", s)
+    return s
+
+
+#: Tag HTML che pymupdf4llm emette per evidenziazioni/apici e che non hanno
+#: senso in un markdown "pulito": vanno rimossi (rumore) e, soprattutto, non
+#: devono impedire il riconoscimento di header/footer (`<mark>`/`<sup>` li
+#: "travestivano", impedendone la rimozione — vedi Pack 5).
+_HTML_TAG_RE = re.compile(
+    r"</?(?:mark|sup|sub|span|b|i|u|em|strong|small|big|font|a|code|pre|"
+    r"blockquote|div|p|br|hr)\b[^>]*>",
+    re.IGNORECASE,
+)
+
+
+def _normalize_html_tags(md: str) -> str:
+    """Rimuove i tag HTML residui; ``<br>`` diventa uno spazio."""
+    if "<" not in md:
+        return md
+    md = re.sub(r"<br\s*/?>", " ", md, flags=re.IGNORECASE)
+    return _HTML_TAG_RE.sub("", md)
+
+
+_CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
+def _normalize_replacement_chars(md: str) -> str:
+    """Normalizza U+FFFD (glifo assente) e i caratteri di controllo in spazi.
+
+    Nei titoli/indici con font senza mappatura pymupdf emette ``\ufffd`` (o un
+    carattere di controllo C0) al posto di un separatore (es. indice ox2:
+    "synthesis\ufffd 108"). Uno spazio è la resa più leggibile; quei caratteri
+    non portano contenuto recuperabile.
+    """
+    if "\ufffd" not in md and not _CTRL_RE.search(md):
+        return md
+    md = re.sub(r"[ \t]*\ufffd[ \t]*", " ", md)
+    return _CTRL_RE.sub(" ", md)
+
+
+def _normalize_soft_hyphens(md: str) -> str:
+    """Ricomporre le parole spezzate da un soft hyphen (U+00AD).
+
+    ``dom\\xad peridone`` → ``domperidone``: il soft hyphen è invisibile e
+    indica sempre una sillabazione a fine riga, non un trattino vero.
+    """
+    if "\u00ad" not in md:
+        return md
+    return re.sub(r"\u00ad[ \t]*", "", md)
 
 
 #: Didascalia numerata ("TABLE 2 …", "FIG. 14.10 …"): è contenuto, non un
@@ -403,7 +521,15 @@ def _margin_noise(page, exclude: Sequence[tuple] = ()) -> set[str]:
 
 def _is_noise_line(line: str, candidates: set[str]) -> bool:
     """True se la riga è (o contiene solo) un header/footer di stampa."""
-    if not candidates or len(line) >= 200:
+    if len(line) >= 200:
+        return False
+    # Running head tipico "48 CHAPTER 1 Cellular structure and function": il
+    # numero di pagina davanti al marcatore è la firma dell'header (un titolo
+    # di capitolo vero non ha la pagina davanti). I margini a volte non lo
+    # intercettano (bande grafiche), quindi lo si riconosce dal pattern.
+    if _RUNNING_HEAD_RE.match(line):
+        return True
+    if not candidates:
         return False
     norm = _norm_noise(line)
     if norm and norm in candidates:
@@ -461,8 +587,41 @@ def _strip_running_headers(md: str, page) -> str:
     return "\n".join(kept)
 
 
+#: Nel font "spaziato" di alcuni libri (mw15) pymupdf4llm separa i glifi con
+#: spazi e marca la lettera ``i`` in corsivo-barrato: ``**D** **~~i~~ vert**``
+#: per "Diverticulum". Due passate ricompongono il titolo.
+_SPACED_LETTER_RE = re.compile(r"[ \t]*~~([A-Za-z])~~[ \t]*")
+_BOLD_RUNS_ONLY_RE = re.compile(
+    r"^\s*(#{1,6})\s*((?:\*\*[^*\n]+\*\*)(?:[ \t]+\*\*[^*\n]+\*\*)+)\s*$"
+)
+
+
+def _rejoin_spaced_headings(md: str) -> str:
+    """Ricompone i titoli resi a lettere separate (font "spaziato")."""
+    if "~~" in md:
+        # 1) la lettera corsiva isolata torna attaccata alla parola: "D ~~i~~ vert"
+        md = _SPACED_LETTER_RE.sub(r"\1", md)
+    # 2) un titolo fatto di soli run in grassetto adiacenti e' un titolo
+    #    spezzato: uniscilo. (Un titolo con altro testo tra i run, es.
+    #    "**A** = **B**", non viene toccato.) Il segnale e' ``** **``: senza
+    #    di esso si salta il passaggio per riga (costoso su markdown grande).
+    if "** **" not in md:
+        return md
+    out: list[str] = []
+    for line in md.split("\n"):
+        m = _BOLD_RUNS_ONLY_RE.match(line)
+        if not m:
+            out.append(line)
+            continue
+        joined = "".join(re.findall(r"\*\*([^*]+)\*\*", line))
+        joined = re.sub(r"(?<=-)\s+(?=[A-Za-z])", "", joined)
+        out.append(f"{m.group(1)} **{joined}**")
+    return "\n".join(out)
+
+
 def _normalize_headings(md: str) -> str:
     """Unisce titoli spezzati, elimina artefatti, retrocede le didascalie."""
+    md = _rejoin_spaced_headings(md)
     md = md.replace("~~", "").replace("■", "")
     lines = md.split("\n")
     out: list[str] = []
@@ -808,7 +967,7 @@ _MD_TABLE_RE = re.compile(
 #: frasi in grassetto e vanno lasciate intatte.
 _TABLE_CAPTION_RE = re.compile(
     r"^\s*(?:#{1,6}\s*)?\**\s*"
-    r"(?P<label>table)\s*(?P<num>\d[\w.\-–]*)"
+    r"(?P<label>table)\s*(?P<num>[A-Za-z]?\d[\w.\-–]*)"
     r"\**\s*(?P<rest>.*)$",
     re.IGNORECASE,
 )
@@ -1120,6 +1279,11 @@ def _rebuild_tables_md(md: str, page, exclude: Sequence[tuple] = ()) -> str:
 
 
 def _apply_rebuild_tables(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
+    # Su una pagina ruotata (landscape a 90°) find_tables/get_textbox mappano le
+    # celle in coordinate sbagliate e la ricostruzione *peggiora* la tabella:
+    # l'estrazione ruotata di pymupdf4llm è già corretta, quindi non si tocca.
+    if page is not None and getattr(page, "rotation", 0):
+        return md
     return _rebuild_tables_md(md, page, exclude)
 
 
@@ -1161,6 +1325,12 @@ _FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
 
 
 def _apply_cleanup(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
+    if not is_fix_disabled("cleanup_html_tags"):
+        md = _normalize_html_tags(md)
+    if not is_fix_disabled("cleanup_fffd"):
+        md = _normalize_replacement_chars(md)
+    if not is_fix_disabled("cleanup_soft_hyphens"):
+        md = _normalize_soft_hyphens(md)
     md = _strip_running_headers(md, page)
 
     # Protegge i blocchi di codice: dentro un fence `#`, `~~`, `•` sono letterali.

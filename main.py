@@ -868,7 +868,15 @@ def _figure_regions(page, exclude: tuple = ()) -> list[dict]:
                 continue  # deve stare sopra la didascalia, vicino
             if min(c[2], caption[2]) - max(c[0], caption[0]) <= 0:
                 continue  # colonna diversa
-            sel.append(c)
+            # La figura sta nella colonna della didascalia: un cluster grafico
+            # a tutta larghezza (banner d'header, righe di tabella) non deve
+            # essere "assorbito" e far considerare figura l'intera fascia alta.
+            col_pad = 40.0
+            cx0 = max(c[0], caption[0] - col_pad)
+            cx1 = min(c[2], caption[2] + col_pad)
+            if cx1 - cx0 < 40:
+                continue
+            sel.append((cx0, c[1], cx1, c[3]))
         if not sel:
             continue
         figures.append(
@@ -989,7 +997,7 @@ def _link_figures(md: str, page, dest_dir, page_num: int) -> str:
                 n = _norm_text(ln)
                 if (
                     2 <= len(n) <= 120
-                    and len(n.split()) <= 15
+                    and len(n.split()) <= 8
                     and (n in internal or set(n.split()) <= itokens)
                 ):
                     if k < idx:
@@ -1622,7 +1630,20 @@ def _extract_pymupdf4llm(
             kwargs: dict = {}
             if lang:
                 kwargs["ocr_language"] = lang
-            md = pymupdf4llm.to_markdown(path, pages=[page_num], **kwargs)
+            # Pagine con testo a 90° (landscape senza /Rotate): raddrizza prima
+            # di estrarre, altrimenti pymupdf4llm legge lungo l'asse sbagliato.
+            md = None
+            try:
+                with pymupdf.open(path) as doc:
+                    rot = layout_engine.detect_sideways_rotation(doc[page_num])
+                    if rot:
+                        doc[page_num].set_rotation(rot)
+                        md = pymupdf4llm.to_markdown(
+                            doc, pages=[page_num], **kwargs)
+            except Exception:
+                md = None
+            if md is None:
+                md = pymupdf4llm.to_markdown(path, pages=[page_num], **kwargs)
             return md.strip() or T("extract.empty_page")
         except Exception as e:  # noqa: BLE001 — degrada al fallback, non crasha
             last_error = e
@@ -1648,6 +1669,14 @@ def _apply_engine_on_page(
     next to their caption ("corpo unico + didascalia").
     """
     label = "manual" if (include or exclude) else "auto"
+    rot = 0
+    if page is not None:
+        try:
+            rot = layout_engine.detect_sideways_rotation(page)
+            if rot:
+                page.set_rotation(rot)
+        except Exception:
+            rot = 0
     try:
         if include:
             result = _inclusion_order_markdown(page, include, exclude=exclude) or text
@@ -1662,6 +1691,12 @@ def _apply_engine_on_page(
                 result = layout_engine.apply_plan(text, page, profile, plan) or text
     except Exception:
         return text, label
+    finally:
+        if rot:
+            try:
+                page.set_rotation(0)
+            except Exception:
+                pass
     if figures_dir is not None:
         try:
             result = _link_figures(result, page, figures_dir, page_num)

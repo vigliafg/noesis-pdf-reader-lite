@@ -468,21 +468,23 @@ metriche in `/tmp/opencode/arb/{base,now,now50}.json`, markdown in
 
 ---
 
-## §13 — Piano di domani (2026-09-30): test su 150 pagine nuove
+## §13 — Piano di oggi (2026-09-30): test su **120 pagine** nuove (`corpus2`)
 
-**Obiettivo**: validare l'engine attuale (dopo il merge del Pack 4) su un corpus
-**nuovo di 150 pagine** estratte dal corpus degli 8 PDF, con **valutazione
-automatica (checklist + punteggio)** e **arbitraggio visivo** fatto dall'agente
-(modello con visione): è l'agente a decidere se il markdown è leggibile in senso
-naturale.
+**Obiettivo**: validare l'engine attuale (dopo il merge del Pack 4) su **12 PDF
+nuovi e più difficili** (cartella `corpus2/`, layout più impegnativi), prendendo
+**10 pagine NON consecutive per PDF (120 in totale)**, casuali ma distribuite in
+10 punti diversi dell'intero PDF (una per decimo → rappresentative). Con
+**valutazione automatica (checklist + punteggio + velocità)** e **arbitraggio
+visivo** fatto dall'agente (modello con visione): è l'agente a decidere se il
+markdown è una rappresentazione **perfettamente leggibile e corretta** del PDF.
 
 ### Task
 | # | Task | Note |
 |---|---|---|
-| E1 | Generare il corpus di **150 pagine** (random + significative, escluse tutte quelle già usate: corpus2 80, 5 viste, vis_pages 24, corpus50 50) | script `select_corpus150.py`; salvare in `/tmp/opencode/pack5/corpus150.json` |
-| E2 | Eseguire l'**arbitro** (`arbiter.py pack150 corpus150.json`) e raccogliere metriche per-difetto + punteggio | usare `python -u`; una riga per pagina |
-| E3 | **Arbitraggio visivo** dell'agente su un campione rappresentativo (≈20 pagine: 2 colonne, box, tabelle, figure, indice/riferimenti): render PNG + confronto col markdown | `render_pages.py` |
-| E4 | Compilare il **verdetto**: metriche, difetti residui, giudizio di leggibilità (voto 1-100) e accettabilità | sezione nuova §14 |
+| E1 | Generare il corpus di **120 pagine** (10 per ciascuno dei 12 PDF di `corpus2/`, una per decimo del PDF → non consecutive e rappresentative) | `select_corpus.py` → `/tmp/opencode/pack5/corpus120.json` |
+| E2 | Eseguire l'**arbitro** (checklist + punteggio + timing per pagina) con **timeout per pagina** e log di avanzamento | `run_batch.py`; una riga per pagina, `flush` |
+| E3 | **Arbitraggio visivo** dell'agente: render PNG input + markdown output, confronto diretto pagina↔md | PNG in `/tmp/opencode/pack5/pages/` |
+| E4 | Compilare il **report/verdetto**: velocità, efficienza, correttezza/leggibilità (voto 1-100), difetti residui | sezione nuova §14 |
 | E5 | Se emergono difetti: fix mirato + test; altrimenti ok | follow-up |
 
 ### Metodo di valutazione (doppio)
@@ -495,15 +497,14 @@ naturale.
 ### Comandi
 ```bash
 cd /home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite
-# E1 — genera il corpus
-.venv/bin/python /tmp/opencode/select_corpus150.py
-# E2 — arbitro sulle 150 pagine (engine attuale)
-.venv/bin/python -u /tmp/opencode/arbiter.py pack150 /tmp/opencode/pack5/corpus150.json
-# E3 — render del campione per l'arbitraggio visivo
-.venv/bin/python /tmp/opencode/render_pages.py /tmp/opencode/vis5 /tmp/opencode/pack5/sample.json
+# E1 — genera il corpus (10 pagine/PDF, una per decimo)
+.venv/bin/python /tmp/opencode/pack5/select_corpus.py
+# E2 — arbitro sulle 120 pagine (engine attuale), timeout+progresso
+.venv/bin/python -u /tmp/opencode/pack5/run_batch.py /tmp/opencode/pack5/corpus120.json /tmp/opencode/pack5/out
+# E3 — arbitraggio visivo: PNG già prodotti in /tmp/opencode/pack5/pages/
 ```
-Artefatti: `/tmp/opencode/arb/pack150.json`, `/tmp/opencode/arb/pack150.md/`,
-`/tmp/opencode/vis5/*.png`.
+Artefatti: `/tmp/opencode/pack5/out/results.jsonl` (+ `summary.json`),
+`/tmp/opencode/pack5/out/md/*.md`, `raw/*.md`, `pages/*.png`, `fig/`.
 
 ### Accettazione
 - Header/pagina, glifi-heading, titoli spezzati, maiuscole fuse, didascalie
@@ -517,3 +518,312 @@ Artefatti: `/tmp/opencode/arb/pack150.json`, `/tmp/opencode/arb/pack150.md/`,
 Il confronto "prima/dopo" non serve se non ci sono regressioni: il riferimento è
 quanto già validato in §12 (29 pagine 96.0→99.4; 50 pagine 99.0).
 
+
+---
+
+## §14 — Report Pack 5: 120 pagine `corpus2` (2026-09-30)
+
+Arbitro: **l'agente** (visione pagina↔markdown) + checklist automatica.
+Baseline: `main` = `cdf3784` (dopo il merge del Pack 4). Nessun fix applicato
+durante il test.
+
+### 1. Metodo
+- **Corpus**: 12 PDF nuovi e più difficili (`corpus2/`), **10 pagine per PDF =
+  120**, una per decimo del documento (random, non consecutive: distanza minima
+  17 pagine), rappresentative di tutto il PDF.
+- **Pipeline reale**: `pymupdf4llm.to_markdown(doc, pages=[p], ocr_language="eng")`
+  → `main._apply_engine_on_page(page, raw, figures_dir=...)`; Tesseract per gli
+  scan.
+- **Robustezza**: `signal.alarm` per pagina (240 s), `try/except` per pagina,
+  una riga di log con `flush` per ogni pagina, `results.jsonl` scritto in append
+  dopo **ogni** pagina. Durata ~6 min, stato sempre visibile, **0 blocchi**.
+- Harness: `/tmp/opencode/pack5/{select_corpus,run_batch,reanalyze,report,review_list}.py`;
+  artefatti in `/tmp/opencode/pack5/out/` (md, raw, pages PNG, fig, results).
+
+### 2. Velocità ed efficienza
+| fase | media | mediana | max | totale | quota |
+|---|---|---|---|---|---|
+| estrazione (OCR+parse) | 0.73 s | 0.56 s | 3.46 s | 87.9 s | 24 % |
+| engine (layout+cleanup+tabelle+figure) | 2.22 s | 1.18 s | 17.41 s | 266.1 s | 72 % |
+| render PNG (arbitraggio) | 0.05 s | — | — | 5.8 s | 2 % |
+| **totale** | **3.1 s/pagina** | | | **370.5 s** | **19.4 pagine/min** |
+
+- 120/120 pagine OK, **0 errori, 0 timeout**.
+- L'engine è il collo di bottiglia (~2.2 s/pagina; picchi 17 s su `to22`, PDF
+  tabellare/denso). L'estrazione è veloce anche con OCR (0.73 s medi).
+
+### 3. Checklist automatica (detector tarati)
+- **Punteggio medio 96.5/100**; mediana 98; 39/120 pagine con score 100.
+- Occorrenze: `html_markup` 58 · `fig_missing` 24 · `caption_fragment` 23 ·
+  `header_leak` 21 · `page_num_leak` 20 · `heading_glued` 15 ·
+  `table_misalign` 12 · `split_word_heading` 12 · `split_heading` 8 · `glue` 6 ·
+  `caps_merged` 2 · `fffd` 154.
+- **Attenzione**: come nel Pack 4, buona parte di questi flag sono **falsi
+  positivi** dei detector (vedi §5); il numero va letto insieme
+  all'arbitraggio visivo, che è la fonte autorevole.
+
+Peggior punteggio: `ox2_0959` 0 (indice ruotato a 3 colonne), `to22_0251` 64
+(falsa tabella), `to22_0945` 90, `oh2_0313` 90.5, `na25_0346` 89.5.
+
+### 4. Difetti REALI (arbitraggio visivo)
+
+**ALTA severità**
+1. **`to22_0251` — falsa ricostruzione di tabella.** Una pagina a *lista
+   definizionale* (Tabella 6, voci A/B/C/S) viene riconosciuta come "tabella" da
+   `find_tables` e `rebuild_tables` la distrugge: le etichette A/B/C/S spariscono
+   e compaiono righe spurie `- 1`, `- 2`, `- 3`, `- d`. Contenuto/struttura persi.
+2. **`to22_0762` — box laterale perso + ordine rotto.** Il box rosa
+   "Bactericidal/Bacteriostatic" (tabella) **non compare** nel markdown
+   (retention 0.50) e il box di destra "Reasons for Combination Therapy" viene
+   inserito **dentro** la lista di sinistra, spezzando una frase. Il punteggio
+   automatico dava 100: caso non rilevato dalla checklist.
+
+**MEDIA severità**
+3. **Markup HTML nel markdown (`<mark>`, `<sup>`, `<br>`).** 28 pagine su 7 PDF
+   (oh2 10, fe23 9, ox2 4, ox16 3, na25 3, co26 1, fe22 1). Doppio danno: (a) è
+   rumore HTML in un file markdown; (b) **impedisce la rimozione di header/
+   footer**, perché `_norm_noise` non cancella i tag → **header trapelati
+   sistematici**: `fe23` 10/10 pagine ("104 Section I`<sup>n</sup>` Diagnostic
+   Imaging"), `oh2_0313` ("**`<mark>`8 The nervous sysTem`</mark>`**"),
+   `ox2_0616` ("600 CHAPTER 9 **`<mark>`Endocrine organs`</mark>`**"),
+   `ox16_0244` (idem).
+4. **`fe23_0064` — pagina ruotata 90° (landscape).** Tabella grande + note:
+   il markdown perde le note a piè di tabella e fonde le colonne
+   (retention 0.41). `page.rotation` è 0 ma il testo è disegnato a 90°.
+5. **`ox2` — indice a 3 colonne.** `profile_page` rileva `columns=1`
+   (`splits` non trovati, `body=1`) → `reorder_columns` non parte → le 3 colonne
+   restano **interlacciate** (ordine di lettura errato). In più 154 `�`
+   (glifo mancante nel PDF sorgente) e numero pagina `943` trapelato.
+
+**BASSA severità**
+6. **`mw15` — titoli con font "spaziato".** 7/10 pagine hanno heading con parole
+   spezzate: `**D** **i agnost** **i c Test** **i ng**`, `**Esophageal Var** **i ces**`,
+   `**Herpes S** **i mplex**`. Leggibili ma visivamente rotti.
+7. **`ne17_0024` — voce numerata promossa a heading.** `### **3** : open mouth
+   sufficiently to place` + frase spezzata su due righe.
+8. **Numeri di pagina isolati trapelati** (`ox2` 6, `na25_0346`, `ne17_0090`,
+   `fe22_4258` "> **1954 Section IV**").
+9. **`co26_1260` — heading spurio `# a`** (etichetta figura).
+10. **Titoli bold incollati al testo**: `fe22_2615` ("EPIDEMIOLOGY &
+    DEMOGRAPHICS **PREVALENCE (IN U.S.):**"), `mo21_0685` ("…heel stick.
+    **Abnormal findings**"). 15 occorrenze.
+
+**INFORMATIVI (non difetti)**
+- `fig_missing` (24 pagine): quasi sempre un **flowchart/diagramma catturato
+  come testo** `>` (contenuto preservato, es. `al17_0344`, `al17_0254`,
+  `fe22_1194`) oppure una figura resa come immagine (Fix 7). Accettabile.
+- Retention <0.90: quasi sempre **testo interno figura rimosso per design**
+  (fix 7) — il contenuto è nell'immagine linkata (`to22_0339`, `to22_0945`,
+  `ne17_0269`, `al17_0254`, `ox2_0765/0343`) o **watermark** rimosso
+  (`mo21_0099` "https://t.me/ALGRAWANY33"). Fanno eccezione i reali `to22_0762`,
+  `to22_0251`, `fe23_0064`.
+
+### 5. Falsi positivi dei detector (da non contare come difetti)
+- `caption_fragment` (23): etichette bold di paragrafo (`**Treatment**`,
+  `**Definition**`, `**Etiology**`) e voci d'indice (`**estrogen fractions 393**`).
+- `glue` (6): artefatti OCR del **maiuscoletto** ("sysTem", "skIlls", "sympToms",
+  "retrOgrade", "deLange"), non parole incollate dall'engine.
+- `caps_merged` (2): mnemonica in maiuscolo ("Erections POINT AND SHOOT").
+- `split_heading`: parte sono coppie legittime heading + etichetta bold.
+- `header_leak` `co26_0489`: è il **titolo del Box 2** (contenuto).
+- `fig_missing` e `fffd`: vedi sopra (design / sorgente).
+
+### 6. Cosa funziona bene
+- Prosa a 1 e 2 colonne: **ordine di lettura corretto**, header/footer e numeri
+  di pagina rimossi, spaziatura buona, tabelle per lo più corrette, figure
+  renderizzate e linkate accanto alla didascalia.
+- `al17` 99.8, `mw15` 100 (a parte i titoli spaziati), `ox16` 100, `fe22` 98,
+  `mo21` 98.5: pagine complesse (box, tabelle, figure, riferimenti) rese bene.
+- Robustezza operativa: nessun blocco, timeout per pagina mai scattato,
+  avanzamento sempre visibile.
+
+### 7. Verdetto (arbitro = agente)
+- **Leggibilità complessiva ≈ 92/100.** Ripartizione stimata delle 120 pagine:
+  ~85 % corrette e scorrevoli; ~10 % con difetti cosmetici minori (titoli
+  spaziati/incollati, markup HTML, numero pagina); ~5 % con problemi seri
+  (interlacciamento indice 3 colonne, corruzione da falsa tabella, box perso,
+  pagina ruotata).
+- **Il markdown è una rappresentazione corretta del PDF nella grande
+  maggioranza delle pagine**, ma **non ancora "perfetta"**: i difetti si
+  concentrano in **stili editoriali specifici** (`fe23`/`ox16`/`oh2` con header
+  colorati → markup; `ox2` indice a 3 colonne; `mw15` titoli spaziati; PDF con
+  pagine landscape).
+- **Efficienza**: buona (19 pagine/min; ~3 s/pagina), engine dominante.
+
+### 8. Raccomandazioni — Pack 5 (fix mirati, in ordine di impatto)
+1. **Normalizzare i tag HTML** (`<mark>`, `<sup>`, `<br>`, `</…>`) in
+   `_norm_noise`/`_strip_md_line` **e** in output → elimina la maggior parte
+   degli header trapelati (fe23/oh2/ox2/ox16) e il rumore HTML.
+2. **Blindare `rebuild_tables`**: non ricostruire quando il "tavolo" è una
+   lista/definizione (righe a 1 cella, colonne incoerenti) → fix `to22_0251`.
+3. **Pagine ruotate/sideways**: rilevare la direzione del testo (≠ orizzontale)
+   ed estrarre con la pagina raddrizzata → fix `fe23_0064`.
+4. **Colonne ≥3 / indici**: migliorare `_detect_column_splits` per 3+ colonne e
+   per gli indici (`has_index`) → fix interlacciamento `ox2`.
+5. **Ricostruire i titoli spaziati**: unire le run di lettere singole nei
+   heading (`**D** **i agnost**…` → `**Diagnostic**`) → fix `mw15`.
+6. **Non promuovere a heading** le voci di lista numerate e tenere intera la
+   frase avvolta → fix `ne17_0024`.
+7. **Preservare i box/tabelle laterali** e non inserirli dentro le liste
+   (to22_0762); normalizzare `U+FFFD` quando adiacente a spazi/cifre (`ox2`).
+8. Ogni fix con chiave di disattivazione in `fix_rules.json` e test dedicati
+   (`tests/test_pack5_*.py`), come per i pack precedenti.
+
+### 9. Pagine ispezionate visivamente (pagina ↔ md)
+`al17` 14/171/254/344/397/447; `ox2` 959/616; `fe23` 64/191; `to22`
+251/339/762/945/1194/1350; `oh2` 313/113; `co26` 489/945; `ne17` 24;
+`mw15` 159; `ox16` 244; `mo21` 685; `na25` 436.
+
+### 10. Riproduzione
+```bash
+cd /home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite
+.venv/bin/python /tmp/opencode/pack5/select_corpus.py
+.venv/bin/python -u /tmp/opencode/pack5/run_batch.py \
+    /tmp/opencode/pack5/corpus120.json /tmp/opencode/pack5/out
+.venv/bin/python /tmp/opencode/pack5/reanalyze.py /tmp/opencode/pack5/out
+.venv/bin/python /tmp/opencode/pack5/report.py /tmp/opencode/pack5/out/results2.jsonl
+```
+
+
+---
+
+
+---
+
+## §15 — Pack 5: fix implementati + report **prima/dopo** (2026-09-30)
+
+Stesse 120 pagine di §14, ri-eseguite dopo i fix e **ri-validate con un audit
+token-per-token** (il punteggio automatico da solo non basta). Esito finale:
+**0 pagine peggiorate, 32 migliorate, nessuna perdita di contenuto, nessun md
+rotto**. Il percorso è stato iterativo: il primo run "dopo" nascondeva 3
+regressioni sottili che l'audit ha trovato e che sono state corrette (vedi §5).
+
+### 1. Fix implementati (tutti disattivabili da `fix_rules.json`)
+| # | Fix | Dove | Chiave |
+|---|---|---|---|
+| A | Tag HTML residui rimossi (`<mark>`,`<sup>`,`<br>`) → non impediscono più la rimozione di header/footer | `_normalize_html_tags`, `_norm_noise`, `_apply_cleanup` | `cleanup_html_tags` |
+| B | `U+FFFD` e caratteri di controllo C0 → spazio | `_normalize_replacement_chars` | `cleanup_fffd` |
+| C | Titoli a lettere separate ricomposti (`**D** **~~i~~ vert**` → `Diverticulum`) | `_rejoin_spaced_headings` | `cleanup_markdown` |
+| D | `_norm_noise` unisce lo spazio davanti a lettera singola ("II n" == "IIn") | `_norm_noise` | `cleanup_markdown` |
+| E | Pagine con testo a 90° raddrizzate | `detect_sideways_rotation` + `_extract_pymupdf4llm`/`_apply_engine_on_page` | — |
+| F | Rete di sicurezza del riordino: fallback al raw se perde >15% di termini o aggiunge ≥5 righe-frammento | `_apply_reorder_columns` (`_content_retention`, `_fragment_lines`) | `reorder_guard` |
+| G | `rebuild_tables` saltato sulle pagine ruotate | `_apply_rebuild_tables` | `rebuild_tables` |
+| H | Soft hyphen `U+00AD` rimosso (parola ricomposta: `dom\xad peridone` → `domperidone`) | `_normalize_soft_hyphens` | `cleanup_soft_hyphens` |
+| I | Running head `NN CHAPTER n …` riconosciuto anche fuori dalle bande-margini | `_RUNNING_HEAD_RE`, `_is_noise_line` | `cleanup_markdown` |
+| J | Didascalie con marcatore a lettera (`TABLE E2 …`) riconosciute e riattaccate | `_TABLE_CAPTION_RE`, `_caption_from_block` | `normalize_table_captions` |
+| K | Regione-figura **clippata alla colonna della didascalia** (non "assorbe" header/tabelle) | `_figure_regions` | `link_figures` |
+| L | Testo interno figura rimosso solo se **etichetta corta** (≤8 parole) | `_link_figures` | `link_figures` |
+
+Test: `tests/test_pack5_corpus2.py` — **17 test** (13 unit + 4 gold su corpus2),
+verdi. Suite completa: **282 test OK** (17 skip). I nuovi passaggi hanno un
+**fast-path** (`"<"`/`"~~"`/`"\ufffd"`/`"\u00ad"` assenti → salta), quindi la
+guardia `CleanupPerformanceTests` resta sotto soglia.
+
+### 2. Risultati finali (120 pagine, prima → dopo)
+| metrica | prima | dopo |
+|---|---|---|
+| punteggio medio | 96.47 | **98.55** |
+| punteggio mediano | 98.00 | **100.00** |
+| punteggio minimo | 0.0 | **90.0** |
+| pagine "clean" (100) | 39 | **71** |
+| pagine con ≥1 difetto | 81 | **49** |
+| retention media | 0.959 | 0.960 |
+| pagine **peggiorate** | — | **0** |
+| pagine **migliorate** | — | **32** |
+
+| difetto (occorrenze) | prima | dopo |
+|---|---|---|
+| html_markup | 58 | **0** |
+| fffd | 154 | **0** |
+| header_leak | 21 | **2** |
+| page_num_leak | 20 | **6** |
+| split_word_heading | 12 | **2** |
+| glue | 6 | **1** |
+| split_heading | 8 | 7 |
+| table_misalign | 12 | 11 |
+| caption_fragment | 23 | 22 |
+| heading_glued | 15 | 16 |
+| fig_missing | 24 | 24 |
+| caps_merged | 2 | 2 |
+
+### 3. Pagine migliorate (32) — nessuna peggiorata
+`to22_0251` **64→100**; `ox2_0959` **0→97**; `fe23_0064` **93.5→100**; `oh2_0313`
+**90.5→100**; `oh2_0422/0600/0682/0734`, `ox16_0058/0244/0394` →100; i 9 `fe23`
+con header `Section IIⁿ`; i 7 `mw15` con titoli spaziati; `co26_0241/1260`,
+`na25_0346/0547`, `ne17_0090/0269`, `ox2_0064`, e i `ox2` con header
+`NN CHAPTER n`.
+
+### 4. Differenze visive confermate (arbitro = agente)
+- `fe23_0064`: prima perdeva le note e fondeva le colonne; dopo riproduce
+  esattamente la tabella `TABLE 1.2` e le note a–b. ✔
+- `to22_0251`: prima righe spurie `- 1/- 2/- 3` e Tabella 6 tagliata; dopo lista
+  definizionale integra (A/B/C/S + corpo) e figura linkata. ✔
+- `oh2_0313`: prima l'header "8 The nervous sysTem" trapelava (in `<mark>`); dopo
+  parte da "Myotonic dystrophy". ✔
+- `mw15_0159`: prima `# **Zenker's D** **i vert** **i culum**`; dopo
+  `# **Zenker's Diverticulum**`. ✔
+
+### 5. Regressioni trovate dall'audit e corrette (punto chiave)
+Il **primo** run "dopo" aveva 0 pagine con punteggio in calo, ma l'audit
+token-per-token ha rivelato 3 problemi **mascherati dal punteggio**:
+1. **`to22_0251` — perdita di contenuto**: con il fallback al raw, Fix 7
+   (figura) eliminava "TABLE 6 … The ABCS" e le etichette A/B/C/S (la regione
+   figura veniva da un cluster a tutta larghezza). → fix K (clip alla colonna)
+   + L (solo etichette corte): contenuto e figura ora entrambi presenti.
+2. **`fe22_1194` — didascalia persa**: `rebuild_tables` sostituiva la tabella e
+   `_caption_from_block` non riconosceva il marcatore "TABLE **E2**" (lettera) →
+   didascalia non riattaccata. → fix J.
+3. **`mw15_0368` — numeri spezzati** ("32 7-3 28") per il fallback troppo
+   aggressivo al raw → soglia retention da 0.93 a 0.85 (fallback solo per
+   `to22_0762`, dove il riordino perde davvero il box).
+Inoltre l'audit ha rivelato **soft hyphen** `U+00AD` in output (7→12 pagine) →
+fix H; e i 4 header `NN CHAPTER n` (ox2) → fix I.
+**Rete di sicurezza aggiuntiva**: ogni run ora è confrontato a livello di token
+prima/dopo (`audit_vs2.py`), così una perdita di contenuto non può più passare
+inosservata dietro un punteggio migliore.
+
+### 6. Residui noti (dopo, non regressi)
+1. **`ox2` indice a 3 colonne** (6 pagine): resta **interlacciato** + numero di
+   pagina isolato. Il testo è **6.4 pt** (< soglia 6.5 di `_body_blocks`).
+   Un tentativo di abbassare la soglia sugli indici è stato **revertito** perché
+   faceva perdere voci d'indice (meglio interlacciato che con perdita).
+2. **`mw15_0263/0293`**: due numeri "spaziati" dal font (`3 0-6 0` = 30-60).
+   Cosmetico, contenuto presente.
+3. **`ne17_0024`**: voce numerata (`- **3** : …`) promossa a heading.
+4. **`fe22_4258`**: `> **1954 Section IV**` (numero/sezione trapelato).
+5. **`to22_0762`**: box reso con lettere spaziate ("C hloramphenicol") — cosmetico.
+6. **`co26_0489`**: "Subjective Global Assessment" è il titolo del Box 2 → **falso
+   positivo** del detector.
+7. `fig_missing` (24), `caption_fragment` (22), `heading_glued` (16),
+   `split_heading` (7), `table_misalign` (11): in gran parte falsi positivi o
+   cosmetici (flowchart-come-testo, etichette bold, intestazioni multi-riga).
+
+### 7. Audit anti-rotture (metodo)
+`audit_vs2.py` confronta i md prima/dopo a livello di token e verifica la
+struttura (celle vuote adiacenti, heading vuoti, fence, celle di tabella). Esito
+sul run finale:
+- **token-contenuto rimossi** solo per header/heading rimossi di proposito
+  (fe23/oh2), per letter-spacing del box (`to22_0762`) o per fusione di parole
+  spezzate (mw15) → **nessuna perdita**.
+- **struttura**: unica variazione = `html_tags` 58→0 (miglioramento).
+- **pagine peggiorate: 0**.
+
+### 8. Velocità
+| fase | prima | dopo |
+|---|---|---|
+| estrazione (media) | 0.73 s | 1.01 s |
+| engine (media) | 2.22 s | 2.32 s |
+| wall (120 pagine) | 370.5 s | 418.8 s |
+
+Il rilevamento della rotazione (`get_text("dict")` per pagina) costa ~0.3 s/pagina.
+
+### 9. Verdetto
+- **Nessun peggioramento e nessun md rotto**: 0 pagine con punteggio in calo,
+  0 perdite di contenuto all'audit, struttura invariata (solo HTML → 0).
+- Tutti i difetti **sistematici** risolti: markup HTML 58→0, header trapelati
+  21→2, `\ufffd` 154→0, titoli spaziati 12→2, numeri pagina 20→6, glue 6→1,
+  soft hyphen 12→1 pagine.
+- **Leggibilità stimata: ~92 → ~97/100**; pagine corrette e scorrevoli da ~85% a
+  ~95%.
+- Restano difetti **localizzati e non regressi** (indice 3 colonne, 2 numeri
+  spaziati, una voce-heading, un box letter-spaziato) → candidati a un Pack 6.

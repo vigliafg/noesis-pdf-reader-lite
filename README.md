@@ -27,10 +27,17 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   righe vengono ricomposti, i titoletti MAIUSCOLI fusi col paragrafo vengono
   separati, la cella-header vuota delle tabelle viene ripristinata in testa, le
   didascalie spezzate su più righe ricomposte e il testo interno alle figure è
-  tolto quando la figura diventa un'immagine. Ogni fix è
+  tolto quando la figura diventa un'immagine. **Pack 5** (layout difficili,
+  `corpus2`): i tag HTML residui (`<mark>`, `<sup>`, `<br>`) vengono rimossi —
+  non impediscono più la rimozione degli header; i `\ufffd` (glifo assente) sono
+  normalizzati; i titoli a lettere separate vengono ricomposti; le pagine con
+  testo a 90° (landscape) vengono raddrizzate prima dell'estrazione; il riordino
+  colonne ripiega sul raw se perderebbe contenuto o produrrebbe righe-frammento.
+  Ogni fix è
   attivabile/disattivabile da `fix_rules.json` (chiavi: `cleanup_markdown`,
   `cleanup_glyph_lines`, `cleanup_caps_runins`, `cleanup_caption_fragments`,
-  `fix_empty_cells`, `normalize_table_captions`, `link_figures`, `spacing`, …).
+  `cleanup_html_tags`, `cleanup_fffd`, `reorder_guard`, `fix_empty_cells`,
+  `normalize_table_captions`, `link_figures`, `spacing`, …).
 - Navigazione (prec/succ, spin, zoom), indice (TOC), toggle Markdown.
 - Tab testo: Originale / Traduzione / 🖼️ Immagini. L'Originale mostra un
   unico testo: l'output del motore adattativo (auto) oppure, quando ci sono
