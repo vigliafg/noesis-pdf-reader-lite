@@ -33,11 +33,16 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   normalizzati; i titoli a lettere separate vengono ricomposti; le pagine con
   testo a 90° (landscape) vengono raddrizzate prima dell'estrazione; il riordino
   colonne ripiega sul raw se perderebbe contenuto o produrrebbe righe-frammento.
-  Ogni fix è
+  **Pack 6** (layout difficili, corpus 3): una voce numerata promossa a heading
+  torna paragrafo e la frase avvolta viene ricucita; un titolo bold incollato in
+  coda a una frase va su riga propria; i numeri "spaziati" dal font
+  (`3 0-6 0` → `30-60`) e la lettera iniziale separata nei box vengono
+  ricomposti. Ogni fix è
   attivabile/disattivabile da `fix_rules.json` (chiavi: `cleanup_markdown`,
   `cleanup_glyph_lines`, `cleanup_caps_runins`, `cleanup_caption_fragments`,
-  `cleanup_html_tags`, `cleanup_fffd`, `reorder_guard`, `fix_empty_cells`,
-  `normalize_table_captions`, `link_figures`, `spacing`, …).
+  `cleanup_html_tags`, `cleanup_fffd`, `cleanup_soft_hyphens`, `cleanup_despace`,
+  `cleanup_numbered_headings`, `cleanup_split_bold_heading`, `reorder_guard`,
+  `fix_empty_cells`, `normalize_table_captions`, `link_figures`, `spacing`, …).
 - Navigazione (prec/succ, spin, zoom), indice (TOC), toggle Markdown.
 - Tab testo: Originale / Traduzione / 🖼️ Immagini. L'Originale mostra un
   unico testo: l'output del motore adattativo (auto) oppure, quando ci sono

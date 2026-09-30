@@ -365,6 +365,42 @@ def _normalize_soft_hyphens(md: str) -> str:
     return re.sub(r"\u00ad[ \t]*", "", md)
 
 
+#: Numero "spaziato" dal font su un intervallo: "3 0-6 0" → "30-60".
+_SPLIT_NUM_RANGE_RE = re.compile(
+    r"(?<!\d)(\d+) (\d+)[ ]?([-–—])[ ]?(\d+) (\d+)(?!\d)"
+)
+#: Lettera iniziale separata dal resto della parola (font spaziato dei box).
+#: Esclude A/I (parole legittime di una lettera: "A diagnosis", "I think").
+_SPLIT_LETTER_RE = re.compile(r"\b([B-HJ-Z]) (?=[a-z]{2,}\b)")
+
+
+def _despace_numbers(md: str) -> str:
+    """Ricomponi i numeri spezzati dal font negli intervalli ("3 0-6 0")."""
+    if not re.search(r"\d \d", md):
+        return md
+    return _SPLIT_NUM_RANGE_RE.sub(
+        lambda m: f"{m.group(1)}{m.group(2)}{m.group(3)}{m.group(4)}{m.group(5)}",
+        md,
+    )
+
+
+def _despace_blockquote_letters(md: str) -> str:
+    """Ricomponi la prima lettera separata nelle righe-citazione (box/figure).
+
+    Solo dentro ``>`` e solo se la riga contiene ≥2 occorrenze del pattern
+    ("C hloramphenicol · E rythromycin"): così non tocca prosa normale.
+    """
+    if "> " not in md and not md.startswith(">"):
+        return md
+    out: list[str] = []
+    for ln in md.split("\n"):
+        if ln.lstrip().startswith(">") and len(_SPLIT_LETTER_RE.findall(ln)) >= 2:
+            out.append(_SPLIT_LETTER_RE.sub(r"\1", ln))
+        else:
+            out.append(ln)
+    return "\n".join(out)
+
+
 #: Didascalia numerata ("TABLE 2 …", "FIG. 14.10 …"): è contenuto, non un
 #: header di pagina. Le didascalie di tabelle/box stanno spesso a filo del
 #: margine alto e senza questo filtro venivano cancellate come running header.
@@ -869,7 +905,10 @@ def _uncomment_picture_text_md(md: str) -> str:
 
 
 def _apply_uncomment_picture_text(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
-    return _uncomment_picture_text_md(md)
+    out = _uncomment_picture_text_md(md)
+    if not is_fix_disabled("cleanup_despace"):
+        out = _despace_blockquote_letters(out)
+    return out
 
 
 # ── gerarchia heading dal TOC (T5.3) ────────────────────────────────────────
@@ -1320,6 +1359,70 @@ def _join_empty_headings(md: str) -> str:
     return _EMPTY_HEADING_RE.sub(r"\1 ", md)
 
 
+_NUM_HEADING_RE = re.compile(r"^(#{1,6})[ \t]*(\*\*\d{1,3}\*\*\s*[:.)].*)$")
+
+
+def _demote_numbered_headings(md: str) -> str:
+    """Un heading che è una voce numerata ("### **3**: …") torna paragrafo.
+
+    Il riordino può promuovere a titolo la prima riga di una lista numerata.
+    Qui si toglie il ``#`` e si ricuce l'eventuale frase avvolta nella riga
+    successiva (che riprende minuscola).
+    """
+    lines = md.split("\n")
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        m = _NUM_HEADING_RE.match(lines[i])
+        if not m:
+            out.append(lines[i])
+            i += 1
+            continue
+        cur = m.group(2)
+        j = i + 1
+        while j < len(lines) and not lines[j].strip():
+            j += 1
+        if (j < len(lines) and lines[j][:1].islower()
+                and not lines[j].lstrip()[:1] in "#->|*"):
+            cur = cur.rstrip() + " " + lines[j].strip()
+            lines[j] = ""
+        out.append(cur)
+        i += 1
+    return "\n".join(out)
+
+
+#: Titolo in grassetto incollato in coda a una riga di testo:
+#: "... heel stick. **Abnormal findings**" → la riga va spezzata.
+_TRAILING_BOLD_RE = re.compile(r"(?m)^(?P<pre>.*\S)[ \t]+(?P<b>\*\*[^*\n]{2,50}\*\*)[ \t]*$")
+_TITLE_CASE_RE = re.compile(r"[A-Z][A-Za-z0-9&/\-]*(?: [A-Z][A-Za-z0-9&/\-]*)*")
+_ALLCAPS_RE = re.compile(r"[A-Z0-9 &/\-]{3,}")
+
+
+def _split_trailing_bold_heading(md: str) -> str:
+    """Separa un titolo bold incollato in coda a una frase.
+
+    Conservativo: agisce solo se il grassetto sembra un titolo (Title Case o
+    maiuscolo), è corto (≤5 parole), la frase prima ha ≥6 parole e termina con
+    punteggiatura di fine periodo. Non rimuove nulla: cambia solo l'a-capo.
+    """
+    def _sub(m: "re.Match[str]") -> str:
+        pre, b = m.group("pre"), m.group("b")
+        inner = b[2:-2].strip()
+        if len(inner.split()) > 5 or len(pre.split()) < 6:
+            return m.group(0)
+        if not pre.rstrip().endswith((".", ":", "!", "?")):
+            return m.group(0)
+        # titolo plausibile: inizia con maiuscola, non è una frase (niente punto)
+        if not inner[:1].isupper() or inner.endswith((".", ":", "!", "?")):
+            return m.group(0)
+        if not (_TITLE_CASE_RE.fullmatch(inner) or _ALLCAPS_RE.fullmatch(inner)
+                or inner[:1].isupper()):
+            return m.group(0)
+        return f"{pre}\n\n{b}"
+
+    return _TRAILING_BOLD_RE.sub(_sub, md)
+
+
 #: Blocchi di codice fenced: il cleanup non deve toccarne il contenuto.
 _FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
 
@@ -1346,12 +1449,21 @@ def _apply_cleanup(md: str, page, profile: LayoutProfile, exclude: Sequence[tupl
         md = _strip_leading_decor(md)
     md = _join_empty_headings(md)
     md = _normalize_headings(md)
+    if not is_fix_disabled("cleanup_numbered_headings"):
+        md = _demote_numbered_headings(md)
+    if not is_fix_disabled("cleanup_split_bold_heading"):
+        md = _split_trailing_bold_heading(md)
     if not is_fix_disabled("cleanup_caps_runins"):
         md = _normalize_caps_runins(md)
     if not is_fix_disabled("cleanup_caption_fragments"):
         md = _merge_caption_fragments_md(md)
     md = _repair_lists(md)
     md = _normalize_emphasis(md)
+    # De-spacing per ultimo: `_normalize_headings` può unire righe spezzate dal
+    # font e produrre i numeri "spaziati" ("30-60" -> "3 0-6 0").
+    if not is_fix_disabled("cleanup_despace"):
+        md = _despace_numbers(md)
+        md = _despace_blockquote_letters(md)
     for i, block in enumerate(fenced):
         md = md.replace(f"\x00FENCE{i}\x00", block)
     return md

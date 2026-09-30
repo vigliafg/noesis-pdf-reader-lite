@@ -827,3 +827,102 @@ Il rilevamento della rotazione (`get_text("dict")` per pagina) costa ~0.3 s/pagi
   ~95%.
 - Restano difetti **localizzati e non regressi** (indice 3 colonne, 2 numeri
   spaziati, una voce-heading, un box letter-spaziato) → candidati a un Pack 6.
+
+
+---
+
+## §16 — Pack 6: corpus 3 + test 150 pagine (corpus 1+2+3) + arbitraggio (2026-09-30)
+
+### 1. Corpus 3 (lavori scientifici OA, layout vari)
+- **58 PDF / 1272 pagine** scaricati e validati (pymupdf), usati nel sorteggio.
+- Fonti: **arXiv** (28, campi diversi: cs/math/physics/q-bio/econ), **PLOS** (12,
+  riviste diverse), **bioRxiv/medRxiv** (8), **Zenodo** (10). Layout: LaTeX 1/2
+  colonne, PLOS 1-colonna con tabelle, preprint, report multilingua.
+- Fonti tentate e **non disponibili** in questa sessione (documentato): Europe PMC
+  (503), OpenAlex (rate-limit), **CDC MMWR** (403), ECDC/ISS (stub/404),
+  Nature/Science/Lancet/Annals (paywall/JS).
+
+### 2. Test random: 150 pagine da corpus 1 + 2 + 3
+- **50 pagine per corpus**, 52 PDF distinti, dedup e non-blank.
+- Engine Pack 6: **150/150, 0 errori**, wall 636 s (~14 pagine/min), **media
+  98.77**, mediana 100, min 84.
+- Per corpus: **corpus1 99.3** (libri), **corpus2 97.8** (12 PDF difficili),
+  **corpus3 99.2** (lavori OA).
+- Difetti (occorrenze): `caption_fragment 25`, `fig_missing 19`, `glue 17`,
+  `table_misalign 14`, `split_heading 10`, `page_num_leak 6`, `heading_glued 5`,
+  `split_word_heading 5`, `caps_merged 3`, `header_leak 1`.
+
+### 3. Prima/dopo (Pack 5 → Pack 6) sulle stesse 150
+- **Identico: 0 migliorate, 0 peggiorate, 0 token persi.** I fix Pack 6 sono
+  **mirati** e non scattano su pagine casuali → nessuna regressione.
+- **Delta mirato** (Pack 5 → Pack 6), verificato sui bersagli:
+  `ne17_0024` heading numerato ✔, `mo21_0685` titolo incollato ✔,
+  `mw15_0263/0293` numeri spaziati ✔, `to22_0762` box `C hloramphenicol` ✔.
+
+### 4. Fix Pack 6 (con chiave `fix_rules.json`)
+| Fix | Funzione | Chiave |
+|---|---|---|
+| Voce numerata non più heading + frase ricucita | `_demote_numbered_headings` | `cleanup_numbered_headings` |
+| Titolo bold incollato in coda alla frase → riga propria | `_split_trailing_bold_heading` | `cleanup_split_bold_heading` |
+| Numeri "spaziati" ("3 0-6 0" → "30-60") | `_despace_numbers` | `cleanup_despace` |
+| Lettera iniziale separata nei box (`>` ) | `_despace_blockquote_letters` | `cleanup_despace` |
+| Running head "NN CHAPTER n …" fuori dalle bande-margini | `_RUNNING_HEAD_RE` | `cleanup_markdown` |
+| Soft hyphen U+00AD e caratteri di controllo | `_normalize_soft_hyphens`/`_normalize_replacement_chars` | `cleanup_soft_hyphens`/`cleanup_fffd` |
+
+Test: `tests/test_pack6_layouts.py` — **12 test** (8 unit + 4 gold). Suite
+completa: **294 test OK** (17 skip).
+
+### 5. Arbitraggio visivo pagina↔md (~22 pagine dei 3 corpus)
+- **corpus1**: `cu25_1694` tabella ok, foto non linkate; `ce24_4026` tabella
+  corretta; `ce24_4347` **caption promossa a heading** (difetto reale) + tabella
+  con celle-label; `su19_1826` figura linkata + didascalia ok; `cu25_1729`
+  ordine corretto; `co23_1029` figure linkate e ordinate ✔.
+- **corpus2**: `fe22_3133` figure non linkate (testo presente); `to22_1519`
+  tabella 27 presente; `co26_0522` ordine corretto; `to22_0437` flowchart reso
+  come lista (contenuto presente); `fe22_3745` tabella con celle fuse;
+  `mw15_0122` **"read in g th is"** (letter-spacing); `ox2_0502` **"fi ltered"**
+  (legatura); `fe22_0804` label run-in (`DEFINITION …`); `to22_0762` box
+  de-spaziato ✔.
+- **corpus3**: `arxiv` pagine math (formule: limite intrinseco del markdown);
+  `biorxiv` con **numeri di riga**; `plos` tabella ok; `zenodo` **drop cap**
+  russo; `biorxiv` figure linkate ✔.
+
+### 6. Residui noti (dopo Pack 6)
+1. **Figure non linkate** (`fig_missing 19`): didascalie tipo "FIG. E3" dove la
+   regione-figura non viene trovata → l'immagine non è incorporata (il testo e
+   la legenda ci sono). Es. `fe22_3133`, `fe22_1386`.
+2. **Legature/spaziature dei font** (`mw15`/`ox2`): "fi ltered" → filtered,
+   "read in g th is" (parole spezzate). Cosmetico; la de-spaziatura attuale
+   copre numeri e box `>`, non la prosa.
+3. **Drop cap** esotici (`zenodo` russo: "А" → heading).
+4. **Numeri di riga biorxiv** (`page_num_leak`).
+5. **Caption → heading** su `ce24_4347` (appendice).
+6. `caption_fragment/heading_glued/split_heading/table_misalign`: in gran parte
+   falsi positivi o cosmetici (etichette bold, intestazioni multi-riga).
+
+### 7. Verdetto Pack 6
+- **Nessuna regressione** sulle 150; nessuna perdita di contenuto; corpus1/2/3
+  omogenei (97.8–99.3, media 98.77).
+- Pack 6 risolve 4 classi di difetti mirati (voce-heading, titolo incollato,
+  numeri spaziati, box letter-spaziato) **senza effetti collaterali**.
+- Leggibilità **ottima sui layout comuni**; residui **localizzati** (figure non
+  linkate, ligature dei font, drop cap) → candidati a un Pack 7 mirato.
+- **Limite di questa sessione**: arbitraggio visivo su ~22 pagine (campione
+  ragionato); le 150 sono coperte automaticamente (checklist + audit token).
+
+### 8. Arbitraggio visivo COMPLETO (150/150 pagine, 15 blocchi da 10)
+In 15 blocchi da 10 pagine (uno per volta, con feedback a fine blocco), ho letto
+le **150 pagine** (PNG pagina ↔ md) e giudicato correttezza e pulizia del md.
+Esito: **~120–125 OK**, **~25–30 ⚠️ localizzati**, **nessuna perdita di testo**,
+**nessun problema d'ordine di lettura** rilevato a video.
+Categorie degli ⚠️ (nessuna bloccante):
+- **figure/flowchart non embeddati** (`fig_missing`): ~15 pagine
+  (`ce24` E-FIGURE, `ha22_2227`, `fe22_2997/1386/3737/3133/0340`,
+  `fe23_0066`, `arxiv_23240/38133/38179`, `plos_0256464_0003`);
+- **flowchart resi come frammenti `>`** (leggibili): `fe22_4186/4219`;
+- **caption promossa a heading**: `ce24_4347`;
+- **numeri di riga** bioRxiv (cosmetico): `biorxiv_512946/578257`;
+- **banner/running head** ripetuto: `zenodo` IJPLA;
+- **letter-spacing dei font** ("fi ltered", "read in g th is", cosmetico):
+  `mw15`/`ox2`.
+Dettaglio per pagina: `/tmp/opencode/pack6/visual_notes.md`.
