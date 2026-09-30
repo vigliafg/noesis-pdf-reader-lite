@@ -934,7 +934,7 @@ Dettaglio per pagina: `/tmp/opencode/pack6/visual_notes.md`.
 Dettaglio completo in `HANDOFF-pack7-figure-2026-10-01.md`.
 
 **Obiettivo**: ridurre a ~0 il residuo `fig_missing` (figure/flowchart non
-embedda(n)dati) emerso dall'arbitraggio Pack 6, senza regressioni; secondari:
+embeddati) emerso dall'arbitraggio Pack 6, senza regressioni; secondari:
 caption→heading, numeri di riga bioRxiv, banner ripetuto, ligature dei font.
 
 **Evidenze**: `ce24` E-FIGURE (2003/3039/3369), `ha22_2227`,
