@@ -926,3 +926,32 @@ Categorie degli ⚠️ (nessuna bloccante):
 - **letter-spacing dei font** ("fi ltered", "read in g th is", cosmetico):
   `mw15`/`ox2`.
 Dettaglio per pagina: `/tmp/opencode/pack6/visual_notes.md`.
+
+---
+
+## §17 — Piano Pack 7 (2026-10-01): figure/flowchart embeddati
+
+Dettaglio completo in `HANDOFF-pack7-figure-2026-10-01.md`.
+
+**Obiettivo**: ridurre a ~0 il residuo `fig_missing` (figure/flowchart non
+embedda(n)dati) emerso dall'arbitraggio Pack 6, senza regressioni; secondari:
+caption→heading, numeri di riga bioRxiv, banner ripetuto, ligature dei font.
+
+**Evidenze**: `ce24` E-FIGURE (2003/3039/3369), `ha22_2227`,
+`fe22_3133/1386/3737/2997/0340`, `fe23_0066`, `arxiv_23240_0025/38133_0007/38179_0009`,
+`plos_0256464_0003`; flowchart `fe22_4186/4219`, `to22_0437`.
+
+**Task**:
+| # | Task |
+|---|---|
+| D1 | Diagnosi `diag_figs.py`: raster vs vettoriale, didascalie non riconosciute |
+| D2 | Didascalie `E-FIGURE`, `FIG. E3`, `Fig.`, numeri con lettera/romani |
+| D3 | Figure vettoriali/composite: regione da `cluster_drawings` sopra la didascalia |
+| D4 | Matching didascalia↔md tollerante (varianti/punteggiatura) |
+| D5 | Flowchart: immagine + testo pulito (o lista leggibile) |
+| D6 | Residui secondari (caption→heading, line numbers, banner, ligature) |
+
+**Accettazione**: `fig_missing` ~15→~0; audit token 0 perdite; 0 pagine
+peggiorate; PNG corretto + didascalia conservata; `tests/test_pack7_figures.py`
++ suite verde. Metodo di verifica: harness Pack 6 (`run_batch`, `reanalyze`,
+`audit_vs2`) + arbitraggio visivo a blocchi di 10.
