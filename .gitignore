@@ -9,3 +9,7 @@ dist/
 
 # PDF locali di test (grandi, non versionati)
 *.pdf
+
+# Output/log di lavoro dei test (grandi, rigenerabili con tools/)
+work/
+logs/

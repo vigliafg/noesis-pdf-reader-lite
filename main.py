@@ -802,10 +802,11 @@ def _detect_boxes(page, page_width: float, table_regions: list[tuple], exclude: 
 # e si inserisce `![figura n](uri)` accanto alla didascalia.
 
 _FIGURE_CAPTION_RE = re.compile(
-    # "FIGURE 148-1", "FIG. 14.10", "Figure: scheme", "Figure A — schematic".
+    # "FIGURE 148-1", "FIG. 14.10", "Figure: scheme", "Figure A — schematic",
+    # "E-FIGURE 175-1" (appendice Cecil: prefisso "E-").
     # Senza numero serve un separatore o una maiuscola dopo: una frase di corpo
     # tipo "Figure shows that …" NON è una didascalia.
-    r"^\s*\**\s*fig(?:ure)?\b\.?\s*(?:\d|[:\-–—]|(?-i:[A-Z]))",
+    r"^\s*\**\s*(?:e[-\s]?)?fig(?:ure)?\b\.?\s*(?:\d|[:\-–—]|(?-i:[A-Z]))",
     re.IGNORECASE,
 )
 
@@ -955,7 +956,9 @@ def _link_figures(md: str, page, dest_dir, page_num: int) -> str:
     if layout_engine.is_fix_disabled("link_figures"):
         return md
     if not re.search(
-        r"(?im)^.{0,80}?\bfig(?:ure)?\.?\s*(?:\d|[:\-–—])", md
+        # come _FIGURE_CAPTION_RE: dopo "fig." vale un numero, un separatore o
+        # una lettera MAIUSCOLA ("FIG. E3"); "Figure shows that" NON passa.
+        r"(?im)^.{0,80}?\bfig(?:ure)?\.?\s*(?:\d|[:\-–—]|(?-i:[A-Z]))", md
     ):
         return md  # nessuna didascalia di figura: nessuna scansione grafica
     regions = _figure_regions(page)
@@ -967,11 +970,17 @@ def _link_figures(md: str, page, dest_dir, page_num: int) -> str:
         if not uri:
             continue
         key = _norm_text(fig["caption"])
+        # Confronto anche senza spazi: gestisce "V PE" (nella pagina) vs "VPE"
+        # (apice <sup> rimosso dal cleanup) o spaziature dei font.
+        key_sq = key.replace(" ", "")
         idx = None
         contains = None
         for j, ln in enumerate(lines):
             n = _norm_text(ln)
             if key[:30] and n.startswith(key[:30]):
+                idx = j
+                break
+            if key_sq and n.replace(" ", "").startswith(key_sq[:30]):
                 idx = j
                 break
             # Didascalia incastonata in testo OCR/junk: la si trova per

@@ -955,3 +955,38 @@ caption→heading, numeri di riga bioRxiv, banner ripetuto, ligature dei font.
 peggiorate; PNG corretto + didascalia conservata; `tests/test_pack7_figures.py`
 + suite verde. Metodo di verifica: harness Pack 6 (`run_batch`, `reanalyze`,
 `audit_vs2`) + arbitraggio visivo a blocchi di 10.
+
+### §17-bis — Esito D1 + primi fix (2026-10-01)
+
+**Set di lavoro ricostruito** (era in `/tmp`, perso col riavvio): `corpus1/`
+(copia di `noesis-pdf-cloner-service/pdfs`, 8 libri), `corpus2/` (12, già
+presente), `corpus3/` (**30 lavori OA / 679 pagine**, script
+`tools/build_corpus3.py`), `corpus150.json` (`tools/select_corpus150.py`),
+harness `tools/{run_batch,detectors,audit,diag_figs}.py`.
+
+**Cause accertate** (D1, pipeline reale su 14 bersagli):
+1. **`FIG. E3`** (Ferri serie E): `_figure_regions` trova la regione, ma la
+   **guardia di `_link_figures`** rifiuta una lettera dopo "fig." → nessun link
+   (`fe22_1386/3133/0340/3737`).
+2. **`E-FIGURE 175-1`** (appendice Cecil): `_FIGURE_CAPTION_RE` non riconosce il
+   prefisso "E-" → nessuna regione (`ce24_2003/3039`).
+3. **Apici**: "V PE" (pagina) vs "VPE" (md, `<sup>` rimosso dal cleanup) → match
+   fallito (`arxiv_38133` fig. 4).
+4. **Pagine scansionate/OCR** (`fe23_0066`): la didascalia esiste solo nell'OCR,
+   non nel layer testo → `_collect_blocks`/`_figure_regions` vuoti → figura non
+   linkata (**residuo**, D3-OCR).
+
+**Fix applicati** in `main.py` (sotto la chiave esistente `link_figures`):
+- `_FIGURE_CAPTION_RE`: prefisso opzionale `e[- ]?` ("E-FIGURE").
+- guardia `_link_figures`: branch lettera maiuscola `(?-i:[A-Z])` ("FIG. E3"),
+  "Figure shows that" resta escluso.
+- match didascalia↔md: confronto **anche senza spazi** (apici/ligature).
+
+**Test**: `tests/test_pack7_figures.py` — **9 test OK** (4 regex + 3 sintetici +
+2 gold su corpus1/corpus2).
+
+**Misura** sui 14 bersagli: `fig_missing` **6 → 1** (resta la pagina OCR); link
+aggiunti su `ce24 2003/3039`, `fe22 1386/3737/3133/0340` e `arxiv_38133` fig. 4.
+
+**Prossimo**: run 150 pagine prima/dopo + audit token-level + arbitraggio visivo;
+poi D3-OCR e i residui secondari (D5/D6).

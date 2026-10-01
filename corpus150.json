@@ -1,0 +1,902 @@
+[
+ {
+  "key": "c1_su18_0200",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/su18.pdf",
+  "page": 200,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_pa23_0474",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/pa23.pdf",
+  "page": 474,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_cu25_1387",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/cu25.pdf",
+  "page": 1387,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_co23_1557",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/co23.pdf",
+  "page": 1557,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_pa19_0738",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/pa19.pdf",
+  "page": 738,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_co23_0386",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/co23.pdf",
+  "page": 386,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_ce24_3201",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/ce24.pdf",
+  "page": 3201,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_su18_0250",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/su18.pdf",
+  "page": 250,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_su19_1854",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/su19.pdf",
+  "page": 1854,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_su19_2250",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/su19.pdf",
+  "page": 2250,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_cu25_0867",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/cu25.pdf",
+  "page": 867,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_su19_1078",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/su19.pdf",
+  "page": 1078,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_cu25_0782",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/cu25.pdf",
+  "page": 782,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_ce24_0211",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/ce24.pdf",
+  "page": 211,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_pa23_0914",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/pa23.pdf",
+  "page": 914,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_ha22_0134",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/ha22.pdf",
+  "page": 134,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_ha22_3637",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/ha22.pdf",
+  "page": 3637,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_su19_1018",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/su19.pdf",
+  "page": 1018,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_pa19_0380",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/pa19.pdf",
+  "page": 380,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_co23_1385",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/co23.pdf",
+  "page": 1385,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_co23_1502",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/co23.pdf",
+  "page": 1502,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_su19_0947",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/su19.pdf",
+  "page": 947,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_cu25_1012",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/cu25.pdf",
+  "page": 1012,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_pa19_1032",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/pa19.pdf",
+  "page": 1032,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_pa23_0219",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/pa23.pdf",
+  "page": 219,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_pa19_0921",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/pa19.pdf",
+  "page": 921,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_cu25_1698",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/cu25.pdf",
+  "page": 1698,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_co23_0077",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/co23.pdf",
+  "page": 77,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_su19_1966",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/su19.pdf",
+  "page": 1966,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_pa23_0389",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/pa23.pdf",
+  "page": 389,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_ce24_2561",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/ce24.pdf",
+  "page": 2561,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_co23_0160",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/co23.pdf",
+  "page": 160,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_pa23_0197",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/pa23.pdf",
+  "page": 197,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_su18_0329",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/su18.pdf",
+  "page": 329,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_pa23_0349",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/pa23.pdf",
+  "page": 349,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_co23_0280",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/co23.pdf",
+  "page": 280,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_ha22_3977",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/ha22.pdf",
+  "page": 3977,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_ce24_2193",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/ce24.pdf",
+  "page": 2193,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_ha22_1455",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/ha22.pdf",
+  "page": 1455,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_ce24_1665",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/ce24.pdf",
+  "page": 1665,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_pa19_0117",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/pa19.pdf",
+  "page": 117,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_pa23_0192",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/pa23.pdf",
+  "page": 192,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_ha22_0445",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/ha22.pdf",
+  "page": 445,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_su18_0304",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/su18.pdf",
+  "page": 304,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_su18_0056",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/su18.pdf",
+  "page": 56,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_cu25_0361",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/cu25.pdf",
+  "page": 361,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_pa19_0796",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/pa19.pdf",
+  "page": 796,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_ce24_2084",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/ce24.pdf",
+  "page": 2084,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_su18_0063",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/su18.pdf",
+  "page": 63,
+  "corpus": "c1"
+ },
+ {
+  "key": "c1_ha22_2334",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus1/ha22.pdf",
+  "page": 2334,
+  "corpus": "c1"
+ },
+ {
+  "key": "c2_al17_0774",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/al17.pdf",
+  "page": 774,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_co26_0444",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/co26.pdf",
+  "page": 444,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_mo21_0320",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/mo21.pdf",
+  "page": 320,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_na25_0321",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/na25.pdf",
+  "page": 321,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_al17_0468",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/al17.pdf",
+  "page": 468,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_to22_1419",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/to22.pdf",
+  "page": 1419,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_oh2_0300",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/oh2.pdf",
+  "page": 300,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_ox2_0258",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/ox2.pdf",
+  "page": 258,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_to22_0368",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/to22.pdf",
+  "page": 368,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_to22_0376",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/to22.pdf",
+  "page": 376,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_fe22_3932",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/fe22.pdf",
+  "page": 3932,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_mw15_0265",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/mw15.pdf",
+  "page": 265,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_mw15_0181",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/mw15.pdf",
+  "page": 181,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_ne17_0238",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/ne17.pdf",
+  "page": 238,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_ne17_0056",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/ne17.pdf",
+  "page": 56,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_co26_0092",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/co26.pdf",
+  "page": 92,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_ne17_0261",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/ne17.pdf",
+  "page": 261,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_ox2_0647",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/ox2.pdf",
+  "page": 647,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_mw15_0186",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/mw15.pdf",
+  "page": 186,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_ox16_0413",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/ox16.pdf",
+  "page": 413,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_co26_1440",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/co26.pdf",
+  "page": 1440,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_fe23_0547",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/fe23.pdf",
+  "page": 547,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_na25_0344",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/na25.pdf",
+  "page": 344,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_na25_0471",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/na25.pdf",
+  "page": 471,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_ox2_0037",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/ox2.pdf",
+  "page": 37,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_mo21_0424",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/mo21.pdf",
+  "page": 424,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_fe23_0144",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/fe23.pdf",
+  "page": 144,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_fe22_1236",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/fe22.pdf",
+  "page": 1236,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_al17_0486",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/al17.pdf",
+  "page": 486,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_mw15_0306",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/mw15.pdf",
+  "page": 306,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_ox16_0225",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/ox16.pdf",
+  "page": 225,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_mo21_0332",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/mo21.pdf",
+  "page": 332,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_oh2_0645",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/oh2.pdf",
+  "page": 645,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_na25_0291",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/na25.pdf",
+  "page": 291,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_fe22_1225",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/fe22.pdf",
+  "page": 1225,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_mo21_0205",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/mo21.pdf",
+  "page": 205,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_co26_1300",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/co26.pdf",
+  "page": 1300,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_fe22_4446",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/fe22.pdf",
+  "page": 4446,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_ox16_0228",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/ox16.pdf",
+  "page": 228,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_mo21_0569",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/mo21.pdf",
+  "page": 569,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_oh2_0558",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/oh2.pdf",
+  "page": 558,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_ox16_0017",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/ox16.pdf",
+  "page": 17,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_oh2_0406",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/oh2.pdf",
+  "page": 406,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_fe23_0332",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/fe23.pdf",
+  "page": 332,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_mw15_0101",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/mw15.pdf",
+  "page": 101,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_fe23_0412",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/fe23.pdf",
+  "page": 412,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_to22_1358",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/to22.pdf",
+  "page": 1358,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_ne17_0260",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/ne17.pdf",
+  "page": 260,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_ox2_0809",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/ox2.pdf",
+  "page": 809,
+  "corpus": "c2"
+ },
+ {
+  "key": "c2_al17_0187",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus2/al17.pdf",
+  "page": 187,
+  "corpus": "c2"
+ },
+ {
+  "key": "c3_zenodo_21452412_0001",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/zenodo_21452412.pdf",
+  "page": 1,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_plos_10.1371_journal.pone.0228263_0010",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/plos_10.1371_journal.pone.0228263.pdf",
+  "page": 10,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_zenodo_21644463_0003",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/zenodo_21644463.pdf",
+  "page": 3,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_plos_10.1371_journal.pone.0059363_0003",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/plos_10.1371_journal.pone.0059363.pdf",
+  "page": 3,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_biorxiv_10.1101_2022.10.19.512946_0008",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/biorxiv_10.1101_2022.10.19.512946.pdf",
+  "page": 8,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2609.38151_0001",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2609.38151.pdf",
+  "page": 1,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2609.37412_0023",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2609.37412.pdf",
+  "page": 23,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2609.33753_0011",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2609.33753.pdf",
+  "page": 11,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2609.30742_0021",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2609.30742.pdf",
+  "page": 21,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_plos_10.1371_journal.pone.0228263_0015",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/plos_10.1371_journal.pone.0228263.pdf",
+  "page": 15,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2609.34576_0008",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2609.34576.pdf",
+  "page": 8,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_plos_10.1371_journal.pgph.0001186_0011",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/plos_10.1371_journal.pgph.0001186.pdf",
+  "page": 11,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_plos_10.1371_journal.pone.0256464_0008",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/plos_10.1371_journal.pone.0256464.pdf",
+  "page": 8,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_zenodo_21644463_0004",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/zenodo_21644463.pdf",
+  "page": 4,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2609.33753_0010",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2609.33753.pdf",
+  "page": 10,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2609.38133_0006",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2609.38133.pdf",
+  "page": 6,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2609.33797_0001",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2609.33797.pdf",
+  "page": 1,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_plos_10.1371_journal.pone.0248753_0002",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/plos_10.1371_journal.pone.0248753.pdf",
+  "page": 2,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2609.38133_0012",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2609.38133.pdf",
+  "page": 12,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2609.38151_0018",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2609.38151.pdf",
+  "page": 18,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_zenodo_21451572_0001",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/zenodo_21451572.pdf",
+  "page": 1,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_zenodo_23057768_0007",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/zenodo_23057768.pdf",
+  "page": 7,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_zenodo_23057768_0010",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/zenodo_23057768.pdf",
+  "page": 10,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2609.37195_0009",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2609.37195.pdf",
+  "page": 9,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_zenodo_21452412_0006",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/zenodo_21452412.pdf",
+  "page": 6,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_biorxiv_10.1101_2022.07.29.501882_0007",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/biorxiv_10.1101_2022.07.29.501882.pdf",
+  "page": 7,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2609.38179_0005",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2609.38179.pdf",
+  "page": 5,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_plos_10.1371_journal.pone.0059363_0001",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/plos_10.1371_journal.pone.0059363.pdf",
+  "page": 1,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2609.38104_0039",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2609.38104.pdf",
+  "page": 39,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_plos_10.1371_journal.pgph.0001186_0008",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/plos_10.1371_journal.pgph.0001186.pdf",
+  "page": 8,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2609.37412_0032",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2609.37412.pdf",
+  "page": 32,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_biorxiv_10.1101_2022.07.29.501882_0032",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/biorxiv_10.1101_2022.07.29.501882.pdf",
+  "page": 32,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_biorxiv_10.1101_2023.11.28.569048_0013",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/biorxiv_10.1101_2023.11.28.569048.pdf",
+  "page": 13,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_plos_10.1371_journal.pone.0125826_0013",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/plos_10.1371_journal.pone.0125826.pdf",
+  "page": 13,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2609.23240_0027",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2609.23240.pdf",
+  "page": 27,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_plos_10.1371_journal.pone.0129065_0017",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/plos_10.1371_journal.pone.0129065.pdf",
+  "page": 17,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2609.34576_0030",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2609.34576.pdf",
+  "page": 30,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2609.30742_0003",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2609.30742.pdf",
+  "page": 3,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_plos_10.1371_journal.pone.0237749_0024",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/plos_10.1371_journal.pone.0237749.pdf",
+  "page": 24,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2609.23240_0029",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2609.23240.pdf",
+  "page": 29,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_biorxiv_10.1101_2023.11.28.569048_0021",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/biorxiv_10.1101_2023.11.28.569048.pdf",
+  "page": 21,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2606.00624_0022",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2606.00624.pdf",
+  "page": 22,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_arxiv_2609.37623_0002",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/arxiv_2609.37623.pdf",
+  "page": 2,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_biorxiv_10.1101_2024.01.31.578257_0014",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/biorxiv_10.1101_2024.01.31.578257.pdf",
+  "page": 14,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_plos_10.1371_journal.pone.0129065_0008",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/plos_10.1371_journal.pone.0129065.pdf",
+  "page": 8,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_zenodo_21451572_0003",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/zenodo_21451572.pdf",
+  "page": 3,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_plos_10.1371_journal.pone.0237749_0004",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/plos_10.1371_journal.pone.0237749.pdf",
+  "page": 4,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_biorxiv_10.1101_2022.10.19.512946_0036",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/biorxiv_10.1101_2022.10.19.512946.pdf",
+  "page": 36,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_zenodo_23058054_0008",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/zenodo_23058054.pdf",
+  "page": 8,
+  "corpus": "c3"
+ },
+ {
+  "key": "c3_plos_10.1371_journal.pone.0125826_0005",
+  "path": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite/corpus3/plos_10.1371_journal.pone.0125826.pdf",
+  "page": 5,
+  "corpus": "c3"
+ }
+]
