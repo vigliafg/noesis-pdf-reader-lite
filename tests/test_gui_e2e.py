@@ -171,12 +171,18 @@ class GuiE2E(unittest.TestCase):
         self._goto(0)
         self.assertEqual(self._body(), first)  # dalla cache, identico
 
-    def test_03_figure_linked_and_in_gallery(self):
+    def test_03_figure_embedded_and_in_gallery(self):
         self._goto(1)
         body = self._body()
         self.assertIn("FIG. 1", body)
-        self.assertIn("![", body)  # figura linkata (comportamento attuale)
-        self.assertTrue(self.w._current_images, "gallery vuota: figura non trovata")
+        self.assertIn("![", body)
+        # Step 2: la figura è **embedded** (JPEG base64), non più un file://
+        self.assertIn("data:image/jpeg;base64,", body)
+        self.assertNotIn("file://", body)
+        self.assertTrue(
+            any(u.startswith("data:image") for u in self.w._current_images),
+            "gallery vuota: figura embedded non trovata",
+        )
 
     def test_04_exclude_zone_changes_md_and_label(self):
         auto = self._body()

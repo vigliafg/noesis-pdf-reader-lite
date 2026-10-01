@@ -64,7 +64,8 @@ def _engine(pdf, page_no, dest=None):
     raw = pymupdf4llm.to_markdown(pdf, pages=[page_no - 1])
     with pymupdf.open(pdf) as doc:
         out, _ = main._apply_engine_on_page(
-            doc[page_no - 1], raw, figures_dir=dest, page_num=page_no - 1
+            doc[page_no - 1], raw, figures_dir=dest, page_num=page_no - 1,
+            figure_mode="link",
         )
     return out
 
@@ -234,7 +235,7 @@ class LinkFigureInternalTextTests(unittest.TestCase):
         doc, page = _page_with_chart_labels()
         with tempfile.TemporaryDirectory() as d:
             md = "5 6 7 8 9 HbgA1c\n\nFIGURE 7 A bar chart.\n\nBody text after."
-            out = _link_figures(md, page, Path(d), 0)
+            out = _link_figures(md, page, Path(d), 0, mode="link")
             self.assertEqual(len(list(Path(d).glob("*.png"))), 1)
         self.assertIn("![figura 1](", out)
         self.assertNotIn("HbgA1c", out)          # etichetta interna: nell'immagine
@@ -257,7 +258,7 @@ class LinkFigureInternalTextTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as d:
             md = "**Figure 1**  _Continued_ \n\nBody text after."
-            out = _link_figures(md, page, Path(d), 0)
+            out = _link_figures(md, page, Path(d), 0, mode="link")
         self.assertRegex(out, r"!\[figura \d+\]\(file://")
         self.assertLess(out.index("![figura"), out.index("**Figure 1**"))
         doc.close()

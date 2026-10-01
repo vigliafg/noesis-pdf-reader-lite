@@ -94,7 +94,7 @@ class LinkFiguresTests(unittest.TestCase):
         doc, page = _page_with_figure()
         with tempfile.TemporaryDirectory() as d:
             md = "Intro text.\n\nFIGURE 1 A bar chart.\n\nBody text after the figure."
-            out = _link_figures(md, page, Path(d), 0)
+            out = _link_figures(md, page, Path(d), 0, mode="link")
             saved = sorted(Path(d).glob("*.png"))
             size = saved[0].stat().st_size if saved else 0
         self.assertIn("![figura 1](", out)
@@ -120,7 +120,8 @@ def _engine(pdf, page_no, dest):
     raw = pymupdf4llm.to_markdown(pdf, pages=[page_no - 1])
     with pymupdf.open(pdf) as doc:
         return main._apply_engine_on_page(
-            doc[page_no - 1], raw, figures_dir=dest, page_num=page_no - 1
+            doc[page_no - 1], raw, figures_dir=dest, page_num=page_no - 1,
+            figure_mode="link",
         )
 
 

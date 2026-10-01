@@ -8,12 +8,14 @@ Traduzione e gallery delle figure incluse; nessun dropdown a runtime.
 
 from __future__ import annotations
 
+import base64
 import concurrent.futures
 import hashlib
 import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -60,7 +62,7 @@ from PyQt6.QtCore import (
 )
 from PyQt6.QtGui import (
     QImage, QPixmap, QFont, QKeySequence, QShortcut,
-    QPen, QBrush, QColor, QPainter, QDesktopServices,
+    QPen, QBrush, QColor, QPainter, QDesktopServices, QTextDocument,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -880,12 +882,17 @@ def _figure_regions(page, exclude: tuple = ()) -> list[dict]:
             sel.append((cx0, c[1], cx1, c[3]))
         if not sel:
             continue
+        figure_rect = (
+            min(c[0] for c in sel), min(c[1] for c in sel),
+            max(c[2] for c in sel), max(c[3] for c in sel),
+        )
+        # Zona esclusa a mano che copre la figura (immagine e/o didascalia):
+        # l'utente non vuole quella figura nel markdown (§14).
+        if exclude and _is_excluded(figure_rect, exclude):
+            continue
         figures.append(
             {
-                "rect": (
-                    min(c[0] for c in sel), min(c[1] for c in sel),
-                    max(c[2] for c in sel), max(c[3] for c in sel),
-                ),
+                "rect": figure_rect,
                 "caption": text,
                 "caption_rect": caption,
             }
@@ -942,16 +949,102 @@ def _figure_internal_text(page, fig) -> str:
     return " ".join(parts)
 
 
-def _link_figures(md: str, page, dest_dir, page_num: int) -> str:
+# ── figure embedding: JPEG base64 con tetto al 30% + gate OCR ──────────────
+_FIGURE_ZOOM = 3.0                 # risoluzione di render della regione
+_FIGURE_EMBED_RATIO = 0.30         # tetto: JPEG ≤ 30% del PNG equivalente
+_FIGURE_Q_START = 88               # qualità di partenza (4:2:0)
+_FIGURE_Q_FLOOR = 75               # qualità minima per rientrare nel 30%
+_FIGURE_Q_MAX = 95                 # qualità massima (eccezione leggibilità)
+_FIGURE_OCR_RECALL_MIN = 0.90      # soglia del gate OCR
+
+
+def _tesseract_ocr_image(data: bytes) -> str:
+    """OCR di un'immagine (bytes) via CLI Tesseract; ``""`` se non disponibile."""
+    exe = shutil.which("tesseract")
+    if not exe:
+        return ""
+    try:
+        r = subprocess.run(
+            [exe, "stdin", "stdout", "-l", "eng"],
+            input=data, capture_output=True, timeout=30,
+        )
+        return r.stdout.decode("utf-8", "ignore")
+    except Exception:
+        return ""
+
+
+def _ocr_token_recall(jpeg: bytes, expected: str) -> float:
+    """Frazione dei token attesi riconosciuti dall'OCR sulla figura."""
+    exp = _norm_text(expected).split()
+    if not exp:
+        return 1.0
+    got = set(_norm_text(_tesseract_ocr_image(jpeg)).split())
+    if not got:
+        return 0.0
+    hit = sum(1 for w in exp if w in got)
+    return hit / len(exp)
+
+
+def _figure_jpeg(page, rect: tuple, internal_text: str = "") -> bytes | None:
+    """JPEG della regione-figura con tetto 30% e, se c'è testo, gate OCR.
+
+    - parte da qualità alta e scende (fino al floor) per rientrare nel 30%;
+    - se la figura contiene testo, risale di qualità (anche **sforando** il 30%)
+      finché l'OCR riconosce i token attesi; in ultima istanza qualità massima.
+    """
+    if not _has_pymupdf:
+        return None
+    try:
+        pad = 2.0
+        clip = pymupdf.Rect(
+            rect[0] - pad, rect[1] - pad, rect[2] + pad, rect[3] + pad)
+        pix = page.get_pixmap(
+            clip=clip, matrix=pymupdf.Matrix(_FIGURE_ZOOM, _FIGURE_ZOOM))
+        target = _FIGURE_EMBED_RATIO * len(pix.tobytes("png"))
+        best = None
+        for q in (_FIGURE_Q_START, 82, 78, _FIGURE_Q_FLOOR):
+            jpg = pix.tobytes("jpeg", jpg_quality=q)
+            best = jpg
+            if len(jpg) <= target:
+                break
+        if internal_text.strip():
+            for q in (_FIGURE_Q_START, 92, _FIGURE_Q_MAX):
+                jpg = pix.tobytes("jpeg", jpg_quality=q)
+                if _ocr_token_recall(jpg, internal_text) >= _FIGURE_OCR_RECALL_MIN:
+                    return jpg
+            return pix.tobytes("jpeg", jpg_quality=_FIGURE_Q_MAX)
+        return best
+    except Exception:
+        return None
+
+
+def _figure_data_uri(page, rect: tuple, internal_text: str = "") -> str | None:
+    """``data:image/jpeg;base64,…`` della regione-figura (o None)."""
+    jpg = _figure_jpeg(page, rect, internal_text)
+    if not jpg:
+        return None
+    return "data:image/jpeg;base64," + base64.b64encode(jpg).decode("ascii")
+
+
+def _link_figures(
+    md: str, page, dest_dir, page_num: int, mode: str = "embed", exclude=(),
+) -> str:
     """Inserisce il corpo-immagine accanto alla didascalia di ogni figura.
+
+    ``mode``: ``"embed"`` (default) inserisce un **data URI JPEG base64** (md
+    autocontenuto); ``"link"`` scrive un PNG e inserisce un ``file://`` (per
+    debug/back-compat). ``exclude`` sono zone manuali (punti PDF): una figura
+    che ricade in una zona esclusa non viene linkata.
 
     Il testo interno alla figura (etichette/assi, anche quando pymupdf4llm lo
     emette come paragrafo) viene tolto **solo** se sta dentro la regione
-    renderizzata, così non resta duplicato col PNG. La legenda discorsiva
+    renderizzata, così non resta duplicato con l'immagine. La legenda discorsiva
     (blocco citazione) è conservata sotto l'immagine. Nessun contenuto viene
     eliminato se non è dentro l'immagine.
     """
-    if not _has_pymupdf or page is None or dest_dir is None:
+    if not _has_pymupdf or page is None:
+        return md
+    if mode == "link" and dest_dir is None:
         return md
     if layout_engine.is_fix_disabled("link_figures"):
         return md
@@ -961,12 +1054,16 @@ def _link_figures(md: str, page, dest_dir, page_num: int) -> str:
         r"(?im)^.{0,80}?\bfig(?:ure)?\.?\s*(?:\d|[:\-–—]|(?-i:[A-Z]))", md
     ):
         return md  # nessuna didascalia di figura: nessuna scansione grafica
-    regions = _figure_regions(page)
+    regions = _figure_regions(page, exclude)
     if not regions:
         return md
     lines = md.split("\n")
     for i, fig in enumerate(regions, 1):
-        uri = _render_figure(page, fig["rect"], dest_dir, page_num, i)
+        internal = _figure_internal_text(page, fig)
+        if mode == "link":
+            uri = _render_figure(page, fig["rect"], dest_dir, page_num, i)
+        else:
+            uri = _figure_data_uri(page, fig["rect"], internal)
         if not uri:
             continue
         key = _norm_text(fig["caption"])
@@ -994,7 +1091,6 @@ def _link_figures(md: str, page, dest_dir, page_num: int) -> str:
             continue
         # Toglie il testo interno della figura (già nell'immagine). Non tocca
         # la didascalia né le legende in blocco citazione.
-        internal = _figure_internal_text(page, fig)
         if internal:
             itokens = set(internal.split())
             kept: list[str] = []
@@ -1661,7 +1757,7 @@ def _extract_pymupdf4llm(
 
 def _apply_engine_on_page(
     page, text: str, exclude: tuple = (), include: tuple = (),
-    figures_dir=None, page_num: int = 0,
+    figures_dir=None, page_num: int = 0, figure_mode: str = "embed",
 ) -> tuple[str, str]:
     """Apply the adaptive layout engine to ``text`` using a pymupdf page.
 
@@ -1674,8 +1770,9 @@ def _apply_engine_on_page(
     (profile_page analyzes the page) and slow on scanned PDFs, so callers
     run it off the GUI thread.
 
-    When ``figures_dir`` is given, figures are rendered to PNG there and linked
-    next to their caption ("corpo unico + didascalia").
+    When ``figures_dir`` is given, figures are linked next to their caption:
+    ``figure_mode="embed"`` (default) inserts a **JPEG base64 data URI** (md
+    autocontenuto); ``figure_mode="link"`` writes a PNG and inserts a ``file://``.
     """
     label = "manual" if (include or exclude) else "auto"
     rot = 0
@@ -1708,7 +1805,10 @@ def _apply_engine_on_page(
                 pass
     if figures_dir is not None:
         try:
-            result = _link_figures(result, page, figures_dir, page_num)
+            result = _link_figures(
+                result, page, figures_dir, page_num,
+                mode=figure_mode, exclude=exclude,
+            )
         except Exception:
             pass
     return result, label
@@ -1716,7 +1816,7 @@ def _apply_engine_on_page(
 
 def _apply_engine_standalone(
     path: str, page_num: int, text: str, exclude: tuple = (), include: tuple = (),
-    figures_dir=None,
+    figures_dir=None, figure_mode: str = "embed",
 ) -> tuple[str, str]:
     """Apply the layout engine on a freshly opened document (background thread)."""
     label = "manual" if (include or exclude) else "auto"
@@ -1725,6 +1825,7 @@ def _apply_engine_standalone(
             return _apply_engine_on_page(
                 doc[page_num], text, exclude=exclude, include=include,
                 figures_dir=figures_dir, page_num=page_num,
+                figure_mode=figure_mode,
             )
     except Exception:
         return text, label
@@ -2336,6 +2437,57 @@ def _strip_header(body: str) -> str:
     return body
 
 
+def _uri_qimage(uri: str) -> QImage:
+    """QImage da un URI ``file://`` oppure da un ``data:image/…;base64``."""
+    if uri.startswith("data:"):
+        head, sep, payload = uri.partition(",")
+        if sep and ";base64" in head:
+            try:
+                return QImage.fromData(base64.b64decode(payload))
+            except Exception:
+                return QImage()
+        return QImage()
+    return QImage(QUrl(uri).toLocalFile())
+
+
+def _uri_bytes(uri: str) -> bytes | None:
+    """Byte immagine da un URI ``file://`` o ``data:`` (None se non leggibile)."""
+    if uri.startswith("data:"):
+        _, sep, payload = uri.partition(",")
+        if sep:
+            try:
+                return base64.b64decode(payload)
+            except Exception:
+                return None
+        return None
+    try:
+        return Path(QUrl(uri).toLocalFile()).read_bytes()
+    except Exception:
+        return None
+
+
+class _ImageDocument(QTextDocument):
+    """QTextDocument che sa caricare anche i data URI immagine (base64).
+
+    Il motore rich-text di Qt carica ``file:``/``qrc:`` di default ma **non**
+    ``data:``: qui si decodifica il payload base64 in una ``QImage``. È il punto
+    (Strada 1) che rende visibili nel widget le figure embedded del markdown.
+    """
+
+    def loadResource(self, type_, url):  # noqa: N802 — API Qt
+        try:
+            if url.scheme() == "data":
+                raw = bytes(url.toEncoded()).decode("ascii", "ignore")
+                head, sep, payload = raw.partition(",")
+                if sep and ";base64" in head:
+                    img = QImage.fromData(base64.b64decode(payload))
+                    if not img.isNull():
+                        return img
+        except Exception:
+            pass
+        return super().loadResource(type_, url)
+
+
 class TextPanel(QTextEdit):
     """Editable text window with a live font zoom (A− / A+).
 
@@ -2379,6 +2531,8 @@ class TextPanel(QTextEdit):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # Documento che sa mostrare le figure embedded (data URI base64).
+        self.setDocument(_ImageDocument(self))
         self._base_font_size = 12
         self._font_size = 12
         self._render_source: str = ""     # markdown/raw-html source for re-renders
@@ -3320,7 +3474,9 @@ class TranslatablePanel(QWidget):
         self.images_panel.setWidget(container)
 
     def _make_image_card(self, uri: str) -> QWidget:
-        path = str(QUrl(uri).toLocalFile())
+        # figure automatiche: data URI base64; catture manuali: file://
+        is_data = uri.startswith("data:")
+        path = "" if is_data else str(QUrl(uri).toLocalFile())
         card = QWidget()
         card.setObjectName("imgCard")
         card.setStyleSheet(
@@ -3331,7 +3487,7 @@ class TranslatablePanel(QWidget):
         v.setContentsMargins(8, 8, 8, 8)
         v.setSpacing(6)
 
-        pix = QPixmap(path)
+        pix = QPixmap.fromImage(_uri_qimage(uri))
         thumb = QLabel()
         thumb.setPixmap(
             pix.scaledToWidth(340, Qt.TransformationMode.SmoothTransformation)
@@ -3342,7 +3498,10 @@ class TranslatablePanel(QWidget):
         thumb.mousePressEvent = lambda _e, u=uri: self._show_image_full(u)
         v.addWidget(thumb)
 
-        info = QLabel(f"{Path(path).name}  ·  {pix.width()}×{pix.height()} px")
+        label = f"{pix.width()}×{pix.height()} px"
+        if not is_data:
+            label = f"{Path(path).name}  ·  {label}"
+        info = QLabel(label)
         info.setAlignment(Qt.AlignmentFlag.AlignCenter)
         info.setStyleSheet("border: none; color: #555; font-size: 12px;")
         v.addWidget(info)
@@ -3374,9 +3533,10 @@ class TranslatablePanel(QWidget):
         return card
 
     def _show_image_full(self, uri: str):
-        path = str(QUrl(uri).toLocalFile())
+        is_data = uri.startswith("data:")
+        path = "" if is_data else str(QUrl(uri).toLocalFile())
         dlg = QDialog(self)
-        dlg.setWindowTitle(Path(path).name)
+        dlg.setWindowTitle("" if is_data else Path(path).name)
         dlg.resize(900, 720)
         # finestra top-level: tema scuro esplicito, indipendente dal sistema
         dlg.setStyleSheet(
@@ -3387,27 +3547,39 @@ class TranslatablePanel(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         lbl = QLabel()
-        lbl.setPixmap(QPixmap(path))
+        lbl.setPixmap(QPixmap.fromImage(_uri_qimage(uri)))
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         scroll.setWidget(lbl)
         lay.addWidget(scroll)
         dlg.exec()
 
     def _copy_image(self, uri: str):
-        img = QImage(QUrl(uri).toLocalFile())
+        img = _uri_qimage(uri)
         if not img.isNull():
             QApplication.clipboard().setImage(img)
             self._lbl_spinner.setText(T("status.copied"))
 
     def _save_image(self, uri: str):
-        src = str(QUrl(uri).toLocalFile())
+        is_data = uri.startswith("data:")
+        src = "" if is_data else str(QUrl(uri).toLocalFile())
+        default = "figura.jpg" if is_data else Path(src).name
         dest, _ = QFileDialog.getSaveFileName(
             self,
             T("gallery.save_dialog"),
-            Path(src).name,
+            default,
             T("gallery.save_filter"),
         )
-        if dest:
+        if not dest:
+            return
+        if is_data:
+            data = _uri_bytes(uri)
+            if data:
+                try:
+                    Path(dest).write_bytes(data)
+                    self._lbl_spinner.setText(T("status.saved"))
+                except Exception:
+                    pass
+        else:
             shutil.copyfile(src, dest)
             self._lbl_spinner.setText(T("status.saved"))
 
@@ -4473,17 +4645,28 @@ class MainWindow(QMainWindow):
         self._load_page_figures(page_num)
 
     def _load_page_figures(self, page_num: int):
-        """Add the auto-rendered figures of a page to the gallery (dedup)."""
-        try:
-            images_dir = self._get_images_dir()
-        except Exception:
-            return
+        """Mette in gallery le figure della pagina (dedup).
+
+        Le figure **automatiche** sono embedded nel markdown come JPEG base64:
+        qui si estraggono **dai data URI del corpo di pagina** (nessun file).
+        Restano supportate le vecchie PNG su disco (modalità ``link``).
+        """
         added = False
-        for path in sorted(images_dir.glob(f"page_{page_num + 1:04d}_fig_*.png")):
-            uri = path.resolve().as_uri()
+        body = self.text_panel._page_body or ""
+        for uri in re.findall(r"!\[[^\]]*\]\((data:image/[^)]+)\)", body):
             if uri not in self._current_images:
                 self._current_images.append(uri)
                 added = True
+        try:
+            images_dir = self._get_images_dir()
+        except Exception:
+            images_dir = None
+        if images_dir is not None:
+            for path in sorted(images_dir.glob(f"page_{page_num + 1:04d}_fig_*.png")):
+                uri = path.resolve().as_uri()
+                if uri not in self._current_images:
+                    self._current_images.append(uri)
+                    added = True
         if added:
             self.text_panel.show_images(self._current_images, activate=False)
 
@@ -4653,10 +4836,11 @@ class MainWindow(QMainWindow):
         """Drop a captured image from the gallery and delete its file."""
         if uri in self._current_images:
             self._current_images.remove(uri)
-        try:
-            Path(QUrl(uri).toLocalFile()).unlink(missing_ok=True)
-        except Exception:
-            pass
+        if not uri.startswith("data:"):  # le figure embedded non hanno file
+            try:
+                Path(QUrl(uri).toLocalFile()).unlink(missing_ok=True)
+            except Exception:
+                pass
         self.text_panel.show_images(self._current_images)
 
     def _on_select_region_toggled(self, checked: bool):
