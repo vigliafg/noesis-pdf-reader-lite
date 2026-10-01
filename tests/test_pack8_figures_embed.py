@@ -116,6 +116,28 @@ class FigureEmbedTests(unittest.TestCase):
         finally:
             main._tesseract_ocr_image = orig
 
+    def test_jpeg_cache_persisted_and_reused(self):
+        """G7: il JPEG è salvato su disco e al secondo giro NON si ri-encoda."""
+        doc, page = _page_with_figure()
+        with tempfile.TemporaryDirectory() as d:
+            out1 = main._link_figures(_EMBED_MD, page, Path(d), 0)
+            self.assertEqual(len(list(Path(d).glob("*.jpg"))), 1)
+            calls = {"n": 0}
+            orig = main._figure_jpeg
+
+            def _count(*a, **k):
+                calls["n"] += 1
+                return orig(*a, **k)
+
+            main._figure_jpeg = _count
+            try:
+                out2 = main._link_figures(_EMBED_MD, doc[0], Path(d), 0)
+            finally:
+                main._figure_jpeg = orig
+        self.assertEqual(calls["n"], 0)  # cache hit (persistenza)
+        self.assertEqual(out1, out2)
+        doc.close()
+
     def test_figure_with_text_uses_gate_and_can_exceed_ratio(self):
         """Con testo la figura può superare il 30% (leggibilità vince)."""
         doc, page = _page_with_figure(with_text=True)

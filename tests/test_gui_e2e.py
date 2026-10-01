@@ -248,6 +248,19 @@ class GuiE2E(unittest.TestCase):
         self.assertTrue(self.w.grab().save(str(out)))
         self.assertGreater(out.stat().st_size, 1000)
 
+    def test_12_gallery_is_per_page(self):
+        # pagina 0: nessuna figura → gallery vuota
+        self.assertFalse(self.w._current_images)
+        self._goto(1)
+        self.assertTrue(self.w._current_images, "pagina 1: figura assente")
+        fig1 = list(self.w._current_images)
+        # pagina 2: nessuna figura → gallery vuota (NON cumulativa)
+        self._goto(2)
+        self.assertFalse(self.w._current_images, "gallery cumulativa tra pagine")
+        # ritorno alla pagina 1: le stesse figure ricompaiono subito (dalla cache)
+        self._goto(1)
+        self.assertEqual(self.w._current_images, fig1)
+
 
 @unittest.skipUnless(_IMP_OK, f"Qt/pymupdf non disponibili: {_IMP_ERR}")
 @unittest.skipUnless((_CORPUS2 / "fe22.pdf").is_file(), "corpus2/fe22.pdf assente")
@@ -267,6 +280,74 @@ class GuiE2ECorpus(unittest.TestCase):
             self.assertTrue(w.text_panel._page_body.strip())
         finally:
             w.close()
+
+
+_CORPUS1 = Path(_ROOT) / "corpus1"
+
+
+def _sample_corpus1(n: int = 10, seed: int = 20261001):
+    """n pagine a caso (deterministiche) dai PDF di corpus1."""
+    import random
+
+    pdfs = sorted(_CORPUS1.glob("*.pdf"))
+    if not pdfs:
+        return []
+    rng = random.Random(seed)
+    rng.shuffle(pdfs)
+    sample = []
+    i = 0
+    while len(sample) < n and i < n * len(pdfs):
+        pdf = pdfs[i % len(pdfs)]
+        i += 1
+        try:
+            with pymupdf.open(pdf) as doc:
+                pages = doc.page_count
+        except Exception:
+            continue
+        if pages > 1:
+            sample.append((pdf, rng.randrange(1, pages)))
+    return sample
+
+
+@unittest.skipUnless(_IMP_OK, f"Qt/pymupdf non disponibili: {_IMP_ERR}")
+@unittest.skipUnless(list(_CORPUS1.glob("*.pdf")), "corpus1 assente")
+class GuiE2ECorpus1(unittest.TestCase):
+    """Workflow completo su 10 pagine a caso di corpus1 (libri reali)."""
+
+    def test_10_random_pages_workflow(self):
+        sample = _sample_corpus1(10)
+        self.assertEqual(len(sample), 10)
+        w = main.MainWindow()
+        w._resume_last_page = False
+        w.show()
+        try:
+            for pdf, page in sample:
+                with self.subTest(pdf=pdf.name, page=page):
+                    w._open_pdf(pdf)
+                    w._set_page(page)
+                    self.assertTrue(
+                        wait_until(lambda p=page: any(
+                            k[0] == p for k in w._final_text_cache), timeout=300),
+                        f"{pdf.name} p{page}: estrazione non completata")
+                    body = w.text_panel._page_body
+                    self.assertTrue(body.strip(), f"{pdf.name} p{page}: md vuoto")
+                    self.assertEqual(self._label(w), "auto")
+                    if "![" in body:
+                        # figure embedded (Step 2), nessun file:// nel md
+                        self.assertIn("data:image/jpeg;base64,", body)
+                        self.assertNotIn("file://", body)
+                    # gallery per-pagina: è la lista di QUESTA pagina
+                    self.assertIs(w._current_images, w._page_images.get(page))
+                    n_md = body.count("data:image/jpeg;base64,")
+                    n_gal = sum(
+                        1 for u in w._current_images if u.startswith("data:image"))
+                    self.assertGreaterEqual(n_gal, n_md)
+        finally:
+            w.close()
+
+    @staticmethod
+    def _label(w) -> str:
+        return (w._last_result or ("", "", 0))[1]
 
 
 if __name__ == "__main__":

@@ -1018,9 +1018,30 @@ def _figure_jpeg(page, rect: tuple, internal_text: str = "") -> bytes | None:
         return None
 
 
-def _figure_data_uri(page, rect: tuple, internal_text: str = "") -> str | None:
-    """``data:image/jpeg;base64,…`` della regione-figura (o None)."""
-    jpg = _figure_jpeg(page, rect, internal_text)
+def _figure_data_uri(
+    page, rect: tuple, internal_text: str = "", cache_path=None,
+) -> str | None:
+    """``data:image/jpeg;base64,…`` della regione-figura (o None).
+
+    Persistenza (G7): se ``cache_path`` esiste, **riusa** i byte JPEG (dopo un
+    riavvio non si ri-encoda né si rifà il gate OCR); altrimenti li calcola e li
+    salva. Con ``cache_path=None`` (test) calcola e basta.
+    """
+    jpg = None
+    if cache_path is not None:
+        try:
+            jpg = Path(cache_path).read_bytes() or None
+        except Exception:
+            jpg = None
+    if not jpg:
+        jpg = _figure_jpeg(page, rect, internal_text)
+        if jpg and cache_path is not None:
+            try:
+                p = Path(cache_path)
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_bytes(jpg)
+            except Exception:
+                pass
     if not jpg:
         return None
     return "data:image/jpeg;base64," + base64.b64encode(jpg).decode("ascii")
@@ -1063,7 +1084,10 @@ def _link_figures(
         if mode == "link":
             uri = _render_figure(page, fig["rect"], dest_dir, page_num, i)
         else:
-            uri = _figure_data_uri(page, fig["rect"], internal)
+            cache_path = None
+            if dest_dir is not None:
+                cache_path = Path(dest_dir) / f"page_{page_num + 1:04d}_fig_{i}.jpg"
+            uri = _figure_data_uri(page, fig["rect"], internal, cache_path)
         if not uri:
             continue
         key = _norm_text(fig["caption"])
@@ -4244,7 +4268,10 @@ class MainWindow(QMainWindow):
         self._page_count: int = 0
         self._mupdf_doc = None       # pymupdf Document (render + layout + images)
         self._images_dir: Path | None = None  # dir for extracted figures
-        self._current_images: list[str] = []  # captured regions, kept until the book closes
+        # Gallery **per pagina** (G5): figure automatiche (data URI) + catture
+        # manuali (file://), indicizzate per numero di pagina.
+        self._page_images: dict[int, list[str]] = {}
+        self._current_images: list[str] = []  # lista della pagina corrente
         self._excluded_zones: dict[int, list[tuple]] = {}  # page → excluded PDF rects
         self._inclusion_zones: dict[int, list[tuple]] = {}  # page → numbered inclusion rects
         # Estrazione asincrona: cache del testo grezzo per (pagina, lingua OCR)
@@ -4642,7 +4669,6 @@ class MainWindow(QMainWindow):
         self._last_elapsed = elapsed
         self._display_last_result()
         self._show_page_status(elapsed)
-        self._load_page_figures(page_num)
 
     def _load_page_figures(self, page_num: int):
         """Mette in gallery le figure della pagina (dedup).
@@ -4682,6 +4708,9 @@ class MainWindow(QMainWindow):
         if self._show_header:
             body = self._extraction_header(text, elapsed, label) + text
         self._display_text(body, page_num=self._current_page)
+        # Gallery per pagina: ricarica le figure della pagina corrente (funziona
+        # anche su pagina **cached**, dove l'estrazione non viene rifatta).
+        self._load_page_figures(self._current_page)
 
     def _toggle_markdown(self):
         """Toggle Markdown rendering on/off and refresh display."""
@@ -4989,6 +5018,9 @@ class MainWindow(QMainWindow):
         count = self._page_count
         page_num = max(0, min(page_num, count - 1))
         self._current_page = page_num
+        # Gallery per pagina: la lista corrente diventa quella di questa pagina
+        # (le figure già note ricompaiono subito).
+        self._current_images = self._page_images.setdefault(page_num, [])
         self._remember_last_page(page_num)
 
         # Render left
@@ -5275,6 +5307,7 @@ class MainWindow(QMainWindow):
             self._page_count = len(self._mupdf_doc)
 
             self._images_dir = None
+            self._page_images = {}
             self._current_images = []
             self._excluded_zones = {}
             self._inclusion_zones = {}
