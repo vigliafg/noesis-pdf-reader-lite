@@ -1086,6 +1086,7 @@ def _figure_data_uri(
 
 def _link_figures(
     md: str, page, dest_dir, page_num: int, mode: str = "embed", exclude=(),
+    skip_captions: set | None = None,
 ) -> str:
     """Inserisce il corpo-immagine accanto alla didascalia di ogni figura.
 
@@ -1116,7 +1117,11 @@ def _link_figures(
     if not regions:
         return md
     lines = md.split("\n")
+    skipped = {c for c in (skip_captions or set())}
     for i, fig in enumerate(regions, 1):
+        # Figura già emessa da un'altra sorgente (es. content map IR): non duplicare.
+        if skipped and _norm_text(fig["caption"])[:30] in skipped:
+            continue
         internal = _figure_internal_text(page, fig)
         if mode == "link":
             uri = _render_figure(page, fig["rect"], dest_dir, page_num, i)
@@ -1913,6 +1918,40 @@ def _apply_engine_standalone(
             )
     except Exception:
         return text, label
+
+
+def _pipeline_mode() -> str:
+    """Pipeline attiva: ``"current"`` (default) o ``"ir"`` (content map).
+
+    Si sceglie con la variabile d'ambiente ``NOESIS_PIPELINE`` (o il setting
+    ``pipeline``): così la nuova pipeline si prova senza toccare il default.
+    """
+    v = ""
+    try:
+        v = str(get_setting("pipeline", "") or "")
+    except Exception:
+        v = ""
+    v = (v or os.environ.get("NOESIS_PIPELINE", "") or "").strip().lower()
+    return v if v in ("current", "ir") else "current"
+
+
+def _apply_ir_on_page(path: str, page_num: int, figures_dir=None, exclude=()):
+    """Markdown della pagina con la pipeline IR + **figura-detection unita**.
+
+    Le figure vengono dalla content map (classe ``picture``) e, in più, dalle
+    didascalie rilevate da ``_link_figures`` (current): così non si perdono né
+    le figure "del modello" né i flowchart con didascalia "Figure n".
+    """
+    import ir_layout
+
+    with pymupdf.open(path) as doc:
+        page = doc[page_num]
+        md, served = ir_layout.build_markdown(
+            page, doc, page_num, figures_dir=figures_dir,
+            embed_figures=True, return_meta=True)
+        md = _link_figures(md, page, figures_dir, page_num, mode="embed",
+                           exclude=exclude, skip_captions=served)
+    return md
 
 
 # Markdown structural patterns protected during translation.
@@ -3020,11 +3059,23 @@ class ExtractThread(QThread):
             raw = _extract_pymupdf4llm(
                 self._path, self._page_num, ocr_language=self._ocr_language
             )
-        text, label = _apply_engine_standalone(
-            self._path, self._page_num, raw,
-            exclude=self._exclude, include=self._include,
-            figures_dir=self._figures_dir,
-        )
+        text, label = "", ""
+        # Pipeline IR (content map), solo senza zone manuali (che richiedono il
+        # motore "current"). Guardia anti-body=0: se IR non produce testo, ricade
+        # sulla pipeline attuale (es. pagine quasi vuote).
+        if _pipeline_mode() == "ir" and not self._include and not self._exclude:
+            try:
+                md = _apply_ir_on_page(self._path, self._page_num, self._figures_dir)
+                if md and _norm_text(md).strip():
+                    text, label = md, "auto"
+            except Exception:
+                text = ""
+        if not text:
+            text, label = _apply_engine_standalone(
+                self._path, self._page_num, raw,
+                exclude=self._exclude, include=self._include,
+                figures_dir=self._figures_dir,
+            )
         elapsed = time.perf_counter() - t0
         self.result_ready.emit(
             self._generation, self._page_num, text, label, raw, elapsed
@@ -5278,6 +5329,7 @@ class MainWindow(QMainWindow):
         """Testo (monospazio) su quale cache l'app sta usando per la pagina."""
         out: list[str] = []
         out.append(f"PDF:            {self._pdf_path}")
+        out.append(f"pipeline:       {_pipeline_mode()}")
         out.append(f"app data base:  {_app_data_base()}")
         out.append(f"cache file:     {self._extraction_cache_file}")
         f = self._extraction_cache_file

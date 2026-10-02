@@ -110,8 +110,13 @@ def _attach_captions(elements: list[dict]) -> dict[int, list[dict]]:
 
 
 def build_markdown(page, doc, page_index: int, figures_dir=None,
-                   embed_figures: bool = True) -> str:
-    """Markdown della pagina ricostruito dalla content map (ordine di lettura)."""
+                   embed_figures: bool = True, return_meta: bool = False):
+    """Markdown della pagina ricostruito dalla content map (ordine di lettura).
+
+    Con ``return_meta=True`` restituisce ``(markdown, served)`` dove ``served``
+    è l'insieme delle didascalie (normalizzate) già emesse con una figura: serve
+    a non duplicare le figure quando si unisce la rilevazione di ``main``.
+    """
     import main  # lazy
 
     text, els = page_elements(doc, page_index)
@@ -162,4 +167,11 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
             emit(e)
         if i < len(seps):
             emit(seps[i])
-    return "\n\n".join(out)
+    md = "\n\n".join(out)
+    if return_meta:
+        served = {
+            main._norm_text(cap["text"])[:30]
+            for caps in attached.values() for cap in caps
+        }
+        return md, served
+    return md
