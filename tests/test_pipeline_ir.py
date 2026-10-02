@@ -40,16 +40,16 @@ class PipelineModeTests(unittest.TestCase):
         else:
             os.environ.pop("NOESIS_PIPELINE", None)
 
-    def test_default_is_current(self):
-        self.assertEqual(main._pipeline_mode(), "current")
-
-    def test_env_selects_ir(self):
-        os.environ["NOESIS_PIPELINE"] = "ir"
+    def test_default_is_ir(self):
         self.assertEqual(main._pipeline_mode(), "ir")
 
-    def test_unknown_falls_back_to_current(self):
-        os.environ["NOESIS_PIPELINE"] = "boh"
+    def test_env_selects_current(self):
+        os.environ["NOESIS_PIPELINE"] = "current"
         self.assertEqual(main._pipeline_mode(), "current")
+
+    def test_unknown_falls_back_to_ir(self):
+        os.environ["NOESIS_PIPELINE"] = "boh"
+        self.assertEqual(main._pipeline_mode(), "ir")
 
 
 @unittest.skipUnless(_OK, "pymupdf/main non disponibili")

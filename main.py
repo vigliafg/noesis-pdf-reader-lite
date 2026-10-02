@@ -2012,10 +2012,12 @@ def _apply_engine_standalone(
 
 
 def _pipeline_mode() -> str:
-    """Pipeline attiva: ``"current"`` (default) o ``"ir"`` (content map).
+    """Pipeline attiva: ``"ir"`` (default) o ``"current"`` (legacy/fallback).
 
-    Si sceglie con la variabile d'ambiente ``NOESIS_PIPELINE`` (o il setting
-    ``pipeline``): così la nuova pipeline si prova senza toccare il default.
+    IR è la pipeline di default (content map + cosmetica + figura unite, con
+    gate d'integrità che ricade su ``current`` pagina per pagina). Si può
+    forzare ``current`` con la variabile ``NOESIS_PIPELINE=current`` (o il
+    setting ``pipeline``).
     """
     v = ""
     try:
@@ -2023,7 +2025,7 @@ def _pipeline_mode() -> str:
     except Exception:
         v = ""
     v = (v or os.environ.get("NOESIS_PIPELINE", "") or "").strip().lower()
-    return v if v in ("current", "ir") else "current"
+    return v if v in ("current", "ir") else "ir"
 
 
 def _cosmetic_ir(md: str) -> str:

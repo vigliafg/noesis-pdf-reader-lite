@@ -304,11 +304,6 @@ def _apply_reorder_columns(md: str, page, profile: LayoutProfile, exclude: Seque
     return reordered
 
 
-def _apply_reorder_columns_title(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
-    from main import _column_aware_markdown
-    return _column_aware_markdown(page, move_title=True, exclude=exclude) or md
-
-
 def _apply_spacing(md: str, page, profile: LayoutProfile, exclude: Sequence[tuple] = ()) -> str:
     from main import _spacing_fixes
     return _spacing_fixes(md)
@@ -1540,11 +1535,6 @@ def _when_reorder_columns(p: LayoutProfile, b: str) -> bool:
     return b != "Docling 🧠" and p.columns >= 2 and p.columns_overlap
 
 
-def _when_reorder_columns_title(p: LayoutProfile, b: str) -> bool:
-    # Solo manuale: lo scheduler "auto" non lo propone mai da solo.
-    return False
-
-
 def _when_spacing(p: LayoutProfile, b: str) -> bool:
     return True
 
@@ -1570,13 +1560,6 @@ FIX_REGISTRY: Sequence[Fix] = (
         30,
         _when_reorder_columns,
         _apply_reorder_columns,
-    ),
-    Fix(
-        "reorder_columns_title",
-        "Come sopra + titolo del capitolo in testa (solo manuale)",
-        35,
-        _when_reorder_columns_title,
-        _apply_reorder_columns_title,
     ),
     Fix(
         "cleanup_markdown",
