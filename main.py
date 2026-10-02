@@ -1935,23 +1935,50 @@ def _pipeline_mode() -> str:
     return v if v in ("current", "ir") else "current"
 
 
+def _cosmetic_ir(md: str) -> str:
+    """Pulizia cosmetica del markdown IR — **nessun fix strutturale**.
+
+    La struttura (colonne, tabelle, header/footer, tipi di blocco) arriva già
+    dalla content map: qui restano solo i ritocchi tipografici che il modello
+    non fa (tag HTML residui, enfasi, soft-hyphen/FFFD, spaziature, liste).
+    Non si portano i fix strutturali (reorder, column-aware, header/footer).
+    """
+    try:
+        md = layout_engine._normalize_html_tags(md)
+        md = layout_engine._normalize_replacement_chars(md)
+        md = layout_engine._normalize_soft_hyphens(md)
+        md = layout_engine._repair_lists(md)
+        md = layout_engine._normalize_emphasis(md)
+        md = layout_engine._despace_numbers(md)
+        md = layout_engine._despace_blockquote_letters(md)
+        md = md.replace("~~", "").replace("■", "")
+    except Exception:
+        pass
+    return md
+
+
 def _apply_ir_on_page(path: str, page_num: int, figures_dir=None, exclude=()):
     """Markdown della pagina con la pipeline IR + **figura-detection unita**.
 
-    Le figure vengono dalla content map (classe ``picture``) e, in più, dalle
-    didascalie rilevate da ``_link_figures`` (current): così non si perdono né
-    le figure "del modello" né i flowchart con didascalia "Figure n".
+    Una **sola** passata di layout (``page_chunk``), usata sia per la content map
+    sia come "raw" per la cache. Le figure vengono dalla content map (classe
+    ``picture``) e, in più, dalle didascalie rilevate da ``_link_figures``
+    (current): così non si perdono né le figure del modello né i flowchart con
+    didascalia "Figure n". Restituisce ``(markdown, raw)``.
     """
     import ir_layout
 
     with pymupdf.open(path) as doc:
         page = doc[page_num]
+        chunk = ir_layout.page_chunk(doc, page_num)  # UNA sola passata
         md, served = ir_layout.build_markdown(
             page, doc, page_num, figures_dir=figures_dir,
-            embed_figures=True, return_meta=True)
+            embed_figures=True, return_meta=True, chunk=chunk)
         md = _link_figures(md, page, figures_dir, page_num, mode="embed",
                            exclude=exclude, skip_captions=served)
-    return md
+        md = _cosmetic_ir(md)
+        raw = chunk.get("text", "") or ""
+    return md, raw
 
 
 # Markdown structural patterns protected during translation.
@@ -3053,24 +3080,27 @@ class ExtractThread(QThread):
 
     def run(self):
         t0 = time.perf_counter()
-        if self._raw is not None:
-            raw = self._raw  # già estratta (cache): solo engine layout
-        else:
-            raw = _extract_pymupdf4llm(
-                self._path, self._page_num, ocr_language=self._ocr_language
-            )
+        raw = self._raw  # dalla cache, se c'è (None altrimenti)
         text, label = "", ""
         # Pipeline IR (content map), solo senza zone manuali (che richiedono il
         # motore "current"). Guardia anti-body=0: se IR non produce testo, ricade
-        # sulla pipeline attuale (es. pagine quasi vuote).
+        # sulla pipeline attuale (es. pagine quasi vuote). Una **sola** passata:
+        # IR restituisce anche il "raw" da mettere in cache.
         if _pipeline_mode() == "ir" and not self._include and not self._exclude:
             try:
-                md = _apply_ir_on_page(self._path, self._page_num, self._figures_dir)
+                md, ir_raw = _apply_ir_on_page(
+                    self._path, self._page_num, self._figures_dir)
                 if md and _norm_text(md).strip():
                     text, label = md, "auto"
+                    if raw is None:
+                        raw = ir_raw
             except Exception:
                 text = ""
         if not text:
+            if raw is None:
+                raw = _extract_pymupdf4llm(
+                    self._path, self._page_num, ocr_language=self._ocr_language
+                )
             text, label = _apply_engine_standalone(
                 self._path, self._page_num, raw,
                 exclude=self._exclude, include=self._include,

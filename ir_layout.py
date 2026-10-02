@@ -28,11 +28,14 @@ _TEXTY = {"text", "section-header", "title", "list-item", "footnote",
           "formula", "table", "caption"}
 
 
-def page_elements(doc, page_index: int) -> tuple[str, list[dict]]:
-    """(testo_pagina, elementi) dalla content map di PyMuPDF4LLM."""
+def page_chunk(doc, page_index: int) -> dict:
+    """Unico ``to_markdown(page_chunks=True)`` per pagina (una sola passata)."""
     import pymupdf4llm
 
-    chunk = pymupdf4llm.to_markdown(doc, pages=[page_index], page_chunks=True)[0]
+    return pymupdf4llm.to_markdown(doc, pages=[page_index], page_chunks=True)[0]
+
+
+def _elements_from_chunk(chunk: dict) -> tuple[str, list[dict]]:
     text = chunk.get("text", "") or ""
     els: list[dict] = []
     for b in chunk.get("page_boxes", []) or []:
@@ -46,6 +49,11 @@ def page_elements(doc, page_index: int) -> tuple[str, list[dict]]:
             "text": text[a:z],
         })
     return text, els
+
+
+def page_elements(doc, page_index: int) -> tuple[str, list[dict]]:
+    """(testo_pagina, elementi) dalla content map di PyMuPDF4LLM."""
+    return _elements_from_chunk(page_chunk(doc, page_index))
 
 
 def _order(elements: list[dict], page_width: float) -> list[list[dict]]:
@@ -110,16 +118,22 @@ def _attach_captions(elements: list[dict]) -> dict[int, list[dict]]:
 
 
 def build_markdown(page, doc, page_index: int, figures_dir=None,
-                   embed_figures: bool = True, return_meta: bool = False):
+                   embed_figures: bool = True, return_meta: bool = False,
+                   chunk: dict | None = None):
     """Markdown della pagina ricostruito dalla content map (ordine di lettura).
 
     Con ``return_meta=True`` restituisce ``(markdown, served)`` dove ``served``
     è l'insieme delle didascalie (normalizzate) già emesse con una figura: serve
     a non duplicare le figure quando si unisce la rilevazione di ``main``.
+    Se ``chunk`` è fornito (da ``page_chunk``), NON si ri-esegue ``to_markdown``
+    (una sola passata di layout).
     """
     import main  # lazy
 
-    text, els = page_elements(doc, page_index)
+    if chunk is None:
+        text, els = page_elements(doc, page_index)
+    else:
+        text, els = _elements_from_chunk(chunk)
     pw = page.rect.width
 
     # scarta chrome + etichette di margine strette agli estremi
