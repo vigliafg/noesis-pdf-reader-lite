@@ -24,7 +24,7 @@ def main() -> int:
     root = Path(args.dir)
 
     rows: list[dict] = []
-    files = sorted(root.glob("*/report.jsonl"))
+    files = sorted(root.rglob("report.jsonl"))
     if (root / "report.jsonl").exists():
         files.append(root / "report.jsonl")
     for jl in files:

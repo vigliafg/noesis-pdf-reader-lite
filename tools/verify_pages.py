@@ -91,11 +91,13 @@ def _recall(ref: str, out: str, minlen: int = 6) -> float:
 
 
 def _order_score(md: str, elements: list[dict], page_width: float) -> float:
-    """Quota di colonne il cui testo compare **contiguo** nel md (0..1).
+    """Order score robusto alla formattazione (penalità di interlacciamento).
 
-    Usa i blocchi di testo della content map (ground truth delle colonne): per
-    ogni colonna concatena i testi in ordine di y e verifica che siano una
-    sottostringa contigua del md normalizzato. Penalizza l'interlacciamento.
+    Ogni blocco di testo della content map è un *anchor* (prime parole); se ne
+    trova la posizione nel md normalizzato. Guardando la **sequenza delle
+    colonne** in ordine di posizione, un ordine colona-major ideale ha
+    ``ncol-1`` transizioni; ogni transizione in più è interlacciamento.
+    ``order = 1 - max(0, transizioni-(ncol-1)) / (n-1)``.
     """
     import main
 
@@ -110,24 +112,25 @@ def _order_score(md: str, elements: list[dict], page_width: float) -> float:
         page_width,
     )
     ncol = len(splits) + 1
-    cols: list[list[dict]] = [[] for _ in range(ncol)]
+    M = _norm(md)
+    seq: list[tuple[int, float]] = []
     for e in texty:
         mid = (e["bbox"][0] + e["bbox"][2]) / 2
-        cols[sum(1 for s in splits if mid > s)].append(e)
-    M = _norm(md)
-    ok = 0
-    total = 0
-    for c in cols:
-        if not c:
+        col = sum(1 for s in splits if mid > s)
+        anchor = " ".join(_norm(_strip_images(e["text"])).split()[:6])
+        if len(anchor) < 20:
             continue
-        c.sort(key=lambda e: e["y0"])
-        expected = _norm(" ".join(_strip_images(e["text"]) for e in c))
-        if len(expected) < 80:
+        pos = M.find(anchor)
+        if pos < 0:
             continue
-        total += 1
-        if expected in M:
-            ok += 1
-    return 1.0 if total == 0 else ok / total
+        seq.append((col, pos))
+    if len(seq) < 3:
+        return 1.0
+    seq.sort(key=lambda t: t[1])
+    cols = [c for c, _ in seq]
+    transitions = sum(1 for a, b in zip(cols, cols[1:]) if a != b)
+    extra = max(0, transitions - (ncol - 1))
+    return max(0.0, 1.0 - extra / (len(cols) - 1))
 
 
 def _last_block_height(text_edit) -> float:
@@ -226,7 +229,8 @@ def main() -> int:
                 (pd / f"page_{idx:04d}.md").write_text(md, encoding="utf-8")
                 (pd / f"page_{idx:04d}.plain.txt").write_text(plain, encoding="utf-8")
                 panel.grab().save(str(pd / f"page_{idx:04d}.png"))
-                rec = {"page_idx": idx, "page_ui": idx + 1, "pipeline": pipe,
+                rec = {"pdf": Path(pdf).name, "page_idx": idx,
+                       "page_ui": idx + 1, "pipeline": pipe,
                        "secs": round(dt, 2), "body_len": len(md),
                        "plain_len": len(plain), "recall_pdf": round(r_pdf, 4),
                        "recall_render": round(r_ren, 4),
