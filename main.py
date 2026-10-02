@@ -297,6 +297,42 @@ def _collect_blocks(page, exclude: tuple = ()) -> list[dict]:
     return blocks
 
 
+def _printed_page_number(page) -> int | None:
+    """Numero di pagina **stampato** (letto dal margine alto/basso), o ``None``.
+
+    Molti PDF hanno una numerazione stampata diversa dall'indice del file
+    (front matter, tavole intercalate): il numero è una riga di **sole cifre**
+    nella fascia del margine. Si prende la più in alto (la più in basso in
+    mancanza) per non confonderla con le etichette degli assi quando una figura
+    arriva a filo del bordo. È solo informativo: l'indice PDF resta la chiave di
+    navigazione.
+    """
+    if page is None:
+        return None
+    try:
+        h = page.rect.height
+        band = min(0.05 * h, 45.0)
+        cands: list[tuple[float, float, int]] = []
+        for blk in page.get_text("dict").get("blocks", []):
+            if blk.get("type") != 0:
+                continue
+            for line in blk["lines"]:
+                y0, y1 = line["bbox"][1], line["bbox"][3]
+                t = "".join(s["text"] for s in line["spans"]).strip()
+                if not re.fullmatch(r"\d{1,4}", t):
+                    continue
+                if y1 <= band:
+                    cands.append((y0, line["bbox"][0], int(t)))
+                elif y0 >= h - band:
+                    cands.append((y0, line["bbox"][0], int(t)))
+        if not cands:
+            return None
+        cands.sort(key=lambda c: (c[0], c[1]))
+        return cands[0][2]
+    except Exception:
+        return None
+
+
 def _strip_margin_blocks(blocks: list[dict], page_height: float) -> list[dict]:
     """Drop blocks that lie entirely in the top/bottom page margins.
 
@@ -4556,6 +4592,12 @@ class MainWindow(QMainWindow):
         self.lbl_total = QLabel("0")
         bar.addWidget(self.lbl_total)
 
+        # Numero di pagina **stampato** (offset rispetto all'indice PDF):
+        # informativo, letto dal margine. Vuoto se non riconosciuto.
+        self.lbl_printed = QLabel("")
+        self.lbl_printed.setStyleSheet("color: #777;")
+        bar.addWidget(self.lbl_printed)
+
         # Next
         self.btn_next = QPushButton(T("toolbar.next"))
         self.btn_next.clicked.connect(self._next_page)
@@ -5111,6 +5153,10 @@ class MainWindow(QMainWindow):
         self.page_spin.blockSignals(True)
         self.page_spin.setValue(page_num + 1)
         self.page_spin.blockSignals(False)
+        printed = _printed_page_number(
+            self._mupdf_doc[page_num] if self._mupdf_doc is not None else None)
+        self.lbl_printed.setText(
+            T("toolbar.printed", n=printed) if printed is not None else "")
 
         # Sync TOC highlight
         self.toc_panel.select_page(page_num)
@@ -5388,6 +5434,7 @@ class MainWindow(QMainWindow):
             self._current_images = []
             self._excluded_zones = {}
             self._inclusion_zones = {}
+            self.lbl_printed.setText("")
             self.text_panel.set_document(path)
             self._set_extraction_cache(path)
 

@@ -189,6 +189,10 @@ _STRINGS: dict[str, dict[str, str]] = {
     "toolbar.of": {
         "it": "di", "en": "of", "fr": "de", "de": "von", "es": "de",
     },
+    "toolbar.printed": {
+        "it": "· st. {n}", "en": "· p. {n}", "fr": "· p. {n}",
+        "de": "· S. {n}", "es": "· p. {n}",
+    },
     "toolbar.zoom_out.tip": {
         "it": "Riduci zoom (Ctrl+-)", "en": "Zoom out (Ctrl+-)",
         "fr": "Zoom arrière (Ctrl+-)", "de": "Verkleinern (Strg+-)",

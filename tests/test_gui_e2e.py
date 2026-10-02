@@ -106,6 +106,27 @@ def setUpModule():  # noqa: N802
 
 
 @unittest.skipUnless(_IMP_OK, f"Qt/pymupdf non disponibili: {_IMP_ERR}")
+class PrintedPageNumberTests(unittest.TestCase):
+    """Lettura del numero di pagina **stampato** dal margine (offset)."""
+
+    def test_reads_top_margin_number(self):
+        doc = pymupdf.open()
+        page = doc.new_page(width=612, height=792)
+        page.insert_text((18, 24), "60", fontsize=10)  # numero stampato
+        page.insert_text((57, 45), "85", fontsize=9)   # etichetta asse (fuori banda)
+        page.insert_text((72, 200), "Body text.", fontsize=11)
+        self.assertEqual(main._printed_page_number(page), 60)
+        doc.close()
+
+    def test_none_without_margin_number(self):
+        doc = pymupdf.open()
+        page = doc.new_page(width=612, height=792)
+        page.insert_text((72, 200), "Body text only.", fontsize=11)
+        self.assertIsNone(main._printed_page_number(page))
+        doc.close()
+
+
+@unittest.skipUnless(_IMP_OK, f"Qt/pymupdf non disponibili: {_IMP_ERR}")
 class GuiE2E(unittest.TestCase):
     """Workflow completo sull'app reale, in modalità headless."""
 
