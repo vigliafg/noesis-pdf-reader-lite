@@ -153,6 +153,29 @@ class CacheResetTests(unittest.TestCase):
         self.assertTrue(ok, "Rigenera non ha rieseguito l'estrazione")
         w.close()
 
+    def test_cache_diagnostics_lists_file_and_revision(self):
+        w = main.MainWindow()
+        w._resume_last_page = False
+        w._open_pdf(self._pdf)
+        txt = w._cache_diagnostics()
+        self.assertIn("cache file", txt)
+        self.assertIn(str(w._extraction_cache_file), txt)
+        self.assertIn(f"revision attesa:{main._CACHE_REVISION}", txt)
+        self.assertIn("pagina:", txt)
+        w.close()
+
+    def test_cache_info_dialog_builds(self):
+        w = main.MainWindow()
+        w._resume_last_page = False
+        w._open_pdf(self._pdf)
+        orig = main.QDialog.exec
+        main.QDialog.exec = lambda self, *a, **k: 0  # non bloccare
+        try:
+            w._show_cache_info()
+        finally:
+            main.QDialog.exec = orig
+        w.close()
+
     def test_clear_document_empties_caches(self):
         w = main.MainWindow()
         w._resume_last_page = False

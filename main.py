@@ -4626,6 +4626,13 @@ class MainWindow(QMainWindow):
         self.btn_clear_cache.setEnabled(False)
         bar.addWidget(self.btn_clear_cache)
 
+        # Info cache: quale file/cartella usa l'app e cosa c'e' per la pagina.
+        self.btn_cache_info = QPushButton("ℹ")
+        self.btn_cache_info.setToolTip(T("toolbar.cache_info.tip"))
+        self.btn_cache_info.clicked.connect(self._show_cache_info)
+        self.btn_cache_info.setEnabled(False)
+        bar.addWidget(self.btn_cache_info)
+
         bar.addSeparator()
 
         # Zoom
@@ -5225,6 +5232,81 @@ class MainWindow(QMainWindow):
         self._save_extraction_cache()
         self._refresh_current_page_text()
 
+    def _cache_diagnostics(self) -> str:
+        """Testo (monospazio) su quale cache l'app sta usando per la pagina."""
+        out: list[str] = []
+        out.append(f"PDF:            {self._pdf_path}")
+        out.append(f"app data base:  {_app_data_base()}")
+        out.append(f"cache file:     {self._extraction_cache_file}")
+        f = self._extraction_cache_file
+        exists = bool(f and f.exists())
+        out.append(f"cache esiste:   {exists}")
+        out.append(f"revision attesa:{_CACHE_REVISION}")
+        if exists:
+            try:
+                data = json.loads(f.read_text(encoding="utf-8"))
+                out.append(f"revision disco: {data.get('revision')}")
+                out.append(f"fingerprint:    {data.get('fingerprint')}")
+            except Exception as e:  # noqa: BLE001
+                out.append(f"cache illeggibile: {e}")
+        out.append(f"fingerprint doc:{self._doc_fingerprint}")
+        out.append("")
+        page = self._current_page
+        lang = _tess_lang_code(get_source_lang())
+        zk = self._zones_key(page)
+        out.append(f"pagina:         {page + 1}  (idx {page})")
+        out.append(f"lingua OCR:     {lang}")
+        out.append(f"zones key:      {zk}")
+        out.append(f"raw in memoria: {(page, lang) in self._extraction_cache}")
+        out.append(f"final in mem.:  {(page, lang, zk) in self._final_text_cache}")
+        out.append(f"pagine in cache:{len({p for (p, _l) in self._extraction_cache})}")
+        try:
+            d = self._get_images_dir()
+            figs = sorted(d.glob(f"page_{page + 1:04d}_fig_*.jpg"))
+            out.append(f"figure dir:     {d}")
+            out.append(f"figure pagina:  {len(figs)}  {[p.name for p in figs]}")
+        except Exception as e:  # noqa: BLE001
+            out.append(f"figure: n/d ({e})")
+        out.append("")
+        tc = getattr(self.text_panel, "_page_translation_cache", {})
+        engine = getattr(self.text_panel, "_engine", "?")
+        target = getattr(self.text_panel, "_target_lang", "?")
+        out.append(f"traduzioni in cache: {len(tc)}")
+        out.append(f"trad. pagina:   {(page, engine, target) in tc}")
+        if self._last_result is not None:
+            _t, label, elapsed = self._last_result
+            out.append(f"ultimo esito:   label={label}  {elapsed:.2f}s")
+        return "\n".join(out)
+
+    def _show_cache_info(self):
+        """Pannello diagnostico: quale cache e cosa c'e' per la pagina corrente."""
+        dlg = QDialog(self)
+        dlg.setWindowTitle(T("cache.info.title"))
+        dlg.resize(760, 500)
+        lay = QVBoxLayout(dlg)
+        edit = QTextEdit()
+        edit.setReadOnly(True)
+        edit.setPlainText(self._cache_diagnostics())
+        edit.setStyleSheet(
+            "font-family: 'Consolas','monospace'; font-size: 12px;"
+        )
+        lay.addWidget(edit)
+        row = QHBoxLayout()
+        btn_copy = QPushButton(T("cache.info.copy"))
+        btn_copy.clicked.connect(
+            lambda: (
+                QApplication.clipboard().setText(edit.toPlainText()),
+                self.status_bar.showMessage(T("cache.info.copied")),
+            )
+        )
+        btn_close = QPushButton(T("cache.info.close"))
+        btn_close.clicked.connect(dlg.accept)
+        row.addStretch()
+        row.addWidget(btn_copy)
+        row.addWidget(btn_close)
+        lay.addLayout(row)
+        dlg.exec()
+
     # ── navigation ────────────────────────────────────────────────────────
 
     def _set_page(self, page_num: int):
@@ -5538,6 +5620,7 @@ class MainWindow(QMainWindow):
             self.page_spin.setMaximum(max(self._page_count, 1))
             self.btn_regenerate.setEnabled(True)
             self.btn_clear_cache.setEnabled(True)
+            self.btn_cache_info.setEnabled(True)
             self.lbl_total.setText(str(self._page_count))
 
             # Build the multi-level table of contents
@@ -5559,6 +5642,7 @@ class MainWindow(QMainWindow):
                 self.status_bar.showMessage(T("status.empty_pdf"))
                 self.btn_regenerate.setEnabled(False)
                 self.btn_clear_cache.setEnabled(False)
+                self.btn_cache_info.setEnabled(False)
         except Exception as e:
             QMessageBox.critical(self, T("dlg.pdf_error"), T("dlg.cannot_open", e=e))
             self._mupdf_doc = None

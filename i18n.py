@@ -214,6 +214,30 @@ _STRINGS: dict[str, dict[str, str]] = {
         "es": "Vaciar la caché de todo el documento (todas las páginas) y "
               "regenerar",
     },
+    "toolbar.cache_info.tip": {
+        "it": "Info cache: quale file/cartella l'app usa per la pagina corrente",
+        "en": "Cache info: which file/folder the app uses for the current page",
+        "fr": "Infos cache : quel fichier/dossier l'app utilise pour la page",
+        "de": "Cache-Info: welche Datei/Ordner die App für die Seite nutzt",
+        "es": "Info de caché: qué archivo/carpeta usa la app para la página",
+    },
+    "cache.info.title": {
+        "it": "Info cache", "en": "Cache info", "fr": "Infos cache",
+        "de": "Cache-Info", "es": "Info de caché",
+    },
+    "cache.info.copy": {
+        "it": "Copia", "en": "Copy", "fr": "Copier", "de": "Kopieren",
+        "es": "Copiar",
+    },
+    "cache.info.close": {
+        "it": "Chiudi", "en": "Close", "fr": "Fermer", "de": "Schließen",
+        "es": "Cerrar",
+    },
+    "cache.info.copied": {
+        "it": "Info cache copiate negli appunti", "en": "Cache info copied",
+        "fr": "Infos cache copiées", "de": "Cache-Info kopiert",
+        "es": "Info de caché copiada",
+    },
     "cache.clear.title": {
         "it": "Svuota cache", "en": "Clear cache", "fr": "Vider le cache",
         "de": "Cache leeren", "es": "Vaciar caché",
