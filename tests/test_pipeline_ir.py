@@ -69,9 +69,35 @@ class IrPipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             pdf = Path(d) / "p.pdf"
             self._two_col_pdf(pdf)
-            md, _raw = main._apply_ir_on_page(str(pdf), 0)
+            md, _raw, _ok = main._apply_ir_on_page(str(pdf), 0)
         self.assertIn("Left column line", md)
         self.assertIn("Right column line", md)
+
+
+@unittest.skipUnless(_OK, "pymupdf/main non disponibili")
+class IntegrityGateTests(unittest.TestCase):
+    def test_index_detected(self):
+        page_text = "\n".join(f"term {i}, {100 + i}" for i in range(20))
+        self.assertTrue(main._looks_like_index(page_text))
+
+    def test_prose_not_index(self):
+        page_text = "\n".join(
+            "This is a prose sentence about medicine and health care." for _ in range(20))
+        self.assertFalse(main._looks_like_index(page_text))
+
+    def test_word_recall(self):
+        self.assertEqual(main._word_recall("medicine cardiology", "medicine"), 0.5)
+        self.assertEqual(main._word_recall("medicine", "no such word"), 0.0)
+
+    def test_empty_body_gate_fails(self):
+        # gate su md vuoto -> False (fallback)
+        import pymupdf
+        doc = pymupdf.open()
+        p = doc.new_page(width=612, height=792)
+        p.insert_text((72, 100), "Some page text here.", fontsize=11)
+        ok, reason = main._ir_gate(p, "", [])
+        self.assertFalse(ok)
+        doc.close()
 
 
 if __name__ == "__main__":

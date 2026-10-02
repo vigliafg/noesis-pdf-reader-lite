@@ -155,7 +155,7 @@ def _build_md(pipeline: str, pdf: str, doc, page, idx: int, figures_dir, ocr_lan
             pymupdf4llm.use_layout(True)
     if pipeline == "ir":
         # pipeline IR INTEGRATA (content map + figure unite + cosmetica, 1 passata)
-        md, _raw = main._apply_ir_on_page(pdf, idx, figures_dir=figures_dir)
+        md, _raw, _ok = main._apply_ir_on_page(pdf, idx, figures_dir=figures_dir)
         return md
     # current
     raw = main._extract_pymupdf4llm(pdf, idx, ocr_lang)
