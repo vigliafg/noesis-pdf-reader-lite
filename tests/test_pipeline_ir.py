@@ -69,7 +69,7 @@ class IrPipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             pdf = Path(d) / "p.pdf"
             self._two_col_pdf(pdf)
-            md = main._apply_ir_on_page(str(pdf), 0)
+            md, _raw = main._apply_ir_on_page(str(pdf), 0)
         self.assertIn("Left column line", md)
         self.assertIn("Right column line", md)
 
