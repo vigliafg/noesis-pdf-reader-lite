@@ -88,6 +88,49 @@ class NormNoiseSingleLetterTests(unittest.TestCase):
         self.assertFalse(L._is_noise_line("CHAPTER 1 Cellular structure", set()))
 
 
+class MarginFragmentMergeTests(unittest.TestCase):
+    """La testatina spezzata in frammenti non deve cancellare il titolo.
+
+    Su ce24/p119 la testata è resa come due frammenti sulla stessa riga di base
+    ("CHAPTER 10" + "QUALITY, SAFETY, AND VALUE"): senza unirli, il secondo
+    diventava un candidato rumore e cancellava il titolo ``# QUALITY, SAFETY,
+    AND VALUE`` che ha lo stesso testo della testatina.
+    """
+
+    @staticmethod
+    def _page():
+        y = 15.0
+
+        def _line(x0, x1, text):
+            return {"bbox": (x0, y, x1, y + 12), "spans": [{"text": text}]}
+
+        blocks = [{"type": 0, "lines": [
+            _line(317, 367, "CHAPTER 10\u2003"),
+            _line(376, 528, "QUALITY, SAFETY, AND VALUE"),
+            _line(590, 600, "43"),  # numero di pagina: frammento lontano
+        ]}]
+
+        class _Page:
+            rect = type("R", (), {"height": 800.0})()
+
+            def get_text(self, kind):
+                return {"blocks": blocks}
+
+        return _Page()
+
+    def test_fragments_are_merged(self):
+        texts = [t for t, *_ in L._iter_margin_lines(self._page())]
+        self.assertIn("CHAPTER 10\u2003 QUALITY, SAFETY, AND VALUE", texts)
+        self.assertIn("43", texts)  # il numero di pagina resta separato
+
+    def test_chapter_title_matching_running_head_is_kept(self):
+        md = ("CHAPTER **10 QUALITY, SAFETY, AND VALUE**\n\n"
+              "# **QUALITY, SAFETY, AND VALUE**\n\nTesto del capitolo.\n")
+        out = L._strip_running_headers(md, self._page())
+        self.assertNotIn("CHAPTER **10", out)                    # testatina via
+        self.assertIn("# **QUALITY, SAFETY, AND VALUE**", out)   # titolo resta
+
+
 class CaptionLetterNumberTests(unittest.TestCase):
     def test_letter_number_caption_matches(self):
         # "TABLE E2" (marcatore con lettera) deve essere riconosciuto

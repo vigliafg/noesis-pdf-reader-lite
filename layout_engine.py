@@ -436,24 +436,53 @@ def _is_title_above(line_x0: float, line_x1: float, y1: float, regions: list[tup
     return False
 
 
+#: Tolleranza (pt) per considerare due frammenti sulla stessa riga di base e
+#: distanza orizzontale massima per unirli in un'unica voce di margine.
+_MARGIN_JOIN_Y = 2.0
+_MARGIN_JOIN_GAP = 12.0
+
+
 def _iter_margin_lines(page):
-    """Yield ``(text, x0, x1, y1)`` for the lines in the top/bottom margin band."""
+    """Yield ``(text, x0, x1, y1)`` for the lines in the top/bottom margin band.
+
+    I frammenti sulla **stessa riga di base** e **vicini** (es. la testatina
+    spezzata da un cambio di stile in ``CHAPTER 10`` + ``QUALITY, SAFETY, AND
+    VALUE``) sono uniti in un'unica voce. Altrimenti il singolo frammento
+    diventa un candidato a sé e cancella un titolo di capitolo che ha lo stesso
+    testo della testatina (la testatina ripete il titolo del capitolo). Restano
+    separati i frammenti lontani (es. il numero di pagina a filo del margine).
+    """
     try:
         height = page.rect.height
         blocks = page.get_text("dict")["blocks"]
     except Exception:
         return
     top, bottom = 0.08 * height, 0.92 * height
+    frags: list[tuple[float, float, float, str]] = []
     for blk in blocks:
         if blk.get("type") != 0:
             continue
         for line in blk["lines"]:
             y0, y1 = line["bbox"][1], line["bbox"][3]
             if y1 <= top or y0 >= bottom:
-                yield (
+                frags.append((
+                    y1, line["bbox"][0], line["bbox"][2],
                     "".join(s["text"] for s in line["spans"]),
-                    line["bbox"][0], line["bbox"][2], y1,
-                )
+                ))
+    frags.sort(key=lambda f: (round(f[0], 1), f[1]))
+    merged: list[list] = []  # [y1, x0, x1, testo]
+    for y1, x0, x1, txt in frags:
+        for m in merged:
+            if (abs(m[0] - y1) <= _MARGIN_JOIN_Y
+                    and x0 >= m[1] - _MARGIN_JOIN_GAP
+                    and x0 - m[2] <= _MARGIN_JOIN_GAP):
+                m[2] = max(m[2], x1)
+                m[3] = f"{m[3]} {txt}" if m[3] else txt
+                break
+        else:
+            merged.append([y1, x0, x1, txt])
+    for y1, x0, x1, txt in merged:
+        yield (txt, x0, x1, y1)
 
 
 _DOC_NOISE_CACHE: dict = {}

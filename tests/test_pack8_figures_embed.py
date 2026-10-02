@@ -167,6 +167,48 @@ class GoldEmbedRatioTests(unittest.TestCase):
         self.assertLessEqual(len(jpg), 0.30 * png)
 
 
+def _image_widths(document):
+    """Larghezze dei ``QTextImageFormat`` presenti nel documento."""
+    widths = []
+    block = document.begin()
+    while block.isValid():
+        it = block.begin()
+        while not it.atEnd():
+            frag = it.fragment()
+            it += 1
+            if frag.isValid() and frag.charFormat().isImageFormat():
+                widths.append(frag.charFormat().toImageFormat().width())
+        block = block.next()
+    return widths
+
+
+@unittest.skipUnless(_QT_OK, "PyQt6 non disponibile")
+class ImageFitTests(unittest.TestCase):
+    """La figura embedded non deve sforare la larghezza del pannello."""
+
+    def test_embedded_figure_fits_viewport(self):
+        doc, page = _page_with_figure()
+        regs = main._figure_regions(page)
+        uri = main._figure_data_uri(page, regs[0]["rect"])
+        doc.close()
+        md = f"Testo.\n\n![figura 1]({uri})\n\nDopo."
+        panel = main.TextPanel()
+        panel.resize(520, 700)
+        panel.show()
+        panel.show_text(md, as_markdown=True)
+        _qt_app.processEvents()
+        avail = panel.viewport().width() - 24
+        widths = _image_widths(panel.document())
+        self.assertTrue(widths, "figura non renderizzata")
+        self.assertLessEqual(max(widths), avail + 1)
+        # allargando oltre la dimensione nativa, torna a quella nativa
+        native = main._uri_qimage(uri).width()
+        panel.resize(4000, 700)
+        _qt_app.processEvents()
+        self.assertLessEqual(max(_image_widths(panel.document())), native + 1)
+        panel.deleteLater()
+
+
 @unittest.skipUnless(_QT_OK, "PyQt6 non disponibile")
 class ImageDocumentTests(unittest.TestCase):
     def test_load_resource_decodes_data_uri(self):

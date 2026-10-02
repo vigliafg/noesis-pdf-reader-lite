@@ -63,6 +63,7 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import (
     QImage, QPixmap, QFont, QKeySequence, QShortcut,
     QPen, QBrush, QColor, QPainter, QDesktopServices, QTextDocument,
+    QTextCursor, QTextImageFormat,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -2613,6 +2614,66 @@ class TextPanel(QTextEdit):
         # darebbe falsi positivi di modifica)
         self._rendered_text = self.toPlainText()
         self._buffer = self._rendered_text
+        self._fit_images_to_width()
+
+    def _fit_images_to_width(self) -> None:
+        """Ridimensiona le figure perché stiano nella larghezza visibile.
+
+        Il motore rich-text di Qt **ignora** ``max-width`` nei tag ``<style>`` e
+        rende le immagini alla dimensione nativa: le figure embedded (rese a 3×)
+        sforavano il pannello. Si imposta larghezza (e altezza proporzionale) del
+        ``QTextImageFormat`` al minimo tra nativa e spazio disponibile; allargando
+        la finestra la figura torna alla dimensione nativa.
+        """
+        doc = self.document()
+        avail = self.viewport().width() - 24
+        if avail < 120:
+            return
+        self._programmatic = True
+        try:
+            cur = QTextCursor(doc)
+            block = doc.begin()
+            while block.isValid():
+                it = block.begin()
+                while not it.atEnd():
+                    frag = it.fragment()
+                    it += 1
+                    if not frag.isValid():
+                        continue
+                    fmt = frag.charFormat()
+                    if not fmt.isImageFormat():
+                        continue
+                    img = fmt.toImageFormat()
+                    res = doc.resource(
+                        QTextDocument.ResourceType.ImageResource, QUrl(img.name()))
+                    if not isinstance(res, QImage) or res.isNull():
+                        continue
+                    nw, nh = res.width(), res.height()
+                    if nw <= 0 or nh <= 0:
+                        continue
+                    w = min(nw, avail)
+                    h = nh * w / nw
+                    if abs(w - img.width()) < 1 and abs(h - img.height()) < 1:
+                        continue
+                    new = QTextImageFormat(img)
+                    new.setWidth(w)
+                    new.setHeight(h)
+                    cur.setPosition(frag.position())
+                    cur.setPosition(
+                        frag.position() + frag.length(),
+                        QTextCursor.MoveMode.KeepAnchor)
+                    cur.setCharFormat(new)
+                block = block.next()
+        finally:
+            self._programmatic = False
+
+    def resizeEvent(self, event):  # noqa: N802 — API Qt
+        """Ri-adatta le figure alla nuova larghezza (solo in modalità markdown)."""
+        super().resizeEvent(event)
+        if self._programmatic or self._plain_mode:
+            return
+        if self._as_markdown or self._raw_html:
+            self._fit_images_to_width()
 
     def is_modified(self) -> bool:
         """True if the user changed the content beyond the last render."""
