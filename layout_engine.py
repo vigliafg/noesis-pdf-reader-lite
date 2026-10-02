@@ -70,6 +70,33 @@ def _data_tables(page, exclude: Sequence[tuple] = ()) -> list:
     return out
 
 
+def figure_text_regions(page, exclude: Sequence[tuple] = (), pad: float = 4.0) -> list[tuple]:
+    """Rettangoli delle figure da cui escludere il **testo interno**.
+
+    Etichette degli assi, legende e titoli dei grafici sono testo, ma sono
+    dentro l'immagine della figura. Sono più stretti del 60% della pagina e non
+    stanno in una tabella: senza escluderli fanno da "ponte" tra le colonne e il
+    rilevatore collassa la pagina a una colonna (l'ordine di lettura resta
+    intrecciato). Si usa l'unione grafico+didascalia perché le etichette degli
+    assi stanno proprio tra i due; la didascalia resta contenuto (chi la usa la
+    protegge con ``_FIGURE_CAPTION_RE``). Vedi ha22/p101 (FIG. 10-1).
+    """
+    from main import _figure_regions  # lazy: evita import circolare
+
+    regions: list[tuple] = []
+    try:
+        for f in _figure_regions(page, exclude):
+            x0, y0, x1, y1 = f["rect"]
+            c = f.get("caption_rect")
+            if c:
+                x0, y0 = min(x0, c[0]), min(y0, c[1])
+                x1, y1 = max(x1, c[2]), max(y1, c[3])
+            regions.append((x0 - pad, y0 - pad, x1 + pad, y1 + pad))
+    except Exception:
+        return []
+    return regions
+
+
 def _body_blocks(page, exclude: Sequence[tuple] = ()) -> tuple[list[tuple], list[dict]]:
     """Return (table_regions, body_blocks) come in ``_column_aware_markdown``."""
     from main import _collect_blocks  # lazy: evita import circolare
@@ -77,6 +104,8 @@ def _body_blocks(page, exclude: Sequence[tuple] = ()) -> tuple[list[tuple], list
     table_regions: list[tuple] = []
     for t in _data_tables(page, exclude):
         table_regions.append(tuple(t.bbox))
+
+    figure_regions = figure_text_regions(page, exclude)
 
     def _inside(b: dict, r: tuple) -> bool:
         return (
@@ -89,6 +118,7 @@ def _body_blocks(page, exclude: Sequence[tuple] = ()) -> tuple[list[tuple], list
     body = [
         b for b in blocks
         if not any(_inside(b, r) for r in table_regions)
+        and not any(_inside(b, r) for r in figure_regions)
         and (b["x1"] - b["x0"]) < 0.6 * pw
         and (b["x1"] - b["x0"]) >= 25
     ]

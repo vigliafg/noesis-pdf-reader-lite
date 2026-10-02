@@ -1206,6 +1206,21 @@ def _column_aware_markdown(page, move_title: bool = False, exclude: tuple = ()) 
         if b["max_size"] >= 6.5 or _is_table_legend(b, table_regions)
     ]
 
+    # Il testo **dentro le figure** (etichette degli assi, legende) non deve
+    # contare nel rilevamento delle colonne: è più stretto del 60% della
+    # pagina e non sta in una tabella, quindi da solo fa da "ponte" e collassa
+    # la pagina a una sola colonna, lasciando l'ordine di lettura intrecciato.
+    # Resta però nel flusso d'uscita (le legende delle mappe sono contenuto da
+    # mostrare — vedi il gold su ha22/p1230); la didascalia ("FIGURE n …") è
+    # contenuto e non va mai esclusa. Vedi ha22/p101.
+    figure_text = layout_engine.figure_text_regions(page, exclude)
+
+    def _fig_text(b: dict) -> bool:
+        t = " ".join(s["text"] for line in b["lines"] for s in line)
+        if _FIGURE_CAPTION_RE.match(re.sub(r"\s+", " ", t).strip()):
+            return False  # didascalia: contenuto, non testo-figura
+        return any(_inside(b, r) for r in figure_text)
+
     full_width: list[dict] = []  # spans the page → separator
     body: list[dict] = []        # column paragraphs (outside tables/boxes)
     for b in blocks:
@@ -1227,7 +1242,8 @@ def _column_aware_markdown(page, move_title: bool = False, exclude: tuple = ()) 
     # content): a column that is entirely a box must still count as a column,
     # otherwise the layout collapses to single-column and the box is misordered.
     split_blocks = [
-        b for b in blocks if not any(_inside(b, r) for r in table_regions)
+        b for b in blocks
+        if not any(_inside(b, r) for r in table_regions) and not _fig_text(b)
     ]
     # Headers/footers/watermarks must not bridge the column gap (they would
     # collapse the page to a single column).
