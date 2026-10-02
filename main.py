@@ -1791,6 +1791,13 @@ def _setup_bundled_tesseract() -> None:
         os.environ["TESSDATA_PREFIX"] = tessdata
 
 
+#: Revisione dello schema/dell'output della cache di estrazione. Va incrementata
+#: ogni volta che un fix cambia il markdown finale: al load i "final" salvati con
+#: una revisione diversa vengono **scartati** (i "raw" restano), così l'engine
+#: rigira da solo e l'utente non rivede output vecchi dopo un aggiornamento.
+_CACHE_REVISION = 1
+
+
 def _extract_pymupdf4llm(
     path: str, page_num: int, ocr_language: str | None = None
 ) -> str:
@@ -4603,6 +4610,22 @@ class MainWindow(QMainWindow):
         self.btn_next.clicked.connect(self._next_page)
         bar.addWidget(self.btn_next)
 
+        # Rigenera: svuota la cache (pagina corrente / intero documento) e
+        # rilancia estrazione + traduzione. Serve perché la cache su disco salva
+        # anche il md finale: dopo un fix del motore il risultato vecchio
+        # resterebbe altrimenti al suo posto.
+        self.btn_regenerate = QPushButton("↻")
+        self.btn_regenerate.setToolTip(T("toolbar.reextract.tip"))
+        self.btn_regenerate.clicked.connect(self._regenerate_page)
+        self.btn_regenerate.setEnabled(False)
+        bar.addWidget(self.btn_regenerate)
+
+        self.btn_clear_cache = QPushButton("🧹")
+        self.btn_clear_cache.setToolTip(T("toolbar.clear_cache.tip"))
+        self.btn_clear_cache.clicked.connect(self._clear_document_cache)
+        self.btn_clear_cache.setEnabled(False)
+        bar.addWidget(self.btn_clear_cache)
+
         bar.addSeparator()
 
         # Zoom
@@ -4878,6 +4901,10 @@ class MainWindow(QMainWindow):
             return
         if data.get("fingerprint") != self._doc_fingerprint:
             return
+        # Un fix del motore cambia l'output: se la revisione non combacia, i
+        # "final" salvati sono obsoleti e vanno rieseguiti (i "raw" restano,
+        # così il re-extract è veloce).
+        finals_ok = data.get("revision") == _CACHE_REVISION
         pages = data.get("pages") or {}
         for page_str, langs in pages.items():
             try:
@@ -4897,7 +4924,8 @@ class MainWindow(QMainWindow):
                         self._extraction_cache[(page, lang)] = raw
                     final = value.get("final")
                     if (
-                        isinstance(final, (list, tuple))
+                        finals_ok
+                        and isinstance(final, (list, tuple))
                         and len(final) == 3
                         and isinstance(final[0], str)
                     ):
@@ -4917,7 +4945,11 @@ class MainWindow(QMainWindow):
             if final is not None:
                 entry["final"] = [final[0], final[1], final[2]]
             pages.setdefault(str(page), {})[lang] = entry
-        payload = {"fingerprint": self._doc_fingerprint, "pages": pages}
+        payload = {
+            "revision": _CACHE_REVISION,
+            "fingerprint": self._doc_fingerprint,
+            "pages": pages,
+        }
         try:
             self._extraction_cache_file.write_text(
                 json.dumps(payload, ensure_ascii=False), encoding="utf-8"
@@ -5128,6 +5160,70 @@ class MainWindow(QMainWindow):
             self._images_dir = _app_data_base() / "images" / self._pdf_path.stem
         self._images_dir.mkdir(parents=True, exist_ok=True)
         return self._images_dir
+
+    # ── rigenera / svuota cache ───────────────────────────────────────────
+
+    def _purge_page_cache(self, page_num: int) -> None:
+        """Svuota la cache di una pagina: raw, final, figure (G7) e traduzione."""
+        for k in [k for k in self._extraction_cache if k[0] == page_num]:
+            del self._extraction_cache[k]
+        for k in [k for k in self._final_text_cache if k[0] == page_num]:
+            del self._final_text_cache[k]
+        self.text_panel.invalidate_page(page_num)
+        try:
+            images_dir = self._get_images_dir()
+            for p in images_dir.glob(f"page_{page_num + 1:04d}_fig_*.jpg"):
+                try:
+                    p.unlink()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        self._page_images.pop(page_num, None)
+        if page_num == self._current_page:
+            self._current_images = self._page_images.setdefault(page_num, [])
+        if self._last_result is not None and page_num == self._current_page:
+            self._last_result = None
+
+    def _regenerate_page(self):
+        """Rigenera la pagina corrente: svuota la sua cache e riesegue tutto."""
+        if not self._pdf_path or self._mupdf_doc is None or self._page_count == 0:
+            return
+        self._extract_generation += 1  # invalida eventuali estrazioni in volo
+        self._purge_page_cache(self._current_page)
+        self._save_extraction_cache()
+        self._refresh_current_page_text()
+
+    def _clear_document_cache(self):
+        """Svuota la cache dell'intero documento (tutte le pagine) e rigenera."""
+        if not self._pdf_path or self._mupdf_doc is None or self._page_count == 0:
+            return
+        ret = QMessageBox.question(
+            self,
+            T("cache.clear.title"),
+            T("cache.clear.confirm"),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if ret != QMessageBox.StandardButton.Yes:
+            return
+        self._extract_generation += 1
+        self._extraction_cache.clear()
+        self._final_text_cache.clear()
+        self.text_panel.invalidate_cache()
+        try:
+            images_dir = self._get_images_dir()
+            for p in images_dir.glob("page_*_fig_*.jpg"):
+                try:
+                    p.unlink()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        self._page_images.clear()
+        self._current_images = self._page_images.setdefault(self._current_page, [])
+        self._last_result = None
+        self._save_extraction_cache()
+        self._refresh_current_page_text()
 
     # ── navigation ────────────────────────────────────────────────────────
 
@@ -5440,6 +5536,8 @@ class MainWindow(QMainWindow):
 
             self.page_spin.setEnabled(True)
             self.page_spin.setMaximum(max(self._page_count, 1))
+            self.btn_regenerate.setEnabled(True)
+            self.btn_clear_cache.setEnabled(True)
             self.lbl_total.setText(str(self._page_count))
 
             # Build the multi-level table of contents
@@ -5459,6 +5557,8 @@ class MainWindow(QMainWindow):
                 self.pdf_view.show_page(None)
                 self._display_text(T("view.empty_pdf"))
                 self.status_bar.showMessage(T("status.empty_pdf"))
+                self.btn_regenerate.setEnabled(False)
+                self.btn_clear_cache.setEnabled(False)
         except Exception as e:
             QMessageBox.critical(self, T("dlg.pdf_error"), T("dlg.cannot_open", e=e))
             self._mupdf_doc = None

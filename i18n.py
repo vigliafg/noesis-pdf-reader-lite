@@ -193,6 +193,43 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "· st. {n}", "en": "· p. {n}", "fr": "· p. {n}",
         "de": "· S. {n}", "es": "· p. {n}",
     },
+    "toolbar.reextract.tip": {
+        "it": "Rigenera la pagina: svuota la cache della pagina e riesegue "
+              "estrazione e traduzione",
+        "en": "Re-extract the page: clear the page cache and rerun extraction "
+              "and translation",
+        "fr": "Régénérer la page : vide le cache de la page et relance "
+              "extraction et traduction",
+        "de": "Seite neu erzeugen: Seiten-Cache leeren und Extraktion/"
+              "Übersetzung erneut ausführen",
+        "es": "Regenerar la página: vacía la caché de la página y relanza "
+              "extracción y traducción",
+    },
+    "toolbar.clear_cache.tip": {
+        "it": "Svuota la cache dell'intero documento (tutte le pagine) e rigenera",
+        "en": "Clear the whole document's cache (all pages) and regenerate",
+        "fr": "Vider le cache de tout le document (toutes les pages) et régénérer",
+        "de": "Den Cache des gesamten Dokuments leeren (alle Seiten) und neu "
+              "erzeugen",
+        "es": "Vaciar la caché de todo el documento (todas las páginas) y "
+              "regenerar",
+    },
+    "cache.clear.title": {
+        "it": "Svuota cache", "en": "Clear cache", "fr": "Vider le cache",
+        "de": "Cache leeren", "es": "Vaciar caché",
+    },
+    "cache.clear.confirm": {
+        "it": "Svuotare la cache dell'intero documento? Le pagine verranno "
+              "riestratte al prossimo accesso.",
+        "en": "Clear the whole document's cache? Pages will be re-extracted on "
+              "next view.",
+        "fr": "Vider le cache de tout le document ? Les pages seront "
+              "ré-extraites au prochain affichage.",
+        "de": "Den Cache des gesamten Dokuments leeren? Die Seiten werden beim "
+              "nächsten Aufruf neu extrahiert.",
+        "es": "¿Vaciar la caché de todo el documento? Las páginas se "
+              "reextraerán al volver a verlas.",
+    },
     "toolbar.zoom_out.tip": {
         "it": "Riduci zoom (Ctrl+-)", "en": "Zoom out (Ctrl+-)",
         "fr": "Zoom arrière (Ctrl+-)", "de": "Verkleinern (Strg+-)",
