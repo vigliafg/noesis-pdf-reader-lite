@@ -193,6 +193,46 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "· st. {n}", "en": "· p. {n}", "fr": "· p. {n}",
         "de": "· S. {n}", "es": "· p. {n}",
     },
+    "toolbar.reextract": {
+        "it": "↻ Riestrai pagina", "en": "↻ Re-extract page",
+        "fr": "↻ Réextraire la page", "de": "↻ Seite neu extrahieren",
+        "es": "↻ Reextraer página",
+    },
+    "toolbar.clear_cache": {
+        "it": "🧹 Svuota cache", "en": "🧹 Clear cache",
+        "fr": "🧹 Vider le cache", "de": "🧹 Cache leeren",
+        "es": "🧹 Vaciar caché",
+    },
+    "cache.regenerating": {
+        "it": "Riestrazione pagina {page}…",
+        "en": "Re-extracting page {page}…",
+        "fr": "Réextraction de la page {page}…",
+        "de": "Seite {page} wird neu extrahiert…",
+        "es": "Reextrayendo página {page}…",
+    },
+    "cache.clearing": {
+        "it": "Svuotamento cache in corso…",
+        "en": "Clearing cache…",
+        "fr": "Vidage du cache…",
+        "de": "Cache wird geleert…",
+        "es": "Vaciando caché…",
+    },
+    "cache.cleared": {
+        "it": "Cache svuotata.", "en": "Cache cleared.",
+        "fr": "Cache vidé.", "de": "Cache geleert.", "es": "Caché vaciada.",
+    },
+    "cache.cleared_hint": {
+        "it": "Cache svuotata.\n\nNessun testo in memoria per questa pagina: "
+              "premi «↻ Riestrai pagina» per rieseguire l'estrazione.",
+        "en": "Cache cleared.\n\nNo text in memory for this page: press "
+              "«↻ Re-extract page» to run the extraction again.",
+        "fr": "Cache vidé.\n\nAucun texte en mémoire pour cette page : appuyez "
+              "sur «↻ Réextraire la page» pour relancer l'extraction.",
+        "de": "Cache geleert.\n\nKein Text im Speicher für diese Seite: "
+              "„↻ Seite neu extrahieren“ drücken, um die Extraktion zu starten.",
+        "es": "Caché vaciada.\n\nNo hay texto en memoria para esta página: "
+              "pulsa «↻ Reextraer página» para repetir la extracción.",
+    },
     "toolbar.reextract.tip": {
         "it": "Rigenera la pagina: svuota la cache della pagina e riesegue "
               "estrazione e traduzione",

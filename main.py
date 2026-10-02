@@ -3595,6 +3595,26 @@ class TranslatablePanel(QWidget):
         if activate:
             self._set_active_tab(self._btn_images)
 
+    def clear_pages(self, message: str = ""):
+        """Svuota i pannelli (dopo il reset cache) e mostra un avviso.
+
+        Non riestrae: azzera contenuti/immagini/traduzioni così non restano
+        testi vecchi a schermo e mostra ``message`` nel pannello Originale
+        (invito a riestrarre).
+        """
+        self._page_text = ""
+        self._page_body = ""
+        self._header_prefix = ""
+        self._header_tail = ""
+        self._translated_text = ""
+        self._images = []
+        self._page_translation_cache.clear()
+        self._save_disk_cache()
+        self._rebuild_images_panel()
+        self.origin_panel.show_text(message or "", as_markdown=False)
+        self.translated_panel.show_text("", as_markdown=False)
+        self._set_active_tab(self._btn_original)
+
     # ── Images gallery ─────────────────────────────────────────────────
 
     def _rebuild_images_panel(self):
@@ -4621,13 +4641,13 @@ class MainWindow(QMainWindow):
         # rilancia estrazione + traduzione. Serve perché la cache su disco salva
         # anche il md finale: dopo un fix del motore il risultato vecchio
         # resterebbe altrimenti al suo posto.
-        self.btn_regenerate = QPushButton("↻")
+        self.btn_regenerate = QPushButton(T("toolbar.reextract"))
         self.btn_regenerate.setToolTip(T("toolbar.reextract.tip"))
         self.btn_regenerate.clicked.connect(self._regenerate_page)
         self.btn_regenerate.setEnabled(False)
         bar.addWidget(self.btn_regenerate)
 
-        self.btn_clear_cache = QPushButton("🧹")
+        self.btn_clear_cache = QPushButton(T("toolbar.clear_cache"))
         self.btn_clear_cache.setToolTip(T("toolbar.clear_cache.tip"))
         self.btn_clear_cache.clicked.connect(self._clear_document_cache)
         self.btn_clear_cache.setEnabled(False)
@@ -5203,13 +5223,22 @@ class MainWindow(QMainWindow):
         """Rigenera la pagina corrente: svuota la sua cache e riesegue tutto."""
         if not self._pdf_path or self._mupdf_doc is None or self._page_count == 0:
             return
+        msg = T("cache.regenerating", page=self._current_page + 1)
+        self.status_bar.showMessage(msg)
+        self.text_panel._lbl_spinner.setText(msg)
+        QApplication.processEvents()
         self._extract_generation += 1  # invalida eventuali estrazioni in volo
         self._purge_page_cache(self._current_page)
         self._save_extraction_cache()
         self._refresh_current_page_text()
 
     def _clear_document_cache(self):
-        """Svuota la cache dell'intero documento (tutte le pagine) e rigenera."""
+        """Svuota la cache di TUTTO il documento e svuota i pannelli.
+
+        Non riestrae da solo: dopo il reset il pannello mostra un invito a
+        premere "Riestrai pagina" (↻), così l'utente vede che la cache è vuota
+        e decide quando riestrarre.
+        """
         if not self._pdf_path or self._mupdf_doc is None or self._page_count == 0:
             return
         ret = QMessageBox.question(
@@ -5220,6 +5249,9 @@ class MainWindow(QMainWindow):
         )
         if ret != QMessageBox.StandardButton.Yes:
             return
+        self.status_bar.showMessage(T("cache.clearing"))
+        self.text_panel._lbl_spinner.setText(T("cache.clearing"))
+        QApplication.processEvents()
         self._extract_generation += 1
         self._extraction_cache.clear()
         self._final_text_cache.clear()
@@ -5234,10 +5266,13 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         self._page_images.clear()
-        self._current_images = self._page_images.setdefault(self._current_page, [])
+        self._current_images = []
         self._last_result = None
         self._save_extraction_cache()
-        self._refresh_current_page_text()
+        # Pannello svuotato: niente testo vecchio a schermo + invito a riestrarre.
+        self.text_panel.clear_pages(T("cache.cleared_hint"))
+        self.status_bar.showMessage(T("cache.cleared"))
+        self.text_panel._lbl_spinner.setText(T("cache.cleared"))
 
     def _cache_diagnostics(self) -> str:
         """Testo (monospazio) su quale cache l'app sta usando per la pagina."""

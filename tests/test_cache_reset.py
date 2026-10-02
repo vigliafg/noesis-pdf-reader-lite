@@ -194,6 +194,25 @@ class CacheResetTests(unittest.TestCase):
         self.assertEqual(len(w._extraction_cache), 0)
         w.close()
 
+    def test_clear_document_empties_panel_and_hints(self):
+        w = main.MainWindow()
+        w._resume_last_page = False
+        w._open_pdf(self._pdf)
+        lang = main._tess_lang_code(main.get_source_lang())
+        _wait(lambda: (0, lang, "()") in w._final_text_cache)
+        orig = QMessageBox.question
+        QMessageBox.question = staticmethod(
+            lambda *a, **k: QMessageBox.StandardButton.Yes)
+        try:
+            w._clear_document_cache()
+        finally:
+            QMessageBox.question = orig
+        # niente testo vecchio: pannello svuotato + invito a riestrarre
+        self.assertIsNone(w._last_result)
+        self.assertEqual(w.text_panel._page_body, "")
+        self.assertTrue(w.text_panel.origin_panel.toPlainText().strip())
+        w.close()
+
 
 if __name__ == "__main__":
     unittest.main()
