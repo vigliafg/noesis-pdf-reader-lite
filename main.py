@@ -2689,6 +2689,7 @@ class TextPanel(QTextEdit):
         if avail < 120:
             return
         self._programmatic = True
+        changed = False
         try:
             cur = QTextCursor(doc)
             block = doc.begin()
@@ -2722,7 +2723,13 @@ class TextPanel(QTextEdit):
                         frag.position() + frag.length(),
                         QTextCursor.MoveMode.KeepAnchor)
                     cur.setCharFormat(new)
+                    changed = True
                 block = block.next()
+            # Cambiare i formati immagine durante l'iterazione lascia il layout
+            # incoerente: gli ultimi blocchi restano con altezza 0 (non
+            # impaginati, irraggiungibili). Un relayout completo li sistema.
+            if changed:
+                doc.markContentsDirty(0, doc.characterCount())
         finally:
             self._programmatic = False
 

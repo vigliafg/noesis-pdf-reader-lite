@@ -208,6 +208,35 @@ class ImageFitTests(unittest.TestCase):
         self.assertLessEqual(max(_image_widths(panel.document())), native + 1)
         panel.deleteLater()
 
+    def test_last_block_laid_out_after_image_fit(self):
+        """Ridurre le immagini NON deve lasciare l'ultimo blocco non impaginato.
+
+        Regressione: mutare i QTextImageFormat lasciava il layout incoerente e
+        gli ultimi blocchi venivano resi con altezza 0 (testo presente in
+        ``toPlainText`` ma non visibile/raggiungibile).
+        """
+        from PyQt6.QtGui import QTextCursor
+
+        doc, page = _page_with_figure()
+        regs = main._figure_regions(page)
+        uri = main._figure_data_uri(page, regs[0]["rect"])
+        doc.close()
+        paras = "\n\n".join(
+            f"Paragraph {i} " + "word " * 30 for i in range(40))
+        md = f"Testo iniziale.\n\n![figura 1]({uri})\n\n{paras}"
+        panel = main.TextPanel()
+        panel.resize(520, 700)
+        panel.show()
+        panel.show_text(md, as_markdown=True)
+        _qt_app.processEvents()
+        d = panel.document()
+        cur = QTextCursor(d)
+        cur.movePosition(QTextCursor.MoveOperation.End)
+        rect = d.documentLayout().blockBoundingRect(cur.block())
+        self.assertGreater(rect.height(), 1, "ultimo blocco non impaginato")
+        self.assertLessEqual(abs((rect.y() + rect.height()) - d.size().height()), 6)
+        panel.deleteLater()
+
 
 @unittest.skipUnless(_QT_OK, "PyQt6 non disponibile")
 class ImageDocumentTests(unittest.TestCase):
