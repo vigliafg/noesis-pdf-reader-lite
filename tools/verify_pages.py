@@ -1,27 +1,20 @@
 #!/usr/bin/env python3
-"""Verifica automatica pagina-per-pagina (per l'agente, senza arbitraggio umano).
+"""Verifica/confronto pagina-per-pagina delle pipeline di estrazione.
 
-Apre l'**app reale** headless, va alle pagine richieste, lascia estrarre il
-markdown e salva **quello che il pannello mostra davvero**:
+Pipeline confrontabili (stessa pagina, stessa resa del pannello):
+- ``current``: percorso layout GNN + motore dei fix (quello dell'app di oggi);
+- ``legacy``:  ``pymupdf4llm.use_layout(False)`` (percorso "classico"), raw;
+- ``ir``:      ricostruzione dalla **content map** (``ir_layout.build_markdown``).
 
-- ``page_XXXX.md``    → il markdown in memoria (body del pannello);
-- ``page_XXXX.plain.txt`` → il **testo impaginato** (``toPlainText`` del pannello): è
-  ciò che l'utente vede/scrolla, quindi cattura anche i bug di *resa*;
-- ``page_XXXX.png``   → screenshot della finestra;
-- ``report.md``/``report.jsonl`` → metriche per pagina.
-
-Metriche (per pagina):
-- ``recall_pdf``:  quota di parole "lunghe" della pagina PDF presenti nel body
-  (integrità dell'**estrazione**);
-- ``recall_render``: quota di parole lunghe del body presenti nel testo
-  impaginato (integrità della **resa**: se < ~1, il pannello tronca);
-- ``tail_ok``: l'ultimo blocco del documento è impaginato (altezza > 0);
-- ``body_len`` / ``plain_len``.
+Per ogni pagina e pipeline salva:
+- ``<pipeline>/page_XXXX.md`` / ``.plain.txt`` (testo impaginato) / ``.png``;
+- metriche: tempo, ``recall_pdf`` (integrità estrazione), ``recall_render``
+  (integrità resa), ``order_score`` (contiguità per colonna), ``tail``.
 
 Uso:
     QT_QPA_PLATFORM=offscreen .venv/bin/python tools/verify_pages.py \\
-        corpus1/ha22.pdf --pages 100,118,140-143 --out /tmp/opencode/verify \\
-        [--fresh] [--timeout 120]
+        corpus1/ha22.pdf --pages 99-102 --out /tmp/opencode/verify \\
+        --pipelines current,legacy,ir
 """
 
 from __future__ import annotations
@@ -42,7 +35,6 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 
 def _parse_pages(spec: str) -> list[int]:
-    """'100,118,140-143' → [100,118,140,141,142,143] (0-based indici)."""
     out: list[int] = []
     for part in spec.replace(" ", "").split(","):
         if not part:
@@ -62,22 +54,83 @@ def _norm(t: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", t)).strip()
 
 
-def _long_words(t: str, minlen: int = 6) -> set[str]:
-    return {w for w in _norm(t).split() if len(w) >= minlen}
-
-
 def _strip_images(t: str) -> str:
-    """Toglie i data-URI/base64 (parole finte) prima dei confronti."""
     t = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", t)
     return re.sub(r"data:[^\s)]+", " ", t)
+
+
+def _page_text_no_figures(page, elements: list[dict]) -> str:
+    """Testo della pagina escludendo le regioni `picture` (rese nell'immagine)."""
+    pics = [e["bbox"] for e in elements if e["class"] == "picture"]
+
+    def _inside(b) -> bool:
+        x0, y0, x1, y1 = b["bbox"]
+        for px0, py0, px1, py1 in pics:
+            if x0 >= px0 - 2 and x1 <= px1 + 2 and y0 >= py0 - 2 and y1 <= py1 + 2:
+                return True
+        return False
+
+    parts: list[str] = []
+    for blk in page.get_text("dict").get("blocks", []):
+        if blk.get("type") != 0 or _inside(blk):
+            continue
+        for ln in blk["lines"]:
+            parts.append("".join(s["text"] for s in ln["spans"]))
+    return "\n".join(parts)
+
+
+def _long_words(t: str, minlen: int = 6) -> set[str]:
+    return {w for w in _norm(t).split() if len(w) >= minlen}
 
 
 def _recall(ref: str, out: str, minlen: int = 6) -> float:
     words = _long_words(ref, minlen)
     if not words:
         return 1.0
-    have = _long_words(out, minlen)
-    return len(words & have) / len(words)
+    return len(words & _long_words(out, minlen)) / len(words)
+
+
+def _order_score(md: str, elements: list[dict], page_width: float) -> float:
+    """Order score robusto alla formattazione (penalità di interlacciamento).
+
+    Ogni blocco di testo della content map è un *anchor* (prime parole); se ne
+    trova la posizione nel md normalizzato. Guardando la **sequenza delle
+    colonne** in ordine di posizione, un ordine colona-major ideale ha
+    ``ncol-1`` transizioni; ogni transizione in più è interlacciamento.
+    ``order = 1 - max(0, transizioni-(ncol-1)) / (n-1)``.
+    """
+    import main
+
+    texty = [e for e in elements
+             if e["class"] in ("text", "section-header", "title")
+             and e["w"] < 0.6 * page_width]
+    if not texty:
+        return 1.0
+    splits = main._detect_column_splits(
+        [{"x0": e["bbox"][0], "x1": e["bbox"][2],
+          "y0": e["bbox"][1], "y1": e["bbox"][3]} for e in texty],
+        page_width,
+    )
+    ncol = len(splits) + 1
+    M = _norm(md)
+    seq: list[tuple[int, float]] = []
+    for e in texty:
+        mid = (e["bbox"][0] + e["bbox"][2]) / 2
+        col = sum(1 for s in splits if mid > s)
+        anchor = " ".join(_norm(_strip_images(e["text"])).split()[:6])
+        if len(anchor) < 20:
+            continue
+        pos = M.find(anchor)
+        if pos < 0:
+            continue
+        seq.append((col, pos))
+    if len(seq) < 3:
+        return 1.0
+    seq.sort(key=lambda t: t[1])
+    cols = [c for c, _ in seq]
+    transitions = sum(1 for a, b in zip(cols, cols[1:]) if a != b)
+    extra = max(0, transitions - (ncol - 1))
+    return max(0.0, 1.0 - extra / (len(cols) - 1))
 
 
 def _last_block_height(text_edit) -> float:
@@ -89,89 +142,129 @@ def _last_block_height(text_edit) -> float:
     return float(d.documentLayout().blockBoundingRect(cur.block()).height())
 
 
+def _build_md(pipeline: str, pdf: str, doc, page, idx: int, figures_dir, ocr_lang):
+    import main
+
+    import pymupdf4llm
+
+    if pipeline == "legacy":
+        pymupdf4llm.use_layout(False)
+        try:
+            return pymupdf4llm.to_markdown(pdf, pages=[idx])
+        finally:
+            pymupdf4llm.use_layout(True)
+    if pipeline == "ir":
+        # pipeline IR INTEGRATA (content map + figure unite + cosmetica, 1 passata)
+        md, _raw, _ok = main._apply_ir_on_page(pdf, idx, figures_dir=figures_dir)
+        return md
+    # current
+    raw = main._extract_pymupdf4llm(pdf, idx, ocr_lang)
+    md, _label = main._apply_engine_on_page(
+        page, raw, figures_dir=figures_dir, page_num=idx, figure_mode="embed")
+    return md
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Verifica pagine con l'app reale")
+    ap = argparse.ArgumentParser(description="Verifica/confronto pipeline")
     ap.add_argument("pdf")
-    ap.add_argument("--pages", required=True, help="es. 100,118,140-143 (indici 0-based)")
+    ap.add_argument("--pages", required=True)
     ap.add_argument("--out", default="/tmp/opencode/verify")
+    ap.add_argument("--pipelines", default="current")
     ap.add_argument("--timeout", type=float, default=120.0)
-    ap.add_argument("--fresh", action="store_true",
-                    help="svuota la cache della pagina e riestrae (ignora i final salvati)")
     args = ap.parse_args()
 
     import pymupdf
     from PyQt6.QtWidgets import QApplication
 
     import main as app
+    import ir_layout
 
-    pdf = Path(args.pdf).resolve()
+    pdf = str(Path(args.pdf).resolve())
     pages = _parse_pages(args.pages)
+    pipelines = [p.strip() for p in args.pipelines.split(",") if p.strip()]
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
     qapp = QApplication.instance() or QApplication([])
-    win = app.MainWindow()
-    win._resume_last_page = False
-    win.show()
-    win._open_pdf(pdf)
-    lang = app._tess_lang_code(app.get_source_lang())
+    panel = app.TextPanel()
+    panel.resize(800, 900)
+    panel.show()
 
-    doc = pymupdf.open(str(pdf))
+    doc = pymupdf.open(pdf)
+    ocr_lang = app._tess_lang_code(app.get_source_lang())
     report = []
     try:
         for idx in pages:
             if idx < 0 or idx >= len(doc):
-                print(f"  ! pagina {idx} fuori range")
                 continue
-            if args.fresh:
-                win._purge_page_cache(idx)
-            win._set_page(idx)
-            t0 = time.time()
-            while time.time() - t0 < args.timeout:
+            page = doc[idx]
+            pw = page.rect.width
+            # ground truth colonne: content map (layout ON), una volta per pagina
+            try:
+                _t, elements = ir_layout.page_elements(doc, idx)
+            except Exception:
+                elements = []
+            pdf_text = _page_text_no_figures(page, elements)
+            for pipe in pipelines:
+                figdir = out / pipe / "fig"
+                figdir.mkdir(parents=True, exist_ok=True)
+                t0 = time.time()
+                try:
+                    md = _build_md(pipe, pdf, doc, page, idx, figdir, ocr_lang) or ""
+                except Exception as e:  # noqa: BLE001
+                    md = ""
+                    print(f"  ! {pipe} p{idx}: {e!r}")
+                dt = time.time() - t0
                 qapp.processEvents()
-                if (idx, lang, "()") in win._final_text_cache:
-                    break
-                time.sleep(0.02)
-            qapp.processEvents()
-            origin = win.text_panel.origin_panel
-            body = win.text_panel._page_body or ""
-            plain = origin.toPlainText() or ""
-            body_text = _strip_images(body)
-            pdf_text = doc[idx].get_text("text")
-            r_pdf = _recall(pdf_text, body_text)
-            r_ren = _recall(body_text, plain)
-            tail = _last_block_height(origin)
-            (out / f"page_{idx:04d}.md").write_text(body, encoding="utf-8")
-            (out / f"page_{idx:04d}.plain.txt").write_text(plain, encoding="utf-8")
-            win.grab().save(str(out / f"page_{idx:04d}.png"))
-            rec = {
-                "page_idx": idx, "page_ui": idx + 1,
-                "body_len": len(body), "body_text_len": len(body_text),
-                "plain_len": len(plain),
-                "recall_pdf": round(r_pdf, 4), "recall_render": round(r_ren, 4),
-                "tail_block_h": round(tail, 1),
-                "ok": (r_pdf >= 0.98 and r_ren >= 0.98 and tail > 1),
-            }
-            report.append(rec)
-            flag = "OK " if rec["ok"] else "!! "
-            print(f"{flag}p{idx:4d} body={rec['body_len']:6d} plain={rec['plain_len']:6d} "
-                  f"recall_pdf={r_pdf:.3f} recall_render={r_ren:.3f} tail={tail:.0f}")
+                panel.show_text(md, as_markdown=True)
+                qapp.processEvents()
+                plain = panel.toPlainText() or ""
+                body_text = _strip_images(md)
+                r_pdf = _recall(pdf_text, body_text)
+                r_ren = _recall(body_text, plain)
+                oscore = _order_score(md, elements, pw)
+                tail = _last_block_height(panel)
+                pd = out / pipe
+                pd.mkdir(parents=True, exist_ok=True)
+                (pd / f"page_{idx:04d}.md").write_text(md, encoding="utf-8")
+                (pd / f"page_{idx:04d}.plain.txt").write_text(plain, encoding="utf-8")
+                panel.grab().save(str(pd / f"page_{idx:04d}.png"))
+                rec = {"pdf": Path(pdf).name, "page_idx": idx,
+                       "page_ui": idx + 1, "pipeline": pipe,
+                       "secs": round(dt, 2), "body_len": len(md),
+                       "plain_len": len(plain), "recall_pdf": round(r_pdf, 4),
+                       "recall_render": round(r_ren, 4),
+                       "order_score": round(oscore, 3), "tail": round(tail, 1)}
+                report.append(rec)
+                print(f"{pipe:8s} p{idx:4d} {dt:6.2f}s body={len(md):7d} "
+                      f"pdf={r_pdf:.3f} render={r_ren:.3f} order={oscore:.2f} tail={tail:.0f}")
     finally:
-        win.close()
+        panel.close()
         doc.close()
 
     (out / "report.jsonl").write_text(
         "\n".join(json.dumps(r, ensure_ascii=False) for r in report), encoding="utf-8")
     with (out / "report.md").open("w", encoding="utf-8") as fh:
-        fh.write("# Verifica pagine — " + pdf.name + "\n\n")
-        fh.write("| pagina | body | plain | recall_pdf | recall_render | tail | esito |\n")
-        fh.write("|---|---|---|---|---|---|---|\n")
+        fh.write(f"# Studio pipeline — {Path(pdf).name}\n\n")
+        fh.write("| pagina | pipeline | secs | body | plain | recall_pdf | recall_render | order | tail |\n")
+        fh.write("|---|---|---|---|---|---|---|---|---|\n")
         for r in report:
-            fh.write(f"| {r['page_ui']} | {r['body_len']} | {r['plain_len']} | "
-                     f"{r['recall_pdf']} | {r['recall_render']} | {r['tail_block_h']} | "
-                     f"{'OK' if r['ok'] else '**DA ESAMINARE**'} |\n")
-    bad = [r for r in report if not r["ok"]]
-    print(f"\nReport: {out/'report.md'}   pagine={len(report)}  da esaminare={len(bad)}")
+            fh.write(f"| {r['page_ui']} | {r['pipeline']} | {r['secs']} | {r['body_len']} | "
+                     f"{r['plain_len']} | {r['recall_pdf']} | {r['recall_render']} | "
+                     f"{r['order_score']} | {r['tail']} |\n")
+        # medie per pipeline
+        fh.write("\n## Medie per pipeline\n\n| pipeline | secs (media) | recall_pdf | "
+                 "recall_render | order |\n|---|---|---|---|---|\n")
+        for p in pipelines:
+            rows = [r for r in report if r["pipeline"] == p]
+            if not rows:
+                continue
+            n = len(rows)
+            fh.write(f"| {p} | {sum(r['secs'] for r in rows)/n:.2f} | "
+                     f"{sum(r['recall_pdf'] for r in rows)/n:.3f} | "
+                     f"{sum(r['recall_render'] for r in rows)/n:.3f} | "
+                     f"{sum(r['order_score'] for r in rows)/n:.3f} |\n")
+    print(f"\nReport: {out/'report.md'}")
     return 0
 
 

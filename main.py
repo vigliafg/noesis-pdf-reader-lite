@@ -964,6 +964,100 @@ def _norm_text(s: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"\W+", " ", s)).strip().lower()
 
 
+def _strip_images(s: str) -> str:
+    """Toglie figure/base64 dal testo (per confronti tipo recall)."""
+    s = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", s)
+    return re.sub(r"data:[^\s)]+", " ", s)
+
+
+#: voce d'indice tipica: "termine, 1125" / "termine, 86-87" (+ suffisso lettera)
+_INDEX_ENTRY_RE = re.compile(r",\s*\d{1,4}(?:[–\-]\d{1,4})?[a-z]?\b")
+
+
+def _page_text_no_figures(page, elements: list[dict]) -> str:
+    """Testo della pagina escludendo le regioni ``picture`` (rese nell'immagine)."""
+    pics = [e["bbox"] for e in elements if e.get("class") == "picture"]
+
+    def _inside(b) -> bool:
+        x0, y0, x1, y1 = b["bbox"]
+        for px0, py0, px1, py1 in pics:
+            if x0 >= px0 - 2 and x1 <= px1 + 2 and y0 >= py0 - 2 and y1 <= py1 + 2:
+                return True
+        return False
+
+    parts: list[str] = []
+    try:
+        for blk in page.get_text("dict").get("blocks", []):
+            if blk.get("type") != 0 or _inside(blk):
+                continue
+            for ln in blk["lines"]:
+                parts.append("".join(s["text"] for s in ln["spans"]))
+    except Exception:
+        pass
+    return "\n".join(parts)
+
+
+def _word_recall(ref: str, out: str, minlen: int = 6) -> float:
+    """Quota di parole lunghe di ``ref`` presenti in ``out`` (0..1)."""
+    def _ws(t: str) -> set[str]:
+        t = re.sub(r"-\s*\n\s*", "", t.lower())
+        t = re.sub(r"-\s+(?=[a-z])", "", t)
+        return {w for w in re.sub(r"[^a-z0-9]+", " ", t).split() if len(w) >= minlen}
+
+    words = _ws(ref)
+    if not words:
+        return 1.0
+    return len(words & _ws(out)) / len(words)
+
+
+def _looks_like_index(page_text: str) -> bool:
+    """True se la pagina è un **indice** (molte voci "termine, numero")."""
+    lines = [ln for ln in page_text.splitlines() if ln.strip()]
+    if len(lines) < 15:
+        return False
+    hits = sum(1 for ln in lines if _INDEX_ENTRY_RE.search(ln))
+    return hits >= 0.4 * len(lines)
+
+
+def _ir_gate(page, md: str, elements: list[dict]) -> tuple[bool, str]:
+    """Gate d'integrità per la pipeline IR (testo/figure/tabelle).
+
+    False (→ fallback a ``current``) se: body vuoto; pagina d'**indice** (IR fonde
+    le voci); **recall** del testo sotto soglia (cattura le celle di tabella
+    perse). Le pagine a sole figure non vengono penalizzate (il testo-figura è
+    escluso dal confronto).
+    """
+    if not (md or "").strip():
+        return False, "vuoto"
+    page_text = _page_text_no_figures(page, elements)
+    if _norm_text(page_text).strip() == "":
+        return True, "solo-figure"  # pagina di sole figure: niente prosa da perdere
+    if _looks_like_index(page_text):
+        return False, "indice"
+    # recall della prosa: solo se c'è testo sufficiente (evita i falsi positivi
+    # sulle pagine-grafico, dove le etichette degli assi non sono prosa).
+    ntexty = sum(1 for e in elements
+                 if e.get("class") in ("text", "section-header", "title"))
+    if ntexty > 2:
+        r = _word_recall(page_text, _strip_images(md))
+        if r < 0.90:
+            return False, f"recall {r:.2f}"
+    # tabelle: `find_tables` è costoso (~1s/pagina) → si esegue SOLO se l'IR ha
+    # reso una tabella markdown (righe con "|"). Se l'IR avesse perso la tabella
+    # del tutto, la perdita è già coperta dal recall della prosa qui sopra.
+    if "|" in md:
+        try:
+            tbl = " ".join(
+                str(c) for t in page.find_tables().tables
+                for row in (t.extract() or []) for c in row if c
+            )
+        except Exception:
+            tbl = ""
+        if tbl and _word_recall(tbl, _strip_images(md)) < 0.85:
+            return False, "tabella"
+    return True, "ok"
+
+
 def _figure_internal_text(page, fig) -> str:
     """Testo interno alla regione-figura (etichette/assi/numeri), normalizzato.
 
@@ -1086,6 +1180,7 @@ def _figure_data_uri(
 
 def _link_figures(
     md: str, page, dest_dir, page_num: int, mode: str = "embed", exclude=(),
+    skip_captions: set | None = None,
 ) -> str:
     """Inserisce il corpo-immagine accanto alla didascalia di ogni figura.
 
@@ -1116,7 +1211,11 @@ def _link_figures(
     if not regions:
         return md
     lines = md.split("\n")
+    skipped = {c for c in (skip_captions or set())}
     for i, fig in enumerate(regions, 1):
+        # Figura già emessa da un'altra sorgente (es. content map IR): non duplicare.
+        if skipped and _norm_text(fig["caption"])[:30] in skipped:
+            continue
         internal = _figure_internal_text(page, fig)
         if mode == "link":
             uri = _render_figure(page, fig["rect"], dest_dir, page_num, i)
@@ -1913,6 +2012,74 @@ def _apply_engine_standalone(
             )
     except Exception:
         return text, label
+
+
+def _pipeline_mode() -> str:
+    """Pipeline attiva: ``"ir"`` (default) o ``"current"`` (legacy/fallback).
+
+    IR è la pipeline di default (content map + cosmetica + figura unite, con
+    gate d'integrità che ricade su ``current`` pagina per pagina). Si può
+    forzare ``current`` con la variabile ``NOESIS_PIPELINE=current`` (o il
+    setting ``pipeline``).
+    """
+    v = ""
+    try:
+        v = str(get_setting("pipeline", "") or "")
+    except Exception:
+        v = ""
+    v = (v or os.environ.get("NOESIS_PIPELINE", "") or "").strip().lower()
+    return v if v in ("current", "ir") else "ir"
+
+
+def _cosmetic_ir(md: str) -> str:
+    """Pulizia cosmetica del markdown IR — **nessun fix strutturale**.
+
+    La struttura (colonne, tabelle, header/footer, tipi di blocco) arriva già
+    dalla content map: qui restano solo i ritocchi tipografici che il modello
+    non fa (tag HTML residui, enfasi, soft-hyphen/FFFD, spaziature, liste).
+    Non si portano i fix strutturali (reorder, column-aware, header/footer).
+    """
+    try:
+        md = layout_engine._normalize_html_tags(md)
+        md = layout_engine._normalize_replacement_chars(md)
+        md = layout_engine._normalize_soft_hyphens(md)
+        md = layout_engine._repair_lists(md)
+        md = layout_engine._normalize_emphasis(md)
+        md = layout_engine._despace_numbers(md)
+        md = layout_engine._despace_blockquote_letters(md)
+        md = md.replace("~~", "").replace("■", "")
+    except Exception:
+        pass
+    return md
+
+
+def _apply_ir_on_page(path: str, page_num: int, figures_dir=None, exclude=()):
+    """Markdown della pagina con la pipeline IR + **figura-detection unita**.
+
+    Una **sola** passata di layout (``page_chunk``), usata sia per la content map
+    sia come "raw" per la cache. Le figure vengono dalla content map (classe
+    ``picture``) e, in più, dalle didascalie rilevate da ``_link_figures``
+    (current): così non si perdono né le figure del modello né i flowchart con
+    didascalia "Figure n". Restituisce ``(markdown, raw)``.
+    """
+    import ir_layout
+
+    with pymupdf.open(path) as doc:
+        page = doc[page_num]
+        chunk = ir_layout.page_chunk(doc, page_num)  # UNA sola passata
+        md, served = ir_layout.build_markdown(
+            page, doc, page_num, figures_dir=figures_dir,
+            embed_figures=True, return_meta=True, chunk=chunk)
+        md = _link_figures(md, page, figures_dir, page_num, mode="embed",
+                           exclude=exclude, skip_captions=served)
+        md = _cosmetic_ir(md)
+        raw = chunk.get("text", "") or ""
+        try:
+            _t, elements = ir_layout._elements_from_chunk(chunk)
+            gate_ok, _reason = _ir_gate(page, md, elements)
+        except Exception:
+            gate_ok = True
+    return md, raw, gate_ok
 
 
 # Markdown structural patterns protected during translation.
@@ -3014,17 +3181,32 @@ class ExtractThread(QThread):
 
     def run(self):
         t0 = time.perf_counter()
-        if self._raw is not None:
-            raw = self._raw  # già estratta (cache): solo engine layout
-        else:
-            raw = _extract_pymupdf4llm(
-                self._path, self._page_num, ocr_language=self._ocr_language
+        raw = self._raw  # dalla cache, se c'è (None altrimenti)
+        text, label = "", ""
+        # Pipeline IR (content map), solo senza zone manuali (che richiedono il
+        # motore "current"). Guardia anti-body=0: se IR non produce testo, ricade
+        # sulla pipeline attuale (es. pagine quasi vuote). Una **sola** passata:
+        # IR restituisce anche il "raw" da mettere in cache.
+        if _pipeline_mode() == "ir" and not self._include and not self._exclude:
+            try:
+                md, ir_raw, gate_ok = _apply_ir_on_page(
+                    self._path, self._page_num, self._figures_dir)
+                if raw is None:
+                    raw = ir_raw  # riusa la stessa passata anche in fallback
+                if md and gate_ok and _norm_text(md).strip():
+                    text, label = md, "auto"
+            except Exception:
+                text = ""
+        if not text:
+            if raw is None:
+                raw = _extract_pymupdf4llm(
+                    self._path, self._page_num, ocr_language=self._ocr_language
+                )
+            text, label = _apply_engine_standalone(
+                self._path, self._page_num, raw,
+                exclude=self._exclude, include=self._include,
+                figures_dir=self._figures_dir,
             )
-        text, label = _apply_engine_standalone(
-            self._path, self._page_num, raw,
-            exclude=self._exclude, include=self._include,
-            figures_dir=self._figures_dir,
-        )
         elapsed = time.perf_counter() - t0
         self.result_ready.emit(
             self._generation, self._page_num, text, label, raw, elapsed
@@ -5278,6 +5460,7 @@ class MainWindow(QMainWindow):
         """Testo (monospazio) su quale cache l'app sta usando per la pagina."""
         out: list[str] = []
         out.append(f"PDF:            {self._pdf_path}")
+        out.append(f"pipeline:       {_pipeline_mode()}")
         out.append(f"app data base:  {_app_data_base()}")
         out.append(f"cache file:     {self._extraction_cache_file}")
         f = self._extraction_cache_file
