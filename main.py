@@ -5276,6 +5276,19 @@ class MainWindow(QMainWindow):
         if self._last_result is not None:
             _t, label, elapsed = self._last_result
             out.append(f"ultimo esito:   label={label}  {elapsed:.2f}s")
+        # Confronto lunghezze/estremi: ciò che l'app ha in memoria vs la cache.
+        last_txt = (self._last_result[0] if self._last_result else "") or ""
+        body = getattr(self.text_panel, "_page_body", "") or ""
+        cache_final = self._final_text_cache.get((page, lang, zk))
+        out.append("")
+        out.append(f"last_result:    {len(last_txt)} char")
+        out.append(f"body mostrato:  {len(body)} char")
+        out.append(f"final in cache: {len(cache_final[0]) if cache_final else 0} char")
+        for name, txt in (("last_result", last_txt), ("body", body)):
+            tail = [x for x in txt.split("\n") if x.strip()][-2:]
+            out.append(f"ultime 2 righe [{name}]:")
+            for ln in tail:
+                out.append("   " + ln[:110])
         return "\n".join(out)
 
     def _show_cache_info(self):
