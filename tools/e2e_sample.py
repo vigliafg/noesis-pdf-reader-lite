@@ -114,7 +114,7 @@ def aggregate(records: list[dict], out: Path) -> dict:
         dr = [d for d in real if d["corpus"] == c]
         eng = Counter(r.get("engine") for r in rows)
         per_corpus[c] = {
-            "pages": len({r["page_idx"] for r in rows}),
+            "pages": len({(r["pdf"], r["page_idx"]) for r in rows}),
             "engine": dict(eng),
             "text_ok": sum(1 for r in rows if r["checks"]["text"]["ok"]),
             "fig_ok": sum(1 for r in rows if r["checks"]["figures"]["ok"]),
