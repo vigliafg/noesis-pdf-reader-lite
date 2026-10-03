@@ -219,6 +219,18 @@ class TableFixTests(unittest.TestCase):
         self.assertEqual(out.splitlines()[1], "|---|---|")
         self.assertIn("| c |  |", out)
 
+    def test_grid_table_from_page(self):
+        doc = pymupdf.open()
+        p = doc.new_page(width=595, height=842)
+        p.insert_text((60, 100), "Alzheimer disease", fontsize=11)
+        p.insert_text((300, 100), "Alcoholism", fontsize=11)
+        p.insert_text((60, 120), "Vascular dementia", fontsize=11)
+        p.insert_text((300, 120), "PDD/LBD", fontsize=11)
+        out = ir_layout._grid_table_from_page(p, (50, 90, 500, 140), 2)
+        doc.close()
+        self.assertIn("| Alzheimer disease | Alcoholism |", out)
+        self.assertEqual(out.splitlines()[1], "|---|---|")
+
     def test_single_col_rebuild_from_page(self):
         doc = pymupdf.open()
         p = doc.new_page(width=595, height=842)
