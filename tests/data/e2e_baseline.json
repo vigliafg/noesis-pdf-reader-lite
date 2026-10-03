@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "entries": {
+    "ha22.pdf|ir|100": {
+      "recall_pdf": 1.0,
+      "order_score": 1.0,
+      "body_len": 243925,
+      "figures": 2,
+      "table_recall": null
+    },
+    "fe22.pdf|ir|4446": {
+      "recall_pdf": 0.9778,
+      "order_score": 1.0,
+      "body_len": 2658,
+      "figures": 0,
+      "table_recall": 0.4648
+    },
+    "arxiv_2609.33753.pdf|ir|11": {
+      "recall_pdf": 0.9915,
+      "order_score": 1.0,
+      "body_len": 176220,
+      "figures": 3,
+      "table_recall": null
+    }
+  }
+}

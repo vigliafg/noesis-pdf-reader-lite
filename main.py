@@ -663,6 +663,26 @@ def _rect_overlap_area(r1: tuple, r2: tuple) -> float:
     return ox * oy
 
 
+def _rect_overlaps_any(rect: tuple, rects, thresh: float = 0.5) -> bool:
+    """True se ``rect`` copre almeno ``thresh`` del **minore** con un altro rect.
+
+    Serve alla dedup delle figure: se una regione rilevata dalle didascalie
+    coincide (in gran parte) con una `picture` già emessa dalla content map, è
+    la **stessa** figura e non va ri-emessa.
+    """
+    a = (rect[2] - rect[0]) * (rect[3] - rect[1])
+    if a <= 0:
+        return False
+    for r in rects:
+        b = (r[2] - r[0]) * (r[3] - r[1])
+        if b <= 0:
+            continue
+        inter = _rect_overlap_area(rect, r)
+        if inter > 0 and inter / min(a, b) >= thresh:
+            return True
+    return False
+
+
 def _is_excluded(rect: tuple, exclude: tuple = ()) -> bool:
     """True when ``rect`` is mostly covered by one of the excluded zones.
 
@@ -1042,18 +1062,18 @@ def _ir_gate(page, md: str, elements: list[dict]) -> tuple[bool, str]:
         r = _word_recall(page_text, _strip_images(md))
         if r < 0.90:
             return False, f"recall {r:.2f}"
-    # tabelle: `find_tables` è costoso (~1s/pagina) → si esegue SOLO se l'IR ha
-    # reso una tabella markdown (righe con "|"). Se l'IR avesse perso la tabella
-    # del tutto, la perdita è già coperta dal recall della prosa qui sopra.
-    if "|" in md:
-        try:
-            tbl = " ".join(
-                str(c) for t in page.find_tables().tables
-                for row in (t.extract() or []) for c in row if c
-            )
-        except Exception:
-            tbl = ""
-        if tbl and _word_recall(tbl, _strip_images(md)) < 0.85:
+    # tabelle: riferimento = **parole di pagina** nella regione delle tabelle
+    # (content map). Robusto dove `find_tables` dà celle garbled (es. p231) e
+    # senza il costo di `find_tables` (~1s/pagina). Se l'IR avesse perso la
+    # tabella, il recall cala e il gate fallisce.
+    tbl_rects = [e["bbox"] for e in elements if e.get("class") == "table"]
+    if tbl_rects:
+        def _in_tbl(b: tuple) -> bool:
+            cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+            return any(r[0] <= cx <= r[2] and r[1] <= cy <= r[3] for r in tbl_rects)
+
+        ref = " ".join(w[4] for w in page.get_text("words") if _in_tbl(w[:4]))
+        if ref and _word_recall(ref, _strip_images(md)) < 0.85:
             return False, "tabella"
     return True, "ok"
 
@@ -1180,7 +1200,7 @@ def _figure_data_uri(
 
 def _link_figures(
     md: str, page, dest_dir, page_num: int, mode: str = "embed", exclude=(),
-    skip_captions: set | None = None,
+    skip_captions: set | None = None, skip_rects: list | None = None,
 ) -> str:
     """Inserisce il corpo-immagine accanto alla didascalia di ogni figura.
 
@@ -1212,9 +1232,14 @@ def _link_figures(
         return md
     lines = md.split("\n")
     skipped = {c for c in (skip_captions or set())}
+    skip_rects = list(skip_rects or [])
     for i, fig in enumerate(regions, 1):
         # Figura già emessa da un'altra sorgente (es. content map IR): non duplicare.
         if skipped and _norm_text(fig["caption"])[:30] in skipped:
+            continue
+        # Dedup **geometrica**: stessa regione di una `picture` già emessa dalla
+        # content map → è la stessa figura (le didascalie possono differire).
+        if skip_rects and _rect_overlaps_any(fig["rect"], skip_rects):
             continue
         internal = _figure_internal_text(page, fig)
         if mode == "link":
@@ -2067,11 +2092,12 @@ def _apply_ir_on_page(path: str, page_num: int, figures_dir=None, exclude=()):
     with pymupdf.open(path) as doc:
         page = doc[page_num]
         chunk = ir_layout.page_chunk(doc, page_num)  # UNA sola passata
-        md, served = ir_layout.build_markdown(
+        md, meta = ir_layout.build_markdown(
             page, doc, page_num, figures_dir=figures_dir,
             embed_figures=True, return_meta=True, chunk=chunk)
         md = _link_figures(md, page, figures_dir, page_num, mode="embed",
-                           exclude=exclude, skip_captions=served)
+                           exclude=exclude, skip_captions=meta["captions"],
+                           skip_rects=meta["rects"])
         md = _cosmetic_ir(md)
         raw = chunk.get("text", "") or ""
         try:
