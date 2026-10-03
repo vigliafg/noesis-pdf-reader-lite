@@ -386,9 +386,26 @@ def _collect_defects(records: list[dict]) -> list[dict]:
 # ── report ──────────────────────────────────────────────────────────────────
 def _write_reports(out: Path, records: list[dict], pipelines: list[str],
                    mode: str, pdf: str,
-                   regressions: list[dict] | None = None) -> None:
+                   regressions: list[dict] | None = None,
+                   total_secs: float | None = None) -> None:
     (out / "report.jsonl").write_text(
         "\n".join(json.dumps(r, ensure_ascii=False) for r in records),
+        encoding="utf-8",
+    )
+    ext_sum = sum(r["secs"] for r in records)
+    arb_rows = [r for r in records
+                if (r.get("arbitration") or {}).get("mode") == "advisor"]
+    arb_sum = sum((r["arbitration"].get("secs") or 0.0) for r in arb_rows)
+    (out / "meta.json").write_text(
+        json.dumps({
+            "pdf": Path(pdf).name, "mode": mode, "pipelines": pipelines,
+            "pages": sorted({r["page_idx"] for r in records}),
+            "n_records": len(records),
+            "total_secs": None if total_secs is None else round(total_secs, 2),
+            "extraction_secs_sum": round(ext_sum, 2),
+            "advisor_calls": len(arb_rows),
+            "advisor_secs_sum": round(arb_sum, 2),
+        }, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     lines = [
@@ -397,6 +414,10 @@ def _write_reports(out: Path, records: list[dict], pipelines: list[str],
         f"- modalità: **{mode}**",
         f"- pipeline: {', '.join(pipelines)}",
         f"- pagine: {len({r['page_idx'] for r in records})}",
+        f"- **tempo totale**: {total_secs:.1f}s" if total_secs is not None
+        else "- tempo totale: n/d",
+        f"- estrazione (somma record): {ext_sum:.1f}s",
+        f"- advisor: {arb_sum:.1f}s su {len(arb_rows)} chiamate",
         "",
         "## Medie per pipeline",
         "",
@@ -543,16 +564,21 @@ def _run_advisor(out: Path, records: list[dict], doc, model: str, key: str,
         png = page.get_pixmap(matrix=pymupdf.Matrix(2, 2)).tobytes("png")
         md = (out / r["pipeline"] / f"page_{idx:04d}.md")
         md_text = md.read_text(encoding="utf-8") if md.exists() else ""
+        t0 = time.perf_counter()
         try:
             verdict = _advisor_judge(png, md_text, model, key)
         except urllib.error.HTTPError as e:
             verdict = {"error": f"HTTP {e.code}: {e.read()[:200].decode(errors='replace')}"}
         except Exception as e:  # noqa: BLE001
             verdict = {"error": repr(e)}
-        r["arbitration"] = {"mode": "advisor", "model": model, "verdict": verdict}
+        dt = time.perf_counter() - t0
+        r["arbitration"] = {
+            "mode": "advisor", "model": model, "secs": round(dt, 2),
+            "verdict": verdict,
+        }
         (review / f"{r['pipeline']}_p{idx:04d}_advisor.json").write_text(
             json.dumps(verdict, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"advisor p{r['page_ui']}: {verdict}")
+        print(f"advisor p{r['page_ui']}: {dt:5.1f}s {verdict}")
 
 
 # ── regressione (baseline) ──────────────────────────────────────────────────
@@ -647,6 +673,7 @@ def run(argv: list[str] | None = None) -> int:
     ap.add_argument("--update-baseline", default=None,
                     help="scrive il baseline JSON dai risultati di questo run")
     args = ap.parse_args(argv)
+    t_start = time.perf_counter()
 
     _isolate_config()
 
@@ -703,7 +730,9 @@ def run(argv: list[str] | None = None) -> int:
         else:
             print("Baseline: nessuna regressione")
 
-    _write_reports(out, records, pipelines, args.mode, pdf, regs)
+    total = time.perf_counter() - t_start
+    print(f"Tempo totale: {total:.1f}s")
+    _write_reports(out, records, pipelines, args.mode, pdf, regs, total)
     return 2 if regs else 0
 
 
