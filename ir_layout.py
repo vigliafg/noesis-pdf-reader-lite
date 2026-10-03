@@ -122,9 +122,10 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
                    chunk: dict | None = None):
     """Markdown della pagina ricostruito dalla content map (ordine di lettura).
 
-    Con ``return_meta=True`` restituisce ``(markdown, served)`` dove ``served``
-    è l'insieme delle didascalie (normalizzate) già emesse con una figura: serve
-    a non duplicare le figure quando si unisce la rilevazione di ``main``.
+    Con ``return_meta=True`` restituisce ``(markdown, meta)`` dove ``meta`` è
+    ``{"captions": set, "rects": list}``: le didascalie (normalizzate) già emesse
+    e i **rect delle picture emesse**. Servono a non duplicare le figure quando
+    si unisce la rilevazione di ``main`` (``skip_captions`` / ``skip_rects``).
     Se ``chunk`` è fornito (da ``page_chunk``), NON si ri-esegue ``to_markdown``
     (una sola passata di layout).
     """
@@ -136,21 +137,29 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
         text, els = _elements_from_chunk(chunk)
     pw = page.rect.width
 
-    # scarta chrome + etichette di margine strette agli estremi
+    # scarta chrome, etichette di margine e `picture` **spurie** (decorativi)
+    ph = page.rect.height
     keep: list[dict] = []
     for e in els:
         c = e["class"]
         x0, y0, x1, y1 = e["bbox"]
         if c in _DROP_CLASSES:
             continue
-        if c == "picture" and (x1 - x0) < 40 and (x0 < 30 or x1 > pw - 30):
-            continue  # etichetta verticale di margine
+        if c == "picture":
+            w, h = x1 - x0, y1 - y0
+            if w < 40 and (x0 < 30 or x1 > pw - 30):
+                continue  # etichetta verticale di margine
+            if w * h < 2500:
+                continue  # decorativo minuscolo (es. 7x7)
+            if y1 <= 0.08 * ph and h < 60:
+                continue  # banner decorativo in testa (es. 82x49)
         keep.append(e)
 
     attached, used = _attach_captions(keep)
     bands, seps, ncol = _order(keep, pw)
 
     out: list[str] = []
+    emitted_rects: list[tuple] = []  # rect delle picture effettivamente emesse
 
     def emit(e: dict) -> None:
         c = e["class"]
@@ -166,6 +175,7 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
                     import base64
                     uri = "data:image/jpeg;base64," + base64.b64encode(jpg).decode("ascii")
                     out.append(f"![figura]({uri})")
+                    emitted_rects.append(rect)
             for cap in attached.get(id(e), []):
                 ct = (cap["text"] or "").strip()
                 if ct:
@@ -187,5 +197,5 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
             main._norm_text(cap["text"])[:30]
             for caps in attached.values() for cap in caps
         }
-        return md, served
+        return md, {"captions": served, "rects": emitted_rects}
     return md

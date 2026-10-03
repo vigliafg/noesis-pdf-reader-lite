@@ -33,9 +33,13 @@ for _p in (_ROOT, _TOOLS):
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 try:
+    import re  # noqa: E402
+
     import pymupdf  # noqa: E402
 
     import e2e  # noqa: E402
+    import ir_layout  # noqa: E402
+    import main  # noqa: E402
     _OK = True
 except Exception as e:  # noqa: BLE001
     _OK = False
@@ -199,6 +203,45 @@ class ChecksTests(unittest.TestCase):
             "flags": [], "arbitration": {"verdict": {"error": "HTTP 401"}},
         }
         self.assertEqual(e2e._collect_defects([rec]), [])
+
+
+@unittest.skipUnless(_OK, "pymupdf/e2e non disponibili")
+class FigureDedupTests(unittest.TestCase):
+    """La dedup geometrica evita il doppio marcatore per la stessa figura."""
+
+    def _fig_pdf(self, path: Path) -> None:
+        doc = pymupdf.open()
+        p = doc.new_page(width=595, height=842)
+        pix = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 240, 180))
+        pix.clear_with(120)
+        p.insert_image(pymupdf.Rect(120, 150, 420, 360), stream=pix.tobytes("png"))
+        p.insert_textbox(
+            pymupdf.Rect(120, 365, 420, 420),
+            "FIGURE 1. A test figure caption with enough words.", fontsize=10)
+        doc.save(str(path))
+        doc.close()
+
+    def test_no_duplicate_marker_when_both_sources_fire(self):
+        with tempfile.TemporaryDirectory() as d:
+            pdf = Path(d) / "f.pdf"
+            self._fig_pdf(pdf)
+            doc = pymupdf.open(pdf)
+            try:
+                _t, els = ir_layout.page_elements(doc, 0)
+                pics = [e for e in els if e["class"] == "picture"]
+                regs = main._figure_regions(doc[0])
+            finally:
+                doc.close()
+            # il fixture deve attivare ENTRAMBE le sorgenti (content map + didascalia)
+            self.assertTrue(pics, "il content map non rileva la picture")
+            self.assertTrue(regs, "le didascalie non rilevano la regione")
+            md, _r, _ok = main._apply_ir_on_page(str(pdf), 0, figures_dir=Path(d) / "fig")
+            self.assertEqual(len(re.findall(r"!\[figura", md)), 1)
+
+    def test_rect_overlaps_any(self):
+        self.assertTrue(main._rect_overlaps_any((10, 10, 100, 100), [(20, 20, 90, 90)]))
+        self.assertFalse(main._rect_overlaps_any((10, 10, 50, 50), [(200, 200, 300, 300)]))
+        self.assertFalse(main._rect_overlaps_any((10, 10, 100, 100), []))
 
 
 @unittest.skipUnless(_OK, "pymupdf/e2e non disponibili")
