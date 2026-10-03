@@ -151,21 +151,47 @@ class ChecksTests(unittest.TestCase):
         self.assertIn("[FIGURA: FIG 1]", out)
         self.assertIn("fine", out)
 
-    def test_collect_defects_auto_and_advisor(self):
+    def test_collect_defects_structured(self):
         rec = {
             "pdf": "x.pdf", "page_idx": 0, "page_ui": 1, "pipeline": "ir",
-            "flags": ["tables: celle recall 0.46"],
+            "engine": "ir", "flags": ["tables: celle recall 0.46"],
             "arbitration": {"verdict": {
-                "text_ok": False, "order_ok": True, "figures_ok": True,
-                "tables_ok": False, "missing": ["Fig 3"],
-                "notes": "manca una figura",
+                "text_ok": False, "order_ok": False, "figures_ok": False,
+                "tables_ok": True,
+                "defects": [
+                    {"kind": "figure_duplicate", "severity": "high",
+                     "note": "2 marker per 1 figura"},
+                    {"kind": "marginalia", "severity": "low",
+                     "note": "numero pagina"},
+                    {"kind": "boh", "severity": "medium", "note": "sconosciuto"},
+                ],
+                "notes": "",
             }},
         }
-        kinds = {(d["source"], d["kind"]) for d in e2e._collect_defects([rec])}
-        self.assertIn(("auto", "tables"), kinds)
-        self.assertIn(("advisor", "text"), kinds)
-        self.assertIn(("advisor", "tables"), kinds)
-        self.assertIn(("advisor", "missing"), kinds)
+        defs = e2e._collect_defects([rec])
+        kinds = {d["kind"] for d in defs}
+        self.assertIn("table_content", kinds)       # auto -> tassonomia
+        self.assertIn("figure_duplicate", kinds)
+        self.assertIn("marginalia", kinds)
+        self.assertIn("other", kinds)               # kind ignoto normalizzato
+        marg = [d for d in defs if d["kind"] == "marginalia"]
+        self.assertTrue(marg and marg[0]["real"] is False)
+        self.assertTrue(all(d["kind"] != "marginalia"
+                            for d in defs if d["real"]))
+
+    def test_collect_defects_fallback_booleans(self):
+        rec = {
+            "pdf": "x.pdf", "page_idx": 0, "page_ui": 1, "pipeline": "ir",
+            "engine": "ir", "flags": [],
+            "arbitration": {"verdict": {
+                "text_ok": False, "order_ok": True, "figures_ok": True,
+                "tables_ok": False, "missing": ["Fig 3"], "notes": "x",
+            }},
+        }
+        kinds = {d["kind"] for d in e2e._collect_defects([rec])}
+        self.assertIn("text_missing", kinds)
+        self.assertIn("table_structure", kinds)
+        self.assertIn("other", kinds)
 
     def test_collect_defects_ignores_advisor_error(self):
         rec = {

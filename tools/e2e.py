@@ -61,15 +61,29 @@ MIN_FIGURE_BYTES = 1000     # una figura embedded più piccola è sospetta
 
 _ADVISOR_DEFAULT_MODEL = "meta/muse-spark-1.3-contributor"
 _ADVISOR_URL = "https://openrouter.ai/api/v1/chat/completions"
+# Tassonomia dei difetti: `marginalia` NON è un difetto di contenuto (testate
+# correnti, numero pagina, fasce "PART n", elenchi collaboratori).
+_DEFECT_KINDS = (
+    "figure_missing", "figure_duplicate", "figure_order", "figure_text_bleed",
+    "figure_caption", "table_structure", "table_content", "equation",
+    "text_missing", "text_order", "ref_order", "header_content",
+    "index_truncate", "marginalia", "other",
+)
 _ADVISOR_SYSTEM = (
     "Sei un revisore di estrazione PDF. Ricevi l'immagine di UNA pagina e il "
     "markdown estratto dalla nostra pipeline. Giudica se il markdown riporta "
-    "TUTTO il contenuto della pagina, UNA sola volta, nell'ordine di lettura "
+    "TUTTO il contenuto della pagina, UNA volta, nell'ordine di lettura "
     "corretto. Le figure sono rappresentate da marcatori del tipo "
     "[FIGURA: ...] (i byte non sono inclusi): giudicane presenza, posizione e "
-    "didascalia dall'immagine. Rispondi SOLO con un oggetto JSON, senza altro "
-    "testo, con le chiavi: text_ok, order_ok, figures_ok, tables_ok (booleani), "
-    "missing (lista di stringhe brevi), notes (stringa)."
+    "didascalia dall'immagine.\n"
+    "NON sono difetti di contenuto: numero di pagina, testate correnti "
+    "(es. 'CHAPTER n'), fasce laterali (es. 'PART n'), elenchi di collaboratori: "
+    "classificali come kind 'marginalia' (severita' 'low').\n"
+    "Rispondi SOLO con un oggetto JSON, senza altro testo, con le chiavi: "
+    "text_ok, order_ok, figures_ok, tables_ok (booleani); "
+    "defects (lista di {kind, severity, note}); notes (stringa). "
+    "kind e' uno tra: " + "|".join(_DEFECT_KINDS) + ". "
+    "severity e' 'high'|'medium'|'low'. Non usare 'marginalia' per altro."
 )
 
 _BASE64_IMG_RE = re.compile(
@@ -395,32 +409,57 @@ def _print_rec(rec: dict) -> None:
 
 
 # ── difetti ─────────────────────────────────────────────────────────────────
+# I flag automatici sono grossolani: mappati sulla stessa tassonomia.
+_AUTO_KIND = {"tables": "table_content", "text": "text_missing",
+              "figures": "figure_missing", "gate": "other"}
+
+
 def _collect_defects(records: list[dict]) -> list[dict]:
-    """Aggrega i difetti: flag automatici **e** verdetto dell'advisor visivo."""
+    """Aggrega i difetti in modo **categorizzato** (kind + severita' + real).
+
+    Fonte ``auto`` (gate/metriche) e ``advisor`` (VLM). I difetti di
+    ``marginalia`` sono marcati ``real=False``: non sono difetti di contenuto.
+    """
     defects: list[dict] = []
 
-    def _add(rec: dict, source: str, kind: str, note: str, verdict) -> None:
+    def _add(rec: dict, source: str, kind: str, note: str, severity: str,
+             verdict) -> None:
         defects.append({
             "pdf": rec["pdf"], "page_idx": rec["page_idx"],
             "page_ui": rec["page_ui"], "pipeline": rec["pipeline"],
             "engine": rec.get("engine"),  # pipeline che ha prodotto il testo
-            "source": source, "kind": kind, "note": note, "verdict": verdict,
+            "source": source, "kind": kind, "severity": severity,
+            "real": kind != "marginalia", "note": note, "verdict": verdict,
         })
 
     for r in records:
         for f in r["flags"]:
-            kind, _, note = f.partition(":")
-            _add(r, "auto", kind.strip(), note.strip(), None)
+            prefix, _, note = f.partition(":")
+            kind = _AUTO_KIND.get(prefix.strip(), "other")
+            _add(r, "auto", kind, note.strip(), "high", None)
         arb = r.get("arbitration") or {}
         v = arb.get("verdict")
         if not isinstance(v, dict) or "error" in v or "raw" in v:
             continue
-        for key, kind in (("text_ok", "text"), ("order_ok", "order"),
-                          ("figures_ok", "figures"), ("tables_ok", "tables")):
+        listed = v.get("defects")
+        if isinstance(listed, list) and listed:
+            for d in listed:
+                if not isinstance(d, dict):
+                    continue
+                kind = str(d.get("kind") or "other")
+                if kind not in _DEFECT_KINDS:
+                    kind = "other"
+                _add(r, "advisor", kind, str(d.get("note", "")),
+                     str(d.get("severity") or "medium"), v)
+            continue
+        # fallback: schema a soli booleani (vecchie risposte)
+        for key, kind in (("text_ok", "text_missing"), ("order_ok", "text_order"),
+                          ("figures_ok", "figure_missing"),
+                          ("tables_ok", "table_structure")):
             if v.get(key) is False:
-                _add(r, "advisor", kind, str(v.get("notes", "")), v)
+                _add(r, "advisor", kind, str(v.get("notes", "")), "medium", v)
         for miss in (v.get("missing") or []):
-            _add(r, "advisor", "missing", str(miss), v)
+            _add(r, "advisor", "other", str(miss), "low", v)
     return defects
 
 
@@ -503,24 +542,35 @@ def _write_reports(out: Path, records: list[dict], pipelines: list[str],
         for x in regressions:
             lines.append(f"| {x['key']} | {'; '.join(x['issues'])} |")
     defects = _collect_defects(records)
+    real = [d for d in defects if d["real"]]
+    marg = [d for d in defects if not d["real"]]
     (out / "defects.jsonl").write_text(
         "\n".join(json.dumps(d, ensure_ascii=False) for d in defects),
         encoding="utf-8",
     )
-    lines += ["", f"## Difetti ({len(defects)})", ""]
+    kinds: dict[str, int] = {}
+    for d in real:
+        kinds[d["kind"]] = kinds.get(d["kind"], 0) + 1
+    lines += ["", f"## Difetti ({len(real)} reali + {len(marg)} marginalia)", ""]
     if not defects:
         lines.append("Nessun difetto raccolto.")
     else:
-        lines += ["| pagina | pipeline | engine | fonte | tipo | nota |",
+        if kinds:
+            top = sorted(kinds.items(), key=lambda x: -x[1])
+            lines.append("**Tipi (reali):** "
+                         + ", ".join(f"{k}={v}" for k, v in top))
+            lines.append("")
+        lines += ["| pagina | engine | fonte | tipo | sev | nota |",
                   "|---|---|---|---|---|---|"]
         for d in defects:
             note = (d["note"] or "").replace("|", "/")[:100]
             lines.append(
-                f"| {d['page_ui']} | {d['pipeline']} | {d.get('engine')} | "
-                f"{d['source']} | {d['kind']} | {note} |"
+                f"| {d['page_ui']} | {d.get('engine')} | {d['source']} | "
+                f"{d['kind']} | {d['severity']} | {note} |"
             )
     (out / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"\nReport: {out/'summary.md'} ({len(defects)} difetti)")
+    print(f"\nReport: {out/'summary.md'} "
+          f"({len(real)} difetti reali + {len(marg)} marginalia)")
 
 
 # ── arbitraggio visivo (agente) ─────────────────────────────────────────────
