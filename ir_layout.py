@@ -519,7 +519,15 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
             if w < 40 and (x0 < 30 or x1 > pw - 30):
                 continue  # etichetta verticale di margine
             if w * h < 2500:
-                continue  # decorativo minuscolo (es. 7x7)
+                # minuscolo: se il testo interno è un'**etichetta** (es. "C"), la
+                # si emette come didascalia; altrimenti è un decorativo → scarta
+                label = " ".join(_internal_lines(e["text"])).strip()
+                if 0 < len(label) <= 3 and label.isalnum():
+                    e = dict(e)
+                    e["class"] = "caption"
+                    e["text"] = label
+                    keep.append(e)
+                continue
             if y1 <= 0.08 * ph and h < 60:
                 continue  # banner decorativo in testa (es. 82x49)
         keep.append(e)
