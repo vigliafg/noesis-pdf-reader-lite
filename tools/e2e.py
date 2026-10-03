@@ -65,10 +65,27 @@ _ADVISOR_SYSTEM = (
     "Sei un revisore di estrazione PDF. Ricevi l'immagine di UNA pagina e il "
     "markdown estratto dalla nostra pipeline. Giudica se il markdown riporta "
     "TUTTO il contenuto della pagina, UNA sola volta, nell'ordine di lettura "
-    "corretto. Rispondi SOLO con un oggetto JSON, senza altro testo, con le "
-    "chiavi: text_ok, order_ok, figures_ok, tables_ok (booleani), "
+    "corretto. Le figure sono rappresentate da marcatori del tipo "
+    "[FIGURA: ...] (i byte non sono inclusi): giudicane presenza, posizione e "
+    "didascalia dall'immagine. Rispondi SOLO con un oggetto JSON, senza altro "
+    "testo, con le chiavi: text_ok, order_ok, figures_ok, tables_ok (booleani), "
     "missing (lista di stringhe brevi), notes (stringa)."
 )
+
+_BASE64_IMG_RE = re.compile(
+    r"!\[([^\]]*)\]\(data:image/[^;)]+;base64,[^)]*\)")
+_BARE_BASE64_RE = re.compile(r"data:image/[^;)]+;base64,[A-Za-z0-9+/=]+")
+
+
+def _strip_base64_for_prompt(md: str) -> str:
+    """Sostituisce le figure base64 con marcatori: il VLM deve vedere il testo.
+
+    Senza questo, su una pagina con figure all'inizio il markdown (centinaia di
+    KB di base64) verrebbe troncato e il modello vedrebbe *solo* l'immagine,
+    giudicando per errore che tutto il testo manchi.
+    """
+    md = _BASE64_IMG_RE.sub(r"[FIGURA: \1]", md)
+    return _BARE_BASE64_RE.sub("[FIGURA]", md)
 
 
 # ── isolamento config (non tocca le impostazioni reali) ─────────────────────
@@ -515,12 +532,13 @@ def _write_review(out: Path, pdf: str, records: list[dict], doc) -> None:
 # ── advisor VLM remoto (OpenRouter) ─────────────────────────────────────────
 def _advisor_judge(png_bytes: bytes, md: str, model: str, key: str,
                    url: str = _ADVISOR_URL, timeout: float = 120.0) -> dict:
+    md_clean = _strip_base64_for_prompt(md)
     payload = {
         "model": model,
         "messages": [
             {"role": "system", "content": _ADVISOR_SYSTEM},
             {"role": "user", "content": [
-                {"type": "text", "text": "Markdown estratto:\n\n" + md[:20000]},
+                {"type": "text", "text": "Markdown estratto:\n\n" + md_clean[:200000]},
                 {"type": "image_url", "image_url": {
                     "url": "data:image/png;base64," + base64.b64encode(png_bytes).decode()
                 }},

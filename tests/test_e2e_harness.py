@@ -141,6 +141,16 @@ class ChecksTests(unittest.TestCase):
             truth, "medicine cardiology patients treatment diagnosis", "same")
         self.assertEqual(e2e._flags(checks, None), [])
 
+    def test_strip_base64_for_prompt(self):
+        md = ("prima ![FIG 1](data:image/jpeg;base64,AAAA////) dopo "
+              "e grezzo data:image/png;base64,BBBB fine")
+        out = e2e._strip_base64_for_prompt(md)
+        self.assertNotIn("base64", out)
+        self.assertIn("prima", out)
+        self.assertIn("dopo", out)
+        self.assertIn("[FIGURA: FIG 1]", out)
+        self.assertIn("fine", out)
+
     def test_collect_defects_auto_and_advisor(self):
         rec = {
             "pdf": "x.pdf", "page_idx": 0, "page_ui": 1, "pipeline": "ir",
