@@ -158,6 +158,82 @@ def page_elements(doc, page_index: int) -> tuple[str, list[dict]]:
     return _elements_from_chunk(page_chunk(doc, page_index))
 
 
+def _table_is_single_col(text: str) -> bool:
+    """True se il markdown-tabella della content map ha una sola colonna."""
+    for ln in (text or "").splitlines():
+        s = ln.strip()
+        if s.startswith("|") and s.endswith("|"):
+            cells = s.strip("|").split("|")
+            if all(set(c.strip()) <= set("-: ") for c in cells):
+                continue  # riga separatore
+            if len(cells) > 1 and any(c.strip() for c in cells):
+                return False
+    return True
+
+
+def _single_col_table_from_page(page, bbox: tuple) -> str:
+    """Ricostruisce una tabella a **1 colonna** dalle righe di pagina.
+
+    pymupdf4llm a volte fonde più voci in una cella; le righe reali della pagina
+    no. Si usa la geometria delle parole entro il bbox della tabella.
+    """
+    def _inside(b, r, pad=3.0):
+        return (b[0] >= r[0] - pad and b[2] <= r[2] + pad
+                and b[1] >= r[1] - pad and b[3] <= r[3] + pad)
+
+    words = [w for w in page.get_text("words") if _inside(w[:4], bbox)]
+    words.sort(key=lambda w: (round(w[1] / 3), w[0]))
+    rows: list[list[str]] = []
+    cur: list[str] = []
+    ly = None
+    for w in words:
+        if ly is not None and abs(w[1] - ly) > 5:
+            rows.append(cur)
+            cur = []
+        cur.append(w[4])
+        ly = w[1]
+    if cur:
+        rows.append(cur)
+    return "\n".join(" ".join(r) for r in rows if r)
+
+
+def _normalize_md_table(text: str) -> str:
+    """Rende valido il markdown-tabella: separatore con il n. di colonne giusto."""
+    rows = [ln.rstrip() for ln in (text or "").splitlines() if ln.strip()]
+    if not rows:
+        return text
+    ncol = 0
+    parsed: list[list[str]] = []
+    for ln in rows:
+        s = ln.strip()
+        if s.startswith("|") and s.endswith("|"):
+            cells = s.strip("|").split("|")
+            if all(set(c.strip()) <= set("-: ") for c in cells):
+                parsed.append([])  # separatore (posizione preservata)
+                continue
+            ncol = max(ncol, len(cells))
+            parsed.append(cells)
+        else:
+            parsed.append(None)  # riga non-tabella: lascia com'è
+    if ncol < 2:
+        return text
+    out: list[str] = []
+    sep_done = False
+    for cells in parsed:
+        if cells is None:
+            out.append("")
+        elif cells == []:
+            if not sep_done:
+                out.append("|" + "|".join(["---"] * ncol) + "|")
+                sep_done = True
+        else:
+            cells = cells + [""] * (ncol - len(cells))
+            out.append("| " + " | ".join(c.strip() for c in cells) + " |")
+    if not sep_done and len(out) >= 2:
+        out.insert(1, "|" + "|".join(["---"] * ncol) + "|")
+    return "\n".join(out)
+
+
 def _column_splits(elements: list[dict], page_width: float) -> list[float]:
     """Confini di colonna dai soli blocchi di TESTO (le figure non 'pontano')."""
     import main  # lazy: main importa layout_engine
@@ -199,6 +275,65 @@ def _group_figure_blocks(elements: list[dict], splits: list[float],
             or any(c["x0"] < s < c["x1"] for s in splits)
         )
     return clusters
+
+
+def _multi_header_table(page, headers: list[dict], all_elements: list[dict]):
+    """Tabella a più colonne con **intestazioni separate** (es. Medical|Lifestyle).
+
+    Ritorna ``(testo, region, member_ids)``: ricostruisce per colonna (sx→dx) le
+    righe sotto ciascuna intestazione, così le due liste non si interlacciano.
+    """
+    hs = sorted(headers, key=lambda e: e["bbox"][0])
+    y0 = min(h["bbox"][1] for h in hs)
+    x0 = min(h["bbox"][0] for h in hs) - 5
+    x1 = max(h["bbox"][2] for h in hs)
+    y = max(h["bbox"][3] for h in hs)
+    members = list(hs)
+    items = sorted(
+        (e for e in all_elements
+         if e["class"] in ("list-item", "text", "table")
+         and id(e) not in {id(h) for h in hs}
+         and e["bbox"][1] >= y0 - 5 and e["bbox"][0] >= x0 - 10),
+        key=lambda e: e["bbox"][1])
+    for e in items:
+        if e["bbox"][1] - y > 40:
+            break
+        members.append(e)
+        y = max(y, e["bbox"][3])
+        x1 = max(x1, e["bbox"][2])
+    region = (x0, y0, x1 + 5, y + 3)
+
+    def _inside(b, r, pad=3.0):
+        return (b[0] >= r[0] - pad and b[2] <= r[2] + pad
+                and b[1] >= r[1] - pad and b[3] <= r[3] + pad)
+
+    words = [w for w in page.get_text("words") if _inside(w[:4], region)]
+    # confine di colonna: tra la fine reale della colonna sx (max x1 delle parole
+    # che iniziano prima dell'intestazione dx) e l'inizio dell'intestazione dx
+    bounds: list[float] = []
+    for a, b in zip(hs, hs[1:]):
+        left_x1 = max([a["bbox"][2]] + [w[2] for w in words if w[0] < b["bbox"][0]])
+        bounds.append((left_x1 + b["bbox"][0]) / 2)
+    cols: list[list] = [[] for _ in hs]
+    for w in words:
+        ci = sum(1 for b in bounds if w[0] >= b)
+        cols[min(ci, len(hs) - 1)].append(w)
+    blocks: list[str] = []
+    for cw in cols:
+        cw.sort(key=lambda w: (round(w[1] / 3), w[0]))
+        rows: list[list[str]] = []
+        cur: list[str] = []
+        ly = None
+        for w in cw:
+            if ly is not None and abs(w[1] - ly) > 5:
+                rows.append(cur)
+                cur = []
+            cur.append(w[4])
+            ly = w[1]
+        if cur:
+            rows.append(cur)
+        blocks.append("\n".join(" ".join(r) for r in rows))
+    return "\n\n".join(b for b in blocks if b), region, {id(e) for e in members}
 
 
 def _is_figure_caption(text: str) -> bool:
@@ -315,6 +450,39 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
             "w": pw, "y0": cl["y0"], "text": "", "pics": cl["pics"],
         })
     keep2 = [e for e in keep if id(e) not in spanning_ids] + synthetic
+
+    # tabelle a più colonne con **intestazioni separate** (es. Medical|Lifestyle):
+    # raggruppa le righe per colonna per non interlacciare le liste
+    tables = [e for e in keep2 if e["class"] == "table"]
+    seen: set[int] = set()
+    groups: list[list[dict]] = []
+    for t in tables:
+        if id(t) in seen:
+            continue
+        grp = [t]
+        seen.add(id(t))
+        for u in tables:
+            if id(u) in seen:
+                continue
+            if not (t["bbox"][3] < u["bbox"][1] - 3
+                    or u["bbox"][3] < t["bbox"][1] - 3):
+                grp.append(u)
+                seen.add(id(u))
+        if len(grp) >= 2:
+            groups.append(grp)
+    if groups:
+        remove_ids: set[int] = set()
+        tbl_synth: list[dict] = []
+        for grp in groups:
+            text, region, member_ids = _multi_header_table(page, grp, keep2)
+            if text.strip():
+                remove_ids |= member_ids
+                tbl_synth.append({
+                    "class": "_table_block", "bbox": region,
+                    "w": pw, "y0": region[1], "text": text,
+                })
+        keep2 = [e for e in keep2 if id(e) not in remove_ids] + tbl_synth
+
     bands, seps, ncol = _order(keep2, pw)
 
     # figure (per il bleed): rect + righe del testo interno
@@ -361,6 +529,10 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
                 if t:
                     out.append(t)
             return
+        if c == "_table_block":
+            if seg:
+                out.append(seg)
+            return
         if c == "picture":
             _emit_image(e["bbox"])
             for cap in attached.get(id(e), []):
@@ -370,6 +542,15 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
             return
         if c == "caption" and id(e) in used:
             return  # già emessa con la figura
+        if c == "table":
+            # 1 colonna: pymupdf4llm può fondere voci → ricostruisci dalle righe
+            if _table_is_single_col(seg):
+                rebuilt = _single_col_table_from_page(page, e["bbox"])
+                if rebuilt.strip():
+                    out.append(rebuilt)
+                    return
+            out.append(_normalize_md_table(seg))
+            return
         if seg:
             # Bleed: se il blocco si sovrappone a una figura, togli le etichette
             # interne intrecciate (assi/legenda/tabella).

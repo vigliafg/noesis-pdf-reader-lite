@@ -205,6 +205,32 @@ class ChecksTests(unittest.TestCase):
         self.assertEqual(e2e._collect_defects([rec]), [])
 
 
+@unittest.skipUnless(_OK, "e2e non disponibile")
+class TableFixTests(unittest.TestCase):
+    """Fix struttura tabelle: 1 colonna + normalizzazione markdown."""
+
+    def test_single_col_detection(self):
+        self.assertTrue(ir_layout._table_is_single_col("|a|\n|---|\n|b|"))
+        self.assertFalse(
+            ir_layout._table_is_single_col("|a|b|\n|---|---|\n|c|d|"))
+
+    def test_normalize_separator_and_pad(self):
+        out = ir_layout._normalize_md_table("|a|b|\n|c|")
+        self.assertEqual(out.splitlines()[1], "|---|---|")
+        self.assertIn("| c |  |", out)
+
+    def test_single_col_rebuild_from_page(self):
+        doc = pymupdf.open()
+        p = doc.new_page(width=595, height=842)
+        p.insert_text((60, 100), "Urgent threats", fontsize=11)
+        p.insert_text((60, 120), "Carbapenem-resistant Acinetobacter", fontsize=11)
+        out = ir_layout._single_col_table_from_page(p, (50, 90, 300, 140))
+        doc.close()
+        self.assertIn("Urgent threats", out)
+        self.assertIn("Carbapenem-resistant Acinetobacter", out)
+        self.assertEqual(out.count("\n"), 1)  # due righe distinte
+
+
 @unittest.skipUnless(_OK, "pymupdf/e2e non disponibili")
 class FigureDedupTests(unittest.TestCase):
     """La dedup geometrica evita il doppio marcatore per la stessa figura."""
