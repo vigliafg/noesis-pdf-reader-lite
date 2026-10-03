@@ -560,7 +560,9 @@ def _write_review(out: Path, pdf: str, records: list[dict], doc) -> None:
 
 
 # ── advisor VLM remoto (OpenRouter) ─────────────────────────────────────────
-_ADVISOR_RETRYABLE = {429, 500, 502, 503, 504}
+# 404 incluso: il router OpenRouter a volte risponde "model_not_found" in modo
+# transitorio (osservato su un run reale), pur con il modello corretto.
+_ADVISOR_RETRYABLE = {404, 429, 500, 502, 503, 504}
 
 
 def _advisor_judge(png_bytes: bytes, md: str, model: str, key: str,
