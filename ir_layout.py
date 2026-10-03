@@ -158,6 +158,54 @@ def page_elements(doc, page_index: int) -> tuple[str, list[dict]]:
     return _elements_from_chunk(page_chunk(doc, page_index))
 
 
+def _column_splits(elements: list[dict], page_width: float) -> list[float]:
+    """Confini di colonna dai soli blocchi di TESTO (le figure non 'pontano')."""
+    import main  # lazy: main importa layout_engine
+
+    texty = [e for e in elements
+             if e["class"] in ("text", "section-header", "title")]
+    return main._detect_column_splits(
+        [{"x0": e["bbox"][0], "x1": e["bbox"][2],
+          "y0": e["bbox"][1], "y1": e["bbox"][3]} for e in texty],
+        page_width,
+    )
+
+
+def _group_figure_blocks(elements: list[dict], splits: list[float],
+                         page_width: float, gap: float = 40.0) -> list[dict]:
+    """Raggruppa le `picture` in blocchi per vicinanza verticale.
+
+    Un blocco che **attraversa le colonne** (o è molto largo) va trattato come
+    figura a tutta larghezza: i pannelli di una stessa figura restano insieme.
+    """
+    pics = sorted((e for e in elements if e["class"] == "picture"),
+                  key=lambda e: e["bbox"][1])
+    clusters: list[dict] = []
+    for p in pics:
+        y0, y1 = p["bbox"][1], p["bbox"][3]
+        for c in clusters:
+            if y0 <= c["y1"] + gap and y1 >= c["y0"] - gap:
+                c["pics"].append(p)
+                c["y0"] = min(c["y0"], y0)
+                c["y1"] = max(c["y1"], y1)
+                break
+        else:
+            clusters.append({"pics": [p], "y0": y0, "y1": y1})
+    for c in clusters:
+        c["x0"] = min(p["bbox"][0] for p in c["pics"])
+        c["x1"] = max(p["bbox"][2] for p in c["pics"])
+        c["spanning"] = (
+            (c["x1"] - c["x0"]) >= 0.6 * page_width
+            or any(c["x0"] < s < c["x1"] for s in splits)
+        )
+    return clusters
+
+
+def _is_figure_caption(text: str) -> bool:
+    """True se la didascalia inizia con 'fig' (è la didascalia della figura)."""
+    return bool(re.match(r"(?i)^\W*fig", (text or "").strip()))
+
+
 def _order(elements: list[dict], page_width: float) -> list[list[dict]]:
     """Restituisce gli elementi divisi in bande (lista di liste), in ordine.
 
@@ -165,18 +213,10 @@ def _order(elements: list[dict], page_width: float) -> list[list[dict]]:
     l'ordine è: colonna per colonna (sinistra→destra), top→bottom. Gli elementi
     a tutta larghezza sono separatori (banda a sé, emessi al loro posto).
     """
-    import main  # lazy: main importa layout_engine
-
     full = [e for e in elements if e["w"] >= 0.6 * page_width]
     body = [e for e in elements if e["w"] < 0.6 * page_width]
 
-    # confini colonna dai soli blocchi di TESTO (le figure non devono "pontare")
-    texty = [e for e in body if e["class"] in ("text", "section-header", "title")]
-    splits = main._detect_column_splits(
-        [{"x0": e["bbox"][0], "x1": e["bbox"][2],
-          "y0": e["bbox"][1], "y1": e["bbox"][3]} for e in texty],
-        page_width,
-    )
+    splits = _column_splits(body, page_width)
 
     def col(e: dict) -> int:
         mid = (e["bbox"][0] + e["bbox"][2]) / 2
@@ -258,7 +298,24 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
         keep.append(e)
 
     attached, used = _attach_captions(keep)
-    bands, seps, ncol = _order(keep, pw)
+    # blocchi-figura che **attraversano le colonne** → trattati come a tutta
+    # larghezza: i pannelli di una stessa figura restano insieme e nel punto di
+    # lettura (invece di essere spezzati dall'ordine colonna-major).
+    splits = _column_splits(keep, pw)
+    spanning_ids: set[int] = set()
+    synthetic: list[dict] = []
+    for cl in _group_figure_blocks(keep, splits, pw):
+        if not cl["spanning"]:
+            continue
+        for p in cl["pics"]:
+            spanning_ids.add(id(p))
+        synthetic.append({
+            "class": "_figure_block",
+            "bbox": (cl["x0"], cl["y0"], cl["x1"], cl["y1"]),
+            "w": pw, "y0": cl["y0"], "text": "", "pics": cl["pics"],
+        })
+    keep2 = [e for e in keep if id(e) not in spanning_ids] + synthetic
+    bands, seps, ncol = _order(keep2, pw)
 
     # figure (per il bleed): rect + righe del testo interno
     pics_keep = [e for e in keep if e["class"] == "picture"]
@@ -271,21 +328,41 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
     out: list[str] = []
     emitted_rects: list[tuple] = []  # rect delle picture effettivamente emesse
 
+    def _emit_image(rect: tuple) -> None:
+        if embed_figures and figures_dir is not None:
+            try:
+                jpg = main._figure_jpeg(page, rect, "")
+            except Exception:
+                jpg = None
+            if jpg:
+                import base64
+                uri = "data:image/jpeg;base64," + base64.b64encode(jpg).decode("ascii")
+                out.append(f"![figura]({uri})")
+                emitted_rects.append(rect)
+
     def emit(e: dict) -> None:
         c = e["class"]
         seg = (e["text"] or "").strip()
+        if c == "_figure_block":
+            # immagini ed etichette pannello in ordine di **riga** (y con
+            # tolleranza, poi x), poi la didascalia della figura
+            def _row(e2):
+                return (round(e2["bbox"][1] / 12), e2["bbox"][0])
+
+            pics = sorted(e["pics"], key=_row)
+            for p in pics:
+                _emit_image(p["bbox"])
+            caps = [cap for p in pics for cap in attached.get(id(p), [])]
+            panel = [x for x in caps if not _is_figure_caption(x["text"])]
+            figc = [x for x in caps if _is_figure_caption(x["text"])]
+            for x in (sorted(panel, key=_row)
+                      + sorted(figc, key=lambda x: x["bbox"][1])):
+                t = (x["text"] or "").strip()
+                if t:
+                    out.append(t)
+            return
         if c == "picture":
-            rect = e["bbox"]
-            if embed_figures and figures_dir is not None:
-                try:
-                    jpg = main._figure_jpeg(page, rect, "")
-                except Exception:
-                    jpg = None
-                if jpg:
-                    import base64
-                    uri = "data:image/jpeg;base64," + base64.b64encode(jpg).decode("ascii")
-                    out.append(f"![figura]({uri})")
-                    emitted_rects.append(rect)
+            _emit_image(e["bbox"])
             for cap in attached.get(id(e), []):
                 ct = (cap["text"] or "").strip()
                 if ct:

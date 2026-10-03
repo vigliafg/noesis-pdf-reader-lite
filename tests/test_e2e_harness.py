@@ -243,6 +243,22 @@ class FigureDedupTests(unittest.TestCase):
         self.assertFalse(main._rect_overlaps_any((10, 10, 50, 50), [(200, 200, 300, 300)]))
         self.assertFalse(main._rect_overlaps_any((10, 10, 100, 100), []))
 
+    def test_group_figure_blocks_spanning(self):
+        def pic(x0, y0, x1, y1):
+            return {"class": "picture", "bbox": (x0, y0, x1, y1),
+                    "w": x1 - x0, "y0": y0, "text": ""}
+
+        els = [pic(105, 27, 293, 177), pic(306, 27, 493, 178),
+               pic(141, 540, 293, 691), pic(304, 540, 476, 691)]
+        cl = ir_layout._group_figure_blocks(els, [300.0], 612)
+        self.assertEqual(len(cl), 2)               # top e bottom separati
+        self.assertTrue(all(c["spanning"] for c in cl))
+
+    def test_is_figure_caption(self):
+        self.assertTrue(ir_layout._is_figure_caption(
+            "**FIGURE 322-27** ( _Continued_ )"))
+        self.assertFalse(ir_layout._is_figure_caption("**_C_**"))
+
 
 @unittest.skipUnless(_OK, "e2e non disponibile")
 class FigureBleedTests(unittest.TestCase):
