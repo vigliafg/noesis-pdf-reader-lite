@@ -560,8 +560,12 @@ def _write_review(out: Path, pdf: str, records: list[dict], doc) -> None:
 
 
 # ── advisor VLM remoto (OpenRouter) ─────────────────────────────────────────
+_ADVISOR_RETRYABLE = {429, 500, 502, 503, 504}
+
+
 def _advisor_judge(png_bytes: bytes, md: str, model: str, key: str,
-                   url: str = _ADVISOR_URL, timeout: float = 120.0) -> dict:
+                   url: str = _ADVISOR_URL, timeout: float = 120.0,
+                   retries: int = 4, base_delay: float = 5.0) -> dict:
     md_clean = _strip_base64_for_prompt(md)
     payload = {
         "model": model,
@@ -585,20 +589,49 @@ def _advisor_judge(png_bytes: bytes, md: str, model: str, key: str,
             "X-Title": "noesis-pdf-reader-lite e2e advisor",
         },
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        data = json.loads(resp.read().decode())
-    content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
-    m = re.search(r"\{.*\}", content, re.DOTALL)
-    if m:
+    # Retry con backoff sui limiti upstream (429) e sugli errori transitori:
+    # il modello condiviso è spesso rate-limited e un run lungo perderebbe
+    # meta' dei verdetti.
+    for attempt in range(retries + 1):
         try:
-            return json.loads(m.group(0))
-        except Exception:
-            pass
-    return {"raw": content}
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode())
+            content = (data.get("choices") or [{}])[0].get(
+                "message", {}).get("content", "")
+            m = re.search(r"\{.*\}", content, re.DOTALL)
+            if m:
+                try:
+                    return json.loads(m.group(0))
+                except Exception:
+                    pass
+            return {"raw": content}
+        except urllib.error.HTTPError as e:
+            if e.code in _ADVISOR_RETRYABLE and attempt < retries:
+                wait = base_delay * (2 ** attempt)
+                try:
+                    ra = e.headers.get("Retry-After") if e.headers else None
+                    if ra:
+                        wait = max(wait, float(ra))
+                except Exception:
+                    pass
+                print(f"    advisor: HTTP {e.code}, retry {attempt + 1}/{retries} "
+                      f"tra {wait:.0f}s")
+                time.sleep(wait)
+                continue
+            raise
+        except (urllib.error.URLError, TimeoutError) as e:
+            if attempt < retries:
+                wait = base_delay * (2 ** attempt)
+                print(f"    advisor: {e!r}, retry {attempt + 1}/{retries} "
+                      f"tra {wait:.0f}s")
+                time.sleep(wait)
+                continue
+            raise
+    raise RuntimeError("advisor: retry esauriti")  # pragma: no cover
 
 
 def _run_advisor(out: Path, records: list[dict], doc, model: str, key: str,
-                 max_calls: int) -> None:
+                 max_calls: int, retries: int = 4, delay: float = 0.0) -> None:
     import pymupdf
 
     review = out / "review"
@@ -606,7 +639,9 @@ def _run_advisor(out: Path, records: list[dict], doc, model: str, key: str,
     # L'advisor giudica TUTTE le pagine richieste (anche quelle non auto-flaggate):
     # il gate automatico può non vedere un difetto. `max_calls>0` è solo un tetto.
     targets = records[:max_calls] if max_calls else records
-    for r in targets:
+    for i, r in enumerate(targets):
+        if i and delay:
+            time.sleep(delay)  # gentile con il rate limit upstream
         idx = r["page_idx"]
         page = doc[idx]
         png = page.get_pixmap(matrix=pymupdf.Matrix(2, 2)).tobytes("png")
@@ -614,7 +649,7 @@ def _run_advisor(out: Path, records: list[dict], doc, model: str, key: str,
         md_text = md.read_text(encoding="utf-8") if md.exists() else ""
         t0 = time.perf_counter()
         try:
-            verdict = _advisor_judge(png, md_text, model, key)
+            verdict = _advisor_judge(png, md_text, model, key, retries=retries)
         except urllib.error.HTTPError as e:
             verdict = {"error": f"HTTP {e.code}: {e.read()[:200].decode(errors='replace')}"}
         except Exception as e:  # noqa: BLE001
@@ -716,6 +751,10 @@ def run(argv: list[str] | None = None) -> int:
     ap.add_argument("--advisor-key-env", default="OPENROUTER_API_KEY")
     ap.add_argument("--advisor-max", type=int, default=0,
                     help="tetto al numero di pagine giudicate (0 = tutte)")
+    ap.add_argument("--advisor-retries", type=int, default=4,
+                    help="retry con backoff su 429/5xx dell'advisor")
+    ap.add_argument("--advisor-delay", type=float, default=2.0,
+                    help="pausa (s) tra le chiamate all'advisor")
     ap.add_argument("--baseline", default=None,
                     help="confronta i risultati con un baseline JSON (regressioni)")
     ap.add_argument("--update-baseline", default=None,
@@ -761,7 +800,8 @@ def run(argv: list[str] | None = None) -> int:
                       "salto l'arbitraggio")
             else:
                 _run_advisor(out, records, doc, args.advisor_model, key,
-                             args.advisor_max)
+                             args.advisor_max, retries=args.advisor_retries,
+                             delay=args.advisor_delay)
     finally:
         doc.close()
 

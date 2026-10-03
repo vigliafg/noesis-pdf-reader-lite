@@ -282,6 +282,48 @@ class AdvisorJudgeTests(unittest.TestCase):
             srv.shutdown()
             srv.server_close()
 
+    def test_retries_on_429(self):
+        calls = {"n": 0}
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):  # noqa: N802
+                self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                calls["n"] += 1
+                if calls["n"] < 3:  # primi due tentativi: rate limited
+                    body = b'{"error":{"message":"rate limited"}}'
+                    self.send_response(429)
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                content = ('{"text_ok": true, "order_ok": true, '
+                           '"figures_ok": true, "tables_ok": true, '
+                           '"missing": [], "notes": ""}')
+                body = json.dumps(
+                    {"choices": [{"message": {"content": content}}]}
+                ).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_a):
+                pass
+
+        srv = socketserver.TCPServer(("127.0.0.1", 0), Handler)
+        t = threading.Thread(target=srv.serve_forever, daemon=True)
+        t.start()
+        try:
+            url = f"http://127.0.0.1:{srv.server_address[1]}/chat"
+            verdict = e2e._advisor_judge(
+                b"x", "md", "m", "k", url=url, retries=3, base_delay=0.01)
+            self.assertTrue(verdict["text_ok"])
+            self.assertEqual(calls["n"], 3)
+        finally:
+            srv.shutdown()
+            srv.server_close()
+
 
 if __name__ == "__main__":
     unittest.main()
