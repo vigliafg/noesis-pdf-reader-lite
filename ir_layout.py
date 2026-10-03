@@ -604,9 +604,43 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
                 out.append(f"![figura]({uri})")
                 emitted_rects.append(rect)
 
+    def _emit_clip(rect: tuple, alt: str) -> None:
+        """Embed di un ritaglio di pagina come JPEG base64 (equazioni/formule)."""
+        if not (embed_figures and figures_dir is not None):
+            return
+        import pymupdf
+        try:
+            pix = page.get_pixmap(clip=pymupdf.Rect(rect),
+                                   matrix=pymupdf.Matrix(2, 2))
+            jpg = pix.tobytes("jpeg")
+        except Exception:
+            jpg = None
+        if jpg:
+            import base64
+            out.append(f"![{alt}](data:image/jpeg;base64,"
+                       + base64.b64encode(jpg).decode("ascii") + ")")
+            emitted_rects.append(rect)
+
     def emit(e: dict) -> None:
         c = e["class"]
         seg = (e["text"] or "").strip()
+        if c == "formula":
+            # l'equazione è un grafico: il testo è perso (operatori/frazioni) →
+            # la si rende come immagine del ritaglio
+            r = e["bbox"]
+            if r[2] - r[0] >= 60 and r[3] - r[1] >= 8:
+                _emit_clip((r[0] - 5, r[1] - 4, r[2] + 5, r[3] + 4), "equazione")
+            elif r[3] - r[1] >= 6:
+                # etichetta "(n)" a destra: l'equazione sta a sinistra
+                _emit_clip((max(0.0, r[0] - 200), r[1] - 8,
+                            r[2] + 5, r[3] + 8), "equazione")
+            return
+        if (c == "text" and (e["bbox"][3] - e["bbox"][1]) <= 16
+                and re.search(r"\(\d\)\s*$", re.sub(r"<[^>]+>", "", seg))):
+            # riga-equazione sfuggita come testo (operatori persi) → immagine
+            r = e["bbox"]
+            _emit_clip((r[0] - 5, r[1] - 4, r[2] + 5, r[3] + 4), "equazione")
+            return
         if c == "_figure_block":
             # immagini ed etichette pannello in ordine di **riga** (y con
             # tolleranza, poi x), poi la didascalia della figura
