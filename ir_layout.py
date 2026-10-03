@@ -477,9 +477,13 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
             text, region, member_ids = _multi_header_table(page, grp, keep2)
             if text.strip():
                 remove_ids |= member_ids
+                # a tutta larghezza solo se attraversa le colonne; altrimenti
+                # resta nel flusso della sua colonna (non spezza il testo)
+                spanning = any(region[0] < s < region[2] for s in splits)
                 tbl_synth.append({
                     "class": "_table_block", "bbox": region,
-                    "w": pw, "y0": region[1], "text": text,
+                    "w": pw if spanning else region[2] - region[0],
+                    "y0": region[1], "text": text,
                 })
         keep2 = [e for e in keep2 if id(e) not in remove_ids] + tbl_synth
 
