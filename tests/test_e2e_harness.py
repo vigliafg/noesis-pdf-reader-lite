@@ -244,6 +244,40 @@ class FigureDedupTests(unittest.TestCase):
         self.assertFalse(main._rect_overlaps_any((10, 10, 100, 100), []))
 
 
+@unittest.skipUnless(_OK, "e2e non disponibile")
+class FigureBleedTests(unittest.TestCase):
+    """Rimozione del bleed del testo-figura (assi/legenda) intrecciato nel corpo."""
+
+    def test_strip_glued_multiworld_and_standalone(self):
+        lines = ["100", "80", "60", "40", "20", "0", "23", "1 12 24 36",
+                 "17p deletion", "No. AT Risk", "Normal"]
+        s = ("hybridization 100 (FISH), trisomy 80 12, traditional ther60 apies, "
+             "tumor suppres0 1 sor TP53, bulky lymphadenop20 athy, "
+             "shorter sur17p deletion 23 vival")
+        out = ir_layout._strip_figure_bleed(s, lines)
+        self.assertNotIn("ther60", out)
+        self.assertIn("therapies", out)
+        self.assertNotIn("suppres0", out)
+        self.assertNotIn("suppres1", out)
+        self.assertIn("suppressor", out)
+        self.assertNotIn("lymphadenop20", out)
+        self.assertIn("lymphadenopathy", out)
+        self.assertNotIn("sur17p", out)
+        self.assertIn("survival", out)
+        self.assertIn("trisomy 12", out)
+        self.assertIn("hybridization (FISH)", out)
+
+    def test_strip_noop_when_clean(self):
+        s = "A clean sentence with no figure labels at all."
+        self.assertEqual(ir_layout._strip_figure_bleed(s, ["100", "80"]), s)
+
+    def test_internal_lines(self):
+        t = "<!-- Start of picture text --> 100<br>17p deletion<br><br>No. AT Risk"
+        self.assertEqual(
+            ir_layout._internal_lines(t),
+            ["100", "17p deletion", "No. AT Risk"])
+
+
 @unittest.skipUnless(_OK, "pymupdf/e2e non disponibili")
 class EngineAttributionTests(unittest.TestCase):
     """`_engine_used` dice quale pipeline ha prodotto il testo (ir|current)."""

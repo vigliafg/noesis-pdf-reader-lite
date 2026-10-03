@@ -28,6 +28,44 @@ _TEXTY = {"text", "section-header", "title", "list-item", "footnote",
           "formula", "table", "caption"}
 
 
+def _internal_lines(pic_text: str) -> list[str]:
+    """Righe del testo interno di una figura (dalla content map, separatore `<br>`)."""
+    raw = re.sub(r"<!--.*?-->", "", pic_text or "")
+    parts = re.split(r"<br\s*/?>|\n", raw)
+    return [re.sub(r"\s+", " ", p).strip() for p in parts if p.strip()]
+
+
+def _strip_figure_bleed(seg: str, lines: list[str]) -> str:
+    """Toglie dal testo le etichette-figura **intrecciate** (bleed), con cautela.
+
+    pymupdf4llm intreccia il testo interno delle figure nel paragrafo. Tre
+    livelli, dal più sicuro:
+    1. etichetta **incollata** a una parola (preceduta da lettera minuscola):
+       ``ther60 apies`` → ``therapies``;
+    2. etichetta **multi-parola** distintiva (``17p deletion``, ``No. AT Risk``);
+    3. numero **isolato tra spazi** (assi): ``trisomy 80 12`` → ``trisomy 12``.
+    Non tocca i numeri seguiti da unità (``60%``) né le parole intere; se non
+    cambia nulla restituisce il testo originale.
+    """
+    orig = seg
+    for l in sorted(lines, key=len, reverse=True):
+        esc = re.escape(l)
+        seg = re.sub(r"(?<=[a-z])" + esc + r"\s?", "", seg)
+        if " " in l and len(l) >= 6:
+            seg = re.sub(r"(?<![\w])" + esc + r"\s?", "", seg)
+        elif l.isdigit():
+            seg = re.sub(r"(?<=\s)" + esc + r" (?=\S)", "", seg)
+    # token numerici interni (anche dentro righe lunghe, es. l'asse dei mesi):
+    # si rimuovono **solo se incollati** a una parola ("suppres1 sor"), mai i
+    # numeri isolati (che possono essere contenuto reale, es. "trisomy 12").
+    nums = {tok for l in lines for tok in re.findall(r"\d+", l)}
+    for tok in sorted(nums, key=len, reverse=True):
+        seg = re.sub(r"(?<=[a-z])" + re.escape(tok) + r"\s?", "", seg)
+    if seg == orig:
+        return orig
+    return re.sub(r"[ \t]{2,}", " ", seg)
+
+
 def page_chunk(doc, page_index: int) -> dict:
     """Unico ``to_markdown(page_chunks=True)`` per pagina (una sola passata)."""
     import pymupdf4llm
@@ -158,6 +196,14 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
     attached, used = _attach_captions(keep)
     bands, seps, ncol = _order(keep, pw)
 
+    # figure (per il bleed): rect + righe del testo interno
+    pics_keep = [e for e in keep if e["class"] == "picture"]
+    pic_lines = {id(e): _internal_lines(e["text"]) for e in pics_keep}
+
+    def _overlaps(a: tuple, b: tuple) -> bool:
+        return (min(a[2], b[2]) - max(a[0], b[0]) > 0
+                and min(a[3], b[3]) - max(a[1], b[1]) > 0)
+
     out: list[str] = []
     emitted_rects: list[tuple] = []  # rect delle picture effettivamente emesse
 
@@ -184,6 +230,14 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
         if c == "caption" and id(e) in used:
             return  # già emessa con la figura
         if seg:
+            # Bleed: se il blocco si sovrappone a una figura, togli le etichette
+            # interne intrecciate (assi/legenda/tabella). `_strip_figure_bleed`
+            # non cambia nulla se non c'è bleed.
+            if c in _TEXTY and pics_keep:
+                near = [p for p in pics_keep if _overlaps(e["bbox"], p["bbox"])]
+                if near:
+                    lines = [l for p in near for l in pic_lines[id(p)]]
+                    seg = _strip_figure_bleed(seg, lines)
             out.append(seg)
 
     for i, band in enumerate(bands):
