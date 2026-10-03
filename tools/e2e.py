@@ -338,6 +338,7 @@ def _make_record(pdf: str, idx: int, pipe: str, truth: dict, md: str, plain: str
         "flags": flags,
         "verdict": "review" if flags else "auto-ok",
         "arbitration": None,  # riempito in modalità visual/advisor
+        "regression": None,   # riempito se --baseline
     }
 
 
@@ -355,7 +356,8 @@ def _print_rec(rec: dict) -> None:
 
 # ── report ──────────────────────────────────────────────────────────────────
 def _write_reports(out: Path, records: list[dict], pipelines: list[str],
-                   mode: str, pdf: str) -> None:
+                   mode: str, pdf: str,
+                   regressions: list[dict] | None = None) -> None:
     (out / "report.jsonl").write_text(
         "\n".join(json.dumps(r, ensure_ascii=False) for r in records),
         encoding="utf-8",
@@ -399,6 +401,11 @@ def _write_reports(out: Path, records: list[dict], pipelines: list[str],
                 f"| {r['page_ui']} | {r['pipeline']} | "
                 f"{'; '.join(r['flags'])} | {arb} |"
             )
+    if regressions:
+        lines += ["", f"## Regressioni ({len(regressions)})", "",
+                  "| chiave | regressioni |", "|---|---|"]
+        for x in regressions:
+            lines.append(f"| {x['key']} | {'; '.join(x['issues'])} |")
     (out / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"\nReport: {out/'summary.md'}")
 
@@ -501,6 +508,77 @@ def _run_advisor(out: Path, records: list[dict], doc, model: str, key: str,
         print(f"advisor p{r['page_ui']}: {verdict}")
 
 
+# ── regressione (baseline) ──────────────────────────────────────────────────
+_BASELINE_VERSION = 1
+TOL_RECALL = 0.01   # calo massimo ammesso sul recall della prosa
+TOL_ORDER = 0.02    # calo massimo ammesso sull'order score
+TOL_BODY = 0.20     # calo massimo (frazione) sul body_len
+TOL_TABLE = 0.05    # calo massimo ammesso sul recall delle tabelle
+
+
+def _baseline_key(rec: dict) -> str:
+    return f"{rec['pdf']}|{rec['pipeline']}|{rec['page_idx']}"
+
+
+def _baseline_entry(rec: dict) -> dict:
+    c = rec["checks"]
+    return {
+        "recall_pdf": c["text"]["recall_pdf"],
+        "order_score": rec["order_score"],
+        "body_len": rec["body_len"],
+        "figures": c["figures"]["embedded"],
+        "table_recall": c["tables"]["recall"],
+    }
+
+
+def _load_baseline(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8")).get("entries", {})
+    except Exception:
+        return {}
+
+
+def _write_baseline(path: Path, records: list[dict]) -> None:
+    # merge: più run (anche su PDF diversi) accumulano nello stesso baseline
+    entries = _load_baseline(path)
+    entries.update({_baseline_key(r): _baseline_entry(r) for r in records})
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"version": _BASELINE_VERSION, "entries": entries},
+                   ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    print(f"Baseline scritta: {path} ({len(entries)} voci)")
+
+
+def _compare_baseline(records: list[dict], entries: dict) -> list[dict]:
+    """Annota ogni record con le regressioni rispetto al baseline."""
+    regs: list[dict] = []
+    for r in records:
+        base = entries.get(_baseline_key(r))
+        if not base:
+            continue
+        cur = _baseline_entry(r)
+        issues: list[str] = []
+        if base["recall_pdf"] - cur["recall_pdf"] > TOL_RECALL:
+            issues.append(f"recall {base['recall_pdf']:.3f}->{cur['recall_pdf']:.3f}")
+        if base["order_score"] - cur["order_score"] > TOL_ORDER:
+            issues.append(f"order {base['order_score']:.3f}->{cur['order_score']:.3f}")
+        if base["body_len"] and cur["body_len"] < base["body_len"] * (1 - TOL_BODY):
+            issues.append(f"body {base['body_len']}->{cur['body_len']}")
+        if cur["figures"] < base["figures"]:
+            issues.append(f"figure {base['figures']}->{cur['figures']}")
+        if (base["table_recall"] is not None and cur["table_recall"] is not None
+                and base["table_recall"] - cur["table_recall"] > TOL_TABLE):
+            issues.append(f"tabella {base['table_recall']:.2f}->{cur['table_recall']:.2f}")
+        r["regression"] = issues or None
+        if issues:
+            regs.append({"key": _baseline_key(r), "issues": issues})
+    return regs
+
+
 # ── main ────────────────────────────────────────────────────────────────────
 def run(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Harness E2E dell'agente")
@@ -516,6 +594,10 @@ def run(argv: list[str] | None = None) -> int:
     ap.add_argument("--advisor-model", default=_ADVISOR_DEFAULT_MODEL)
     ap.add_argument("--advisor-key-env", default="OPENROUTER_API_KEY")
     ap.add_argument("--advisor-max", type=int, default=20)
+    ap.add_argument("--baseline", default=None,
+                    help="confronta i risultati con un baseline JSON (regressioni)")
+    ap.add_argument("--update-baseline", default=None,
+                    help="scrive il baseline JSON dai risultati di questo run")
     args = ap.parse_args(argv)
 
     _isolate_config()
@@ -560,8 +642,21 @@ def run(argv: list[str] | None = None) -> int:
     finally:
         doc.close()
 
-    _write_reports(out, records, pipelines, args.mode, pdf)
-    return 0
+    regs: list[dict] = []
+    if args.update_baseline:
+        _write_baseline(Path(args.update_baseline), records)
+    if args.baseline:
+        entries = _load_baseline(Path(args.baseline))
+        regs = _compare_baseline(records, entries)
+        if regs:
+            print(f"⚠ REGRESSIONI: {len(regs)}")
+            for x in regs:
+                print(f"   {x['key']}: {'; '.join(x['issues'])}")
+        else:
+            print("Baseline: nessuna regressione")
+
+    _write_reports(out, records, pipelines, args.mode, pdf, regs)
+    return 2 if regs else 0
 
 
 def main() -> int:  # pragma: no cover - CLI
