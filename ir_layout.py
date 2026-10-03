@@ -197,6 +197,98 @@ def _single_col_table_from_page(page, bbox: tuple) -> str:
     return "\n".join(" ".join(r) for r in rows if r)
 
 
+def _table_col_count(text: str) -> int:
+    """Numero di colonne del markdown-tabella della content map."""
+    n = 0
+    for ln in (text or "").splitlines():
+        s = ln.strip()
+        if s.startswith("|") and s.endswith("|"):
+            cells = s.strip("|").split("|")
+            if all(set(c.strip()) <= set("-: ") for c in cells):
+                continue
+            n = max(n, len(cells))
+    return n
+
+
+def _grid_table_from_page(page, bbox: tuple, ncol: int = 0) -> str:
+    """Ricostruisce una tabella **grid** dalle righe di pagina.
+
+    Divide le celle per i **gap orizzontali** tra parole: robusto quando il testo
+    delle celle della content map è garbled (es. p231). ``ncol`` è il minimo.
+    """
+    def _inside(b, r, pad=3.0):
+        return (b[0] >= r[0] - pad and b[2] <= r[2] + pad
+                and b[1] >= r[1] - pad and b[3] <= r[3] + pad)
+
+    words = [w for w in page.get_text("words") if _inside(w[:4], bbox)]
+    if not words:
+        return ""
+    words.sort(key=lambda w: (round(w[1] / 3), w[0]))
+    rows: list[list] = []
+    cur: list = []
+    ly = None
+    for w in words:
+        if ly is not None and abs(w[1] - ly) > 5:
+            rows.append(cur)
+            cur = []
+        cur.append(w)
+        ly = w[1]
+    if cur:
+        rows.append(cur)
+    # confini di colonna: x coperte da **poche** righe (gap verticale). Robusto a
+    # righe a tutta larghezza (titolo) e a celle lunghe su y indipendenti.
+    x0r, x1r = bbox[0], bbox[2]
+    W = int(x1r - x0r) + 1
+    rowcov = [0] * W
+    for r in rows:
+        cov = [0] * W
+        for w in r:
+            if not w[4].strip():
+                continue
+            a = max(0, int(w[0] - x0r))
+            b = min(W, int(w[2] - x0r))
+            for i in range(a, b):
+                cov[i] = 1
+        for i in range(W):
+            rowcov[i] += cov[i]
+    thr = 0.25 * len(rows)
+    gaps: list[tuple[int, int]] = []
+    i = 0
+    while i < W:
+        if rowcov[i] <= thr:
+            j = i
+            while j < W and rowcov[j] <= thr:
+                j += 1
+            if j - i >= 4:
+                gaps.append((i, j))
+            i = j
+        else:
+            i += 1
+    want = max(ncol - 1, 0)
+    if want and len(gaps) > want:
+        gaps = sorted(gaps, key=lambda g: g[1] - g[0], reverse=True)[:want]
+        gaps.sort()
+    bounds = [x0r + (a + b) / 2 for a, b in gaps]
+    n = max(len(bounds) + 1, ncol, 1)
+
+    def col_of(w) -> int:
+        return min(sum(1 for b in bounds if w[0] >= b), n - 1)
+
+    md_rows: list[list[str]] = []
+    for r in rows:
+        cells = [""] * n
+        for w in r:
+            if not w[4].strip():
+                continue
+            ci = col_of(w)
+            cells[ci] = (cells[ci] + " " + w[4]).strip()
+        md_rows.append(cells)
+    out = ["| " + " | ".join(r) + " |" for r in md_rows]
+    if len(out) >= 2:
+        out.insert(1, "|" + "|".join(["---"] * n) + "|")
+    return "\n".join(out)
+
+
 def _normalize_md_table(text: str) -> str:
     """Rende valido il markdown-tabella: separatore con il n. di colonne giusto."""
     rows = [ln.rstrip() for ln in (text or "").splitlines() if ln.strip()]
@@ -553,8 +645,25 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
                 if rebuilt.strip():
                     out.append(rebuilt)
                     return
-            out.append(_normalize_md_table(seg))
-            return
+            else:
+                # grid: ricostruisci le celle dalle righe di pagina e usala SOLO
+                # se batte la content map (che su alcune pagine è garbled, es. p231)
+                base = _normalize_md_table(seg)
+                grid = _grid_table_from_page(page, e["bbox"],
+                                             _table_col_count(seg))
+                if grid.strip():
+                    r0, r1 = e["bbox"][0], e["bbox"][2]
+                    ry0, ry1 = e["bbox"][1], e["bbox"][3]
+                    ref = " ".join(
+                        w[4] for w in page.get_text("words")
+                        if r0 - 3 <= w[0] and w[2] <= r1 + 3
+                        and ry0 - 3 <= w[1] and w[3] <= ry1 + 3)
+                    if (ref and main._word_recall(ref, grid)
+                            > main._word_recall(ref, base) + 0.02):
+                        out.append(grid)
+                        return
+                out.append(base)
+                return
         if seg:
             # Bleed: se il blocco si sovrappone a una figura, togli le etichette
             # interne intrecciate (assi/legenda/tabella).

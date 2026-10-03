@@ -1062,18 +1062,18 @@ def _ir_gate(page, md: str, elements: list[dict]) -> tuple[bool, str]:
         r = _word_recall(page_text, _strip_images(md))
         if r < 0.90:
             return False, f"recall {r:.2f}"
-    # tabelle: `find_tables` è costoso (~1s/pagina) → si esegue SOLO se l'IR ha
-    # reso una tabella markdown (righe con "|"). Se l'IR avesse perso la tabella
-    # del tutto, la perdita è già coperta dal recall della prosa qui sopra.
-    if "|" in md:
-        try:
-            tbl = " ".join(
-                str(c) for t in page.find_tables().tables
-                for row in (t.extract() or []) for c in row if c
-            )
-        except Exception:
-            tbl = ""
-        if tbl and _word_recall(tbl, _strip_images(md)) < 0.85:
+    # tabelle: riferimento = **parole di pagina** nella regione delle tabelle
+    # (content map). Robusto dove `find_tables` dà celle garbled (es. p231) e
+    # senza il costo di `find_tables` (~1s/pagina). Se l'IR avesse perso la
+    # tabella, il recall cala e il gate fallisce.
+    tbl_rects = [e["bbox"] for e in elements if e.get("class") == "table"]
+    if tbl_rects:
+        def _in_tbl(b: tuple) -> bool:
+            cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+            return any(r[0] <= cx <= r[2] and r[1] <= cy <= r[3] for r in tbl_rects)
+
+        ref = " ".join(w[4] for w in page.get_text("words") if _in_tbl(w[:4]))
+        if ref and _word_recall(ref, _strip_images(md)) < 0.85:
             return False, "tabella"
     return True, "ok"
 
