@@ -141,6 +141,58 @@ class ChecksTests(unittest.TestCase):
             truth, "medicine cardiology patients treatment diagnosis", "same")
         self.assertEqual(e2e._flags(checks, None), [])
 
+    def test_collect_defects_auto_and_advisor(self):
+        rec = {
+            "pdf": "x.pdf", "page_idx": 0, "page_ui": 1, "pipeline": "ir",
+            "flags": ["tables: celle recall 0.46"],
+            "arbitration": {"verdict": {
+                "text_ok": False, "order_ok": True, "figures_ok": True,
+                "tables_ok": False, "missing": ["Fig 3"],
+                "notes": "manca una figura",
+            }},
+        }
+        kinds = {(d["source"], d["kind"]) for d in e2e._collect_defects([rec])}
+        self.assertIn(("auto", "tables"), kinds)
+        self.assertIn(("advisor", "text"), kinds)
+        self.assertIn(("advisor", "tables"), kinds)
+        self.assertIn(("advisor", "missing"), kinds)
+
+    def test_collect_defects_ignores_advisor_error(self):
+        rec = {
+            "pdf": "x.pdf", "page_idx": 0, "page_ui": 1, "pipeline": "ir",
+            "flags": [], "arbitration": {"verdict": {"error": "HTTP 401"}},
+        }
+        self.assertEqual(e2e._collect_defects([rec]), [])
+
+
+@unittest.skipUnless(_OK, "pymupdf/e2e non disponibili")
+class AdvisorAllPagesTests(unittest.TestCase):
+    """L'advisor giudica **tutte** le pagine richieste (non solo le flaggate)."""
+
+    def _recs(self, n: int) -> list[dict]:
+        return [
+            {"pdf": "x.pdf", "page_idx": i, "page_ui": i + 1, "pipeline": "ir",
+             "flags": ["text: recall 0.80"] if i == 0 else []}
+            for i in range(n)
+        ]
+
+    def test_all_pages_and_cap(self):
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as d:
+            doc = pymupdf.open()
+            for _ in range(3):
+                doc.new_page()
+            verdict = {"text_ok": True, "order_ok": True, "figures_ok": True,
+                       "tables_ok": True, "missing": [], "notes": ""}
+            with mock.patch.object(e2e, "_advisor_judge", return_value=verdict) as m:
+                e2e._run_advisor(Path(d), self._recs(3), doc, "m", "k", 0)
+                self.assertEqual(m.call_count, 3)  # 0 = tutte
+                m.reset_mock()
+                e2e._run_advisor(Path(d), self._recs(3), doc, "m", "k", 1)
+                self.assertEqual(m.call_count, 1)  # cap
+            doc.close()
+
 
 @unittest.skipUnless(_OK, "e2e non disponibile")
 class AdvisorJudgeTests(unittest.TestCase):

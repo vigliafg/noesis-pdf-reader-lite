@@ -354,6 +354,35 @@ def _print_rec(rec: dict) -> None:
     )
 
 
+# ── difetti ─────────────────────────────────────────────────────────────────
+def _collect_defects(records: list[dict]) -> list[dict]:
+    """Aggrega i difetti: flag automatici **e** verdetto dell'advisor visivo."""
+    defects: list[dict] = []
+
+    def _add(rec: dict, source: str, kind: str, note: str, verdict) -> None:
+        defects.append({
+            "pdf": rec["pdf"], "page_idx": rec["page_idx"],
+            "page_ui": rec["page_ui"], "pipeline": rec["pipeline"],
+            "source": source, "kind": kind, "note": note, "verdict": verdict,
+        })
+
+    for r in records:
+        for f in r["flags"]:
+            kind, _, note = f.partition(":")
+            _add(r, "auto", kind.strip(), note.strip(), None)
+        arb = r.get("arbitration") or {}
+        v = arb.get("verdict")
+        if not isinstance(v, dict) or "error" in v or "raw" in v:
+            continue
+        for key, kind in (("text_ok", "text"), ("order_ok", "order"),
+                          ("figures_ok", "figures"), ("tables_ok", "tables")):
+            if v.get(key) is False:
+                _add(r, "advisor", kind, str(v.get("notes", "")), v)
+        for miss in (v.get("missing") or []):
+            _add(r, "advisor", "missing", str(miss), v)
+    return defects
+
+
 # ── report ──────────────────────────────────────────────────────────────────
 def _write_reports(out: Path, records: list[dict], pipelines: list[str],
                    mode: str, pdf: str,
@@ -406,8 +435,24 @@ def _write_reports(out: Path, records: list[dict], pipelines: list[str],
                   "| chiave | regressioni |", "|---|---|"]
         for x in regressions:
             lines.append(f"| {x['key']} | {'; '.join(x['issues'])} |")
+    defects = _collect_defects(records)
+    (out / "defects.jsonl").write_text(
+        "\n".join(json.dumps(d, ensure_ascii=False) for d in defects),
+        encoding="utf-8",
+    )
+    lines += ["", f"## Difetti ({len(defects)})", ""]
+    if not defects:
+        lines.append("Nessun difetto raccolto.")
+    else:
+        lines += ["| pagina | pipeline | fonte | tipo | nota |", "|---|---|---|---|---|"]
+        for d in defects:
+            note = (d["note"] or "").replace("|", "/")[:100]
+            lines.append(
+                f"| {d['page_ui']} | {d['pipeline']} | {d['source']} | "
+                f"{d['kind']} | {note} |"
+            )
     (out / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"\nReport: {out/'summary.md'}")
+    print(f"\nReport: {out/'summary.md'} ({len(defects)} difetti)")
 
 
 # ── arbitraggio visivo (agente) ─────────────────────────────────────────────
@@ -489,8 +534,10 @@ def _run_advisor(out: Path, records: list[dict], doc, model: str, key: str,
 
     review = out / "review"
     review.mkdir(parents=True, exist_ok=True)
-    flagged = [r for r in records if r["flags"]][:max_calls]
-    for r in flagged:
+    # L'advisor giudica TUTTE le pagine richieste (anche quelle non auto-flaggate):
+    # il gate automatico può non vedere un difetto. `max_calls>0` è solo un tetto.
+    targets = records[:max_calls] if max_calls else records
+    for r in targets:
         idx = r["page_idx"]
         page = doc[idx]
         png = page.get_pixmap(matrix=pymupdf.Matrix(2, 2)).tobytes("png")
@@ -593,7 +640,8 @@ def run(argv: list[str] | None = None) -> int:
                     help="salta find_tables (ground truth tabelle)")
     ap.add_argument("--advisor-model", default=_ADVISOR_DEFAULT_MODEL)
     ap.add_argument("--advisor-key-env", default="OPENROUTER_API_KEY")
-    ap.add_argument("--advisor-max", type=int, default=20)
+    ap.add_argument("--advisor-max", type=int, default=0,
+                    help="tetto al numero di pagine giudicate (0 = tutte)")
     ap.add_argument("--baseline", default=None,
                     help="confronta i risultati con un baseline JSON (regressioni)")
     ap.add_argument("--update-baseline", default=None,
