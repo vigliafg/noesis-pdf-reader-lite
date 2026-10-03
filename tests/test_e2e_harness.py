@@ -249,11 +249,11 @@ class FigureBleedTests(unittest.TestCase):
     """Rimozione del bleed del testo-figura (assi/legenda) intrecciato nel corpo."""
 
     def test_strip_glued_multiworld_and_standalone(self):
-        lines = ["100", "80", "60", "40", "20", "0", "23", "1 12 24 36",
-                 "17p deletion", "No. AT Risk", "Normal"]
+        lines = ["100", "80", "60", "40", "20", "0", "23", "13", "14",
+                 "1 12 24 36", "17p deletion", "No. AT Risk", "Normal"]
         s = ("hybridization 100 (FISH), trisomy 80 12, traditional ther60 apies, "
              "tumor suppres0 1 sor TP53, bulky lymphadenop20 athy, "
-             "shorter sur17p deletion 23 vival")
+             "shorter sur17p deletion 23 vival, del(13)(q14.3), del(17)(p13.1)")
         out = ir_layout._strip_figure_bleed(s, lines)
         self.assertNotIn("ther60", out)
         self.assertIn("therapies", out)
@@ -266,6 +266,9 @@ class FigureBleedTests(unittest.TestCase):
         self.assertIn("survival", out)
         self.assertIn("trisomy 12", out)
         self.assertIn("hybridization (FISH)", out)
+        # cautela: i loci NON devono essere toccati dai token numerici interni
+        self.assertIn("del(13)(q14.3)", out)
+        self.assertIn("del(17)(p13.1)", out)
 
     def test_strip_noop_when_clean(self):
         s = "A clean sentence with no figure labels at all."

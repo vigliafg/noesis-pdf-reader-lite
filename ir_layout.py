@@ -48,19 +48,28 @@ def _strip_figure_bleed(seg: str, lines: list[str]) -> str:
     cambia nulla restituisce il testo originale.
     """
     orig = seg
-    for l in sorted(lines, key=len, reverse=True):
-        esc = re.escape(l)
-        seg = re.sub(r"(?<=[a-z])" + esc + r"\s?", "", seg)
-        if " " in l and len(l) >= 6:
-            seg = re.sub(r"(?<![\w])" + esc + r"\s?", "", seg)
-        elif l.isdigit():
-            seg = re.sub(r"(?<=\s)" + esc + r" (?=\S)", "", seg)
-    # token numerici interni (anche dentro righe lunghe, es. l'asse dei mesi):
-    # si rimuovono **solo se incollati** a una parola ("suppres1 sor"), mai i
-    # numeri isolati (che possono essere contenuto reale, es. "trisomy 12").
-    nums = {tok for l in lines for tok in re.findall(r"\d+", l)}
-    for tok in sorted(nums, key=len, reverse=True):
-        seg = re.sub(r"(?<=[a-z])" + re.escape(tok) + r"\s?", "", seg)
+    ordered = sorted(lines, key=len, reverse=True)
+    # token numerici interni (anche dentro righe lunghe, es. asse dei mesi o
+    # tabella No. AT Risk): rimossi **solo se incollati e seguiti da spazio**,
+    # mai i numeri isolati né quelli dentro un locus (es. "q14.3").
+    nums = sorted({tok for l in lines for tok in re.findall(r"\d+", l)},
+                  key=len, reverse=True)
+    for _ in range(4):  # più passate: una rimozione può sbloccarne un'altra
+        before = seg
+        for l in ordered:
+            if l.isdigit():
+                # numero isolato tra spazi: "trisomy 80 12" -> "trisomy 12"
+                seg = re.sub(r"(?<=\s)" + re.escape(l) + r" (?=\S)", "", seg)
+                continue
+            esc = re.escape(l)
+            # incollato a parola — **spazio obbligatorio** dopo: non tocca "q14.3"
+            seg = re.sub(r"(?<=[a-z])" + esc + r"\s", "", seg)
+            if " " in l and len(l) >= 6:
+                seg = re.sub(r"(?<![\w])" + esc + r"\s?", "", seg)
+        for tok in nums:
+            seg = re.sub(r"(?<=[a-z])" + re.escape(tok) + r"\s", "", seg)
+        if seg == before:
+            break
     if seg == orig:
         return orig
     return re.sub(r"[ \t]{2,}", " ", seg)
