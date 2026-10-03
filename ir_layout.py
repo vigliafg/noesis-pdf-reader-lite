@@ -75,6 +75,61 @@ def _strip_figure_bleed(seg: str, lines: list[str]) -> str:
     return re.sub(r"[ \t]{2,}", " ", seg)
 
 
+def _has_bleed(seg: str, lines: list[str]) -> bool:
+    """True se ``seg`` contiene bleed di figure (numero incollato o riga interna)."""
+    if re.search(r"[a-z]{3,}\d", seg):
+        return True
+    return any(" " in l and len(l) >= 6 and l in seg for l in lines)
+
+
+def _norm_words(t: str) -> set[str]:
+    """Parole lunghe (≥5) normalizzate, con de-sillabazione (per il gate di sicurezza)."""
+    t = re.sub(r"-\s*\n\s*", "", t.lower())
+    t = re.sub(r"-\s+", "", t)
+    return {w for w in re.sub(r"[^a-z0-9]+", " ", t).split() if len(w) >= 5}
+
+
+def _rebuild_from_words(page, bbox: tuple, excl: list[tuple], pad: float = 6.0) -> str:
+    """Ricostruisce il testo di ``bbox`` dalle parole, escludendo ``excl`` (figure/didascalie).
+
+    Il ``pad`` compensa il fatto che i bbox della content map non coprono
+    esattamente le parole dello slice.
+    """
+    eb = (bbox[0] - pad, bbox[1] - pad, bbox[2] + pad, bbox[3] + pad)
+
+    def _inside(b, r):
+        return (b[0] >= r[0] and b[2] <= r[2] and b[1] >= r[1] and b[3] <= r[3])
+
+    def _center_in(b, r):
+        cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+        return r[0] <= cx <= r[2] and r[1] <= cy <= r[3]
+
+    # esclusione **center-based**: cattura anche le etichette a ridosso del bbox
+    # della figura (es. "100" appena sopra il grafico) senza toccare il corpo.
+    words = [w for w in page.get_text("words")
+             if _inside(w[:4], eb) and not any(_center_in(w[:4], r) for r in excl)]
+    words.sort(key=lambda w: (round(w[1] / 3), w[0]))
+    lines: list[list[str]] = []
+    cur: list[str] = []
+    ly = None
+    for w in words:
+        if ly is not None and abs(w[1] - ly) > 5:
+            lines.append(cur)
+            cur = []
+        cur.append(w[4])
+        ly = w[1]
+    if cur:
+        lines.append(cur)
+    # de-sillabazione: "suppres-" + "sor" -> "suppressor"
+    out: list[str] = []
+    for ln in (" ".join(l) for l in lines):
+        if out and out[-1].endswith("-") and ln[:1].islower():
+            out[-1] = out[-1][:-1] + ln
+        else:
+            out.append(ln)
+    return "\n".join(out)
+
+
 def page_chunk(doc, page_index: int) -> dict:
     """Unico ``to_markdown(page_chunks=True)`` per pagina (una sola passata)."""
     import pymupdf4llm
@@ -240,13 +295,28 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
             return  # già emessa con la figura
         if seg:
             # Bleed: se il blocco si sovrappone a una figura, togli le etichette
-            # interne intrecciate (assi/legenda/tabella). `_strip_figure_bleed`
-            # non cambia nulla se non c'è bleed.
+            # interne intrecciate (assi/legenda/tabella).
             if c in _TEXTY and pics_keep:
                 near = [p for p in pics_keep if _overlaps(e["bbox"], p["bbox"])]
                 if near:
                     lines = [l for p in near for l in pic_lines[id(p)]]
-                    seg = _strip_figure_bleed(seg, lines)
+                    if _has_bleed(seg, lines):
+                        # Fase 2b: ricostruzione **word-level** spaziale (esclude
+                        # le parole dentro figure/didascalie). Il gate di
+                        # sicurezza confronta con il risultato token-removal
+                        # (contenuto reale): si usa il rebuild SOLO se non perde
+                        # parole; altrimenti si resta sulla token-removal (che
+                        # preserva il markdown).
+                        stripped = _strip_figure_bleed(seg, lines)
+                        excl = [o["bbox"] for o in keep
+                                if o is not e and _overlaps(o["bbox"], e["bbox"])]
+                        rebuilt = _rebuild_from_words(page, e["bbox"], excl)
+                        expected = _norm_words(stripped)
+                        missing = expected - _norm_words(rebuilt)
+                        if rebuilt and len(missing) <= max(1, int(0.1 * len(expected))):
+                            seg = rebuilt
+                        else:
+                            seg = stripped
             out.append(seg)
 
     for i, band in enumerate(bands):

@@ -280,6 +280,24 @@ class FigureBleedTests(unittest.TestCase):
             ir_layout._internal_lines(t),
             ["100", "17p deletion", "No. AT Risk"])
 
+    def test_has_bleed(self):
+        self.assertTrue(ir_layout._has_bleed("traditional ther60 apies", []))
+        self.assertFalse(ir_layout._has_bleed("a clean sentence here", []))
+        self.assertTrue(
+            ir_layout._has_bleed("see No. AT Risk below", ["No. AT Risk"]))
+
+    def test_norm_words_dehyphenates(self):
+        self.assertIn("suppressor", ir_layout._norm_words("suppres-\nsor"))
+
+    def test_rebuild_from_words_dehyphenates(self):
+        doc = pymupdf.open()
+        p = doc.new_page(width=595, height=842)
+        p.insert_text((60, 100), "suppres-", fontsize=11)
+        p.insert_text((60, 115), "sor TP53", fontsize=11)
+        out = ir_layout._rebuild_from_words(p, (50, 90, 300, 130), [])
+        doc.close()
+        self.assertIn("suppressor TP53", out)
+
 
 @unittest.skipUnless(_OK, "pymupdf/e2e non disponibili")
 class EngineAttributionTests(unittest.TestCase):
