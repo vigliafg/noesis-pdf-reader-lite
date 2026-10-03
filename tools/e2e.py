@@ -229,6 +229,25 @@ def _render_plain(panel, md: str) -> str:
     return panel.toPlainText() or ""
 
 
+def _engine_used(pdf: str, idx: int, figures_dir) -> tuple[str, bool]:
+    """Quale pipeline ha prodotto il testo finale nell'app: ``ir`` o ``current``.
+
+    L'``ExtractThread`` non espone la pipeline usata (l'etichetta è ``"auto"`` in
+    entrambi i casi). La ricaviamo in modo **deterministico**: l'app usa IR se e
+    solo se ``_apply_ir_on_page`` restituisce md non vuoto **e** il gate passa;
+    altrimenti ricade su ``current``.
+    """
+    import main
+
+    try:
+        md, _raw, gate_ok = main._apply_ir_on_page(pdf, idx, figures_dir=figures_dir)
+    except Exception:
+        return "current", False
+    if md and gate_ok and main._norm_text(md).strip():
+        return "ir", True
+    return "current", bool(gate_ok)
+
+
 # ── percorso APP reale (MainWindow + ExtractThread) ─────────────────────────
 def _run_via_app(pdf: str, pages: list[int], pipelines: list[str], out: Path,
                  qapp, truth: dict, timeout: float) -> list[dict]:
@@ -260,10 +279,12 @@ def _run_via_app(pdf: str, pages: list[int], pipelines: list[str], out: Path,
                 body = getattr(win.text_panel, "_page_body", "") or ""
                 plain = win.text_panel.origin_panel.toPlainText() or ""
                 png = win.text_panel.origin_panel.grab()
+                # attribuzione: quale pipeline ha davvero prodotto il testo
+                engine, _gate_ok = _engine_used(pdf, idx, win._get_images_dir())
                 rec = _make_record(
                     pdf, idx, pipe, truth[idx], body, plain,
                     secs=round(elapsed or (time.perf_counter() - t0), 2),
-                    gate=None, via_app=True, label=label,
+                    gate=None, via_app=True, label=label, engine=engine,
                 )
                 pd = out / pipe
                 pd.mkdir(parents=True, exist_ok=True)
@@ -329,7 +350,8 @@ def _run_direct(pdf: str, doc, pages: list[int], pipelines: list[str], out: Path
 
 
 def _make_record(pdf: str, idx: int, pipe: str, truth: dict, md: str, plain: str,
-                 secs: float, gate: dict | None, via_app: bool, label: str) -> dict:
+                 secs: float, gate: dict | None, via_app: bool, label: str,
+                 engine: str | None = None) -> dict:
     import main
 
     checks = _checks(truth, md, plain)
@@ -344,6 +366,7 @@ def _make_record(pdf: str, idx: int, pipe: str, truth: dict, md: str, plain: str
         "page_idx": idx,
         "page_ui": idx + 1,
         "pipeline": pipe,
+        "engine": engine or pipe,  # pipeline che ha prodotto il testo (via-app: ir|current)
         "via_app": via_app,
         "label": label,
         "secs": secs,
@@ -380,6 +403,7 @@ def _collect_defects(records: list[dict]) -> list[dict]:
         defects.append({
             "pdf": rec["pdf"], "page_idx": rec["page_idx"],
             "page_ui": rec["page_ui"], "pipeline": rec["pipeline"],
+            "engine": rec.get("engine"),  # pipeline che ha prodotto il testo
             "source": source, "kind": kind, "note": note, "verdict": verdict,
         })
 
@@ -425,11 +449,16 @@ def _write_reports(out: Path, records: list[dict], pipelines: list[str],
         }, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    eng_counts: dict[str, int] = {}
+    for r in records:
+        k = r.get("engine") or "?"
+        eng_counts[k] = eng_counts.get(k, 0) + 1
     lines = [
         f"# Harness E2E — {Path(pdf).name}",
         "",
         f"- modalità: **{mode}**",
         f"- pipeline: {', '.join(pipelines)}",
+        f"- engine (attribuzione): {', '.join(f'{k}={v}' for k, v in eng_counts.items())}",
         f"- pagine: {len({r['page_idx'] for r in records})}",
         f"- **tempo totale**: {total_secs:.1f}s" if total_secs is not None
         else "- tempo totale: n/d",
@@ -460,12 +489,12 @@ def _write_reports(out: Path, records: list[dict], pipelines: list[str],
     if not flagged:
         lines.append("Nessuna: tutte le pagine passano i controlli automatici.")
     else:
-        lines.append("| pagina | pipeline | flag | arbitraggio |")
-        lines.append("|---|---|---|---|")
+        lines.append("| pagina | pipeline | engine | flag | arbitraggio |")
+        lines.append("|---|---|---|---|---|")
         for r in flagged:
             arb = (r.get("arbitration") or {}).get("verdict", "")
             lines.append(
-                f"| {r['page_ui']} | {r['pipeline']} | "
+                f"| {r['page_ui']} | {r['pipeline']} | {r.get('engine')} | "
                 f"{'; '.join(r['flags'])} | {arb} |"
             )
     if regressions:
@@ -482,12 +511,13 @@ def _write_reports(out: Path, records: list[dict], pipelines: list[str],
     if not defects:
         lines.append("Nessun difetto raccolto.")
     else:
-        lines += ["| pagina | pipeline | fonte | tipo | nota |", "|---|---|---|---|---|"]
+        lines += ["| pagina | pipeline | engine | fonte | tipo | nota |",
+                  "|---|---|---|---|---|---|"]
         for d in defects:
             note = (d["note"] or "").replace("|", "/")[:100]
             lines.append(
-                f"| {d['page_ui']} | {d['pipeline']} | {d['source']} | "
-                f"{d['kind']} | {note} |"
+                f"| {d['page_ui']} | {d['pipeline']} | {d.get('engine')} | "
+                f"{d['source']} | {d['kind']} | {note} |"
             )
     (out / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"\nReport: {out/'summary.md'} ({len(defects)} difetti)")

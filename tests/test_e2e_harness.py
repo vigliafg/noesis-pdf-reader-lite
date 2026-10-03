@@ -176,6 +176,48 @@ class ChecksTests(unittest.TestCase):
 
 
 @unittest.skipUnless(_OK, "pymupdf/e2e non disponibili")
+class EngineAttributionTests(unittest.TestCase):
+    """`_engine_used` dice quale pipeline ha prodotto il testo (ir|current)."""
+
+    def _index_pdf(self, path: Path) -> None:
+        doc = pymupdf.open()
+        p = doc.new_page(width=595, height=842)
+        for i in range(25):
+            p.insert_text((50, 40 + i * 20), f"term {i}, {100 + i}", fontsize=9)
+        doc.save(str(path))
+        doc.close()
+
+    def test_engine_ir_on_prose(self):
+        with tempfile.TemporaryDirectory() as d:
+            pdf = Path(d) / "s.pdf"
+            _synthetic_pdf(pdf)
+            engine, ok = e2e._engine_used(str(pdf), 0, Path(d) / "fig")
+            self.assertEqual(engine, "ir")
+            self.assertTrue(ok)
+
+    def test_engine_current_on_index(self):
+        with tempfile.TemporaryDirectory() as d:
+            pdf = Path(d) / "idx.pdf"
+            self._index_pdf(pdf)
+            engine, _ok = e2e._engine_used(str(pdf), 0, Path(d) / "fig")
+            self.assertEqual(engine, "current")
+
+    def test_make_record_engine_defaults_to_pipe(self):
+        truth = {"elements": [], "page_width": 595.0, "pdf_text": "",
+                 "ntexty": 0, "expected_figs": 0, "table_text": "", "is_index": False}
+        rec = e2e._make_record("x.pdf", 0, "ir", truth, "text", "text",
+                               1.0, None, False, "auto")
+        self.assertEqual(rec["engine"], "ir")
+
+    def test_collect_defects_has_engine(self):
+        rec = {"pdf": "x.pdf", "page_idx": 0, "page_ui": 1, "pipeline": "ir",
+               "engine": "current", "flags": ["text: recall 0.80"],
+               "arbitration": None}
+        defs = e2e._collect_defects([rec])
+        self.assertEqual(defs[0]["engine"], "current")
+
+
+@unittest.skipUnless(_OK, "pymupdf/e2e non disponibili")
 class AdvisorAllPagesTests(unittest.TestCase):
     """L'advisor giudica **tutte** le pagine richieste (non solo le flaggate)."""
 
