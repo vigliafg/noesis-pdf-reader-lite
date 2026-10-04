@@ -558,11 +558,56 @@ def _attach_captions(elements: list[dict]) -> dict[int, list[dict]]:
     return attached, used
 
 
+#: legature tipografiche → espansione ASCII (PyMuPDF le emette come singolo char)
+_LIGATURES = {0xFB00: "ff", 0xFB01: "fi", 0xFB02: "fl",
+              0xFB03: "ffi", 0xFB04: "ffl"}
+#: spazio spurio dopo una legatura, prima di una continuazione minuscola
+_LIG_SPACE_RE = re.compile(r"(ffi|ffl|ff|fi|fl)\s+(?=[a-z])")
+
+
+def _expand_ligatures(text: str) -> str:
+    """Espande le legature e toglie lo **spazio spurio** che PyMuPDF vi appone.
+
+    ``Deﬁ nition`` → ``Definition``. Lo spazio si toglie **solo** se il testo
+    conteneva davvero una legatura: il pattern ``ff|fi|fl`` da solo è troppo
+    comune (``staff in`` non va toccato).
+    """
+    if not any(ord(c) in _LIGATURES for c in text):
+        return text
+    return _LIG_SPACE_RE.sub(r"\1", text.translate(_LIGATURES))
+
+
+def _ligature_fixes(page) -> dict[str, str]:
+    """Coppie ``parola-spezza`` → ``parola-unita`` dalle legature della pagina.
+
+    La content map espande la legatura in ``fi`` ma **conserva** lo spazio
+    (``Defi nition``): qui si ricostruisce cosa sostituire nel markdown.
+    """
+    fixes: dict[str, str] = {}
+    try:
+        d = page.get_text("dict")
+    except Exception:
+        return fixes
+    for blk in d.get("blocks", []):
+        if blk.get("type") != 0:
+            continue
+        for ln in blk.get("lines", []):
+            for s in ln.get("spans", []):
+                raw = s.get("text", "")
+                if not any(ord(c) in _LIGATURES for c in raw):
+                    continue
+                broken = raw.translate(_LIGATURES)
+                fixed = _LIG_SPACE_RE.sub(r"\1", broken)
+                if fixed != broken:
+                    fixes[broken] = fixed
+    return fixes
+
+
 def _span_md(spans: list[dict]) -> str:
     """Markdown di una riga dai suoi span (grassetto ``**`` e corsivo ``_``)."""
     parts: list[str] = []
     for s in spans or []:
-        t = s.get("text", "")
+        t = _expand_ligatures(s.get("text", ""))
         if not t:
             continue
         lead = " " if t[:1].isspace() else ""
@@ -942,6 +987,9 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
     for e in ordered:
         emit(e)
     md = "\n\n".join(out)
+    fixes = _ligature_fixes(page)
+    for broken, fixed in fixes.items():
+        md = md.replace(broken, fixed)
     if return_meta:
         served = {
             main._norm_text(cap["text"])[:30]

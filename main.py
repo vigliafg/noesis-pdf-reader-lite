@@ -2068,6 +2068,7 @@ def _cosmetic_ir(md: str) -> str:
         md = layout_engine._normalize_replacement_chars(md)
         md = layout_engine._normalize_soft_hyphens(md)
         md = layout_engine._repair_lists(md)
+        md = layout_engine._drop_orphan_bullets(md)
         md = layout_engine._normalize_emphasis(md)
         md = layout_engine._despace_numbers(md)
         md = layout_engine._despace_blockquote_letters(md)

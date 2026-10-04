@@ -925,6 +925,20 @@ def _repair_lists(md: str) -> str:
     return "\n".join(converted)
 
 
+def _drop_orphan_bullets(md: str) -> str:
+    """Toglie gli item di elenco **vuoti** (``- `` senza testo).
+
+    pymupdf4llm talvolta emette un bullet isolato tra due voci reali (artefatto
+    di spaziatura): è rumore puro, non contenuto.
+    """
+    out: list[str] = []
+    for ln in md.split("\n"):
+        if re.fullmatch(r"\s*[-*+]\s*", ln):
+            continue
+        out.append(ln)
+    return "\n".join(out)
+
+
 def _normalize_emphasis(md: str) -> str:
     """Mette uno spazio dopo l'abbreviazione nei corsivi (``_S.pyogenes_``)."""
     md = re.sub(r"(?<=[_*])([A-Z])\.(?=[a-z])", r"\1. ", md)
