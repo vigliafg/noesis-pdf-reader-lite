@@ -444,6 +444,18 @@ def _is_figure_caption(text: str) -> bool:
     return bool(re.match(r"(?i)^\W*fig", (text or "").strip()))
 
 
+def _separated_by_split(a: dict, b: dict, splits: list[float]) -> bool:
+    """True se un confine di colonna sta **tra** due box (colonne diverse).
+
+    Serve a non fondere tabelle **affiancate** in colonne diverse (es. TABLE
+    257-4 e TABLE 257-5): sono indipendenti e vanno lette in sequenza di colonna,
+    non unite come intestazioni multiple della stessa tabella.
+    """
+    ax0, ax1 = a["bbox"][0], a["bbox"][2]
+    bx0, bx1 = b["bbox"][0], b["bbox"][2]
+    return any(ax1 <= s <= bx0 or bx1 <= s <= ax0 for s in splits)
+
+
 def _order(elements: list[dict], page_width: float) -> list[list[dict]]:
     """Restituisce gli elementi divisi in bande (lista di liste), in ordine.
 
@@ -592,6 +604,8 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
         for u in tables:
             if id(u) in seen:
                 continue
+            if _separated_by_split(t, u, splits):
+                continue  # tabelle affiancate in colonne diverse: NON fondere
             if not (t["bbox"][3] < u["bbox"][1] - 3
                     or u["bbox"][3] < t["bbox"][1] - 3):
                 grp.append(u)
