@@ -994,9 +994,48 @@ def _strip_images(s: str) -> str:
 _INDEX_ENTRY_RE = re.compile(r",\s*\d{1,4}(?:[–\-]\d{1,4})?[a-z]?\b")
 
 
+def _rotated_table_rects(page, elements: list[dict]) -> list[tuple]:
+    """bbox dei `table` con testo **ruotato** (``dir`` non orizzontale).
+
+    Una tabella ruotata 90° non è linearizzabile in markdown: va resa come
+    immagine. Qui si rileva guardando la direzione delle righe di testo dentro
+    il bbox della tabella (PyMuPDF ``dir``: ``(1,0)`` = orizzontale).
+    """
+    tbl = [e for e in elements if e.get("class") == "table"]
+    if not tbl:
+        return []
+    rects = [tuple(e["bbox"]) for e in tbl]
+    vert = horiz = 0
+    try:
+        d = page.get_text("dict")
+    except Exception:
+        return []
+    for blk in d.get("blocks", []):
+        if blk.get("type") != 0:
+            continue
+        for ln in blk.get("lines", []):
+            bb = ln.get("bbox", (0, 0, 0, 0))
+            cx, cy = (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2
+            if not any(r[0] - 2 <= cx <= r[2] + 2 and r[1] - 2 <= cy <= r[3] + 2
+                       for r in rects):
+                continue
+            dx, dy = ln.get("dir", (1, 0))
+            if abs(dy) > abs(dx):
+                vert += 1
+            else:
+                horiz += 1
+    if vert > 0 and vert >= 0.5 * (vert + horiz):
+        return rects
+    return []
+
+
 def _page_text_no_figures(page, elements: list[dict]) -> str:
-    """Testo della pagina escludendo le regioni ``picture`` (rese nell'immagine)."""
+    """Testo della pagina escludendo le regioni ``picture`` (rese nell'immagine).
+
+    Esclude anche le **tabelle ruotate**, che l'IR rende come immagine.
+    """
     pics = [e["bbox"] for e in elements if e.get("class") == "picture"]
+    pics += _rotated_table_rects(page, elements)
 
     def _inside(b) -> bool:
         x0, y0, x1, y1 = b["bbox"]
@@ -1053,6 +1092,10 @@ def _ir_gate(page, md: str, elements: list[dict]) -> tuple[bool, str]:
     page_text = _page_text_no_figures(page, elements)
     if _norm_text(page_text).strip() == "":
         return True, "solo-figure"  # pagina di sole figure: niente prosa da perdere
+    # tabella **ruotata**: non linearizzabile in markdown → segnalata (l'IR la
+    # rende come immagine; `_apply_ir_on_page` la considera gestita, non fallback).
+    if _rotated_table_rects(page, elements):
+        return False, "tabella-ruotata"
     # recall della prosa: solo se c'è testo sufficiente (evita i falsi positivi
     # sulle pagine-grafico, dove le etichette degli assi non sono prosa).
     ntexty = sum(1 for e in elements
@@ -1064,8 +1107,11 @@ def _ir_gate(page, md: str, elements: list[dict]) -> tuple[bool, str]:
     # tabelle: riferimento = **parole di pagina** nella regione delle tabelle
     # (content map). Robusto dove `find_tables` dà celle garbled (es. p231) e
     # senza il costo di `find_tables` (~1s/pagina). Se l'IR avesse perso la
-    # tabella, il recall cala e il gate fallisce.
-    tbl_rects = [e["bbox"] for e in elements if e.get("class") == "table"]
+    # tabella, il recall cala e il gate fallisce. Le tabelle ruotate sono
+    # escluse (rese come immagine).
+    rotated = {tuple(r) for r in _rotated_table_rects(page, elements)}
+    tbl_rects = [e["bbox"] for e in elements
+                 if e.get("class") == "table" and tuple(e["bbox"]) not in rotated]
     if tbl_rects:
         def _in_tbl(b: tuple) -> bool:
             cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
@@ -2103,6 +2149,10 @@ def _apply_ir_on_page(path: str, page_num: int, figures_dir=None, exclude=()):
         try:
             _t, elements = ir_layout._elements_from_chunk(chunk)
             gate_ok, _reason = _ir_gate(page, md, elements)
+            # tabella ruotata: l'IR la rende come immagine (fedele), quindi è
+            # "gestita" — non si ricade su `current` (che qui è peggiore).
+            if not gate_ok and _reason == "tabella-ruotata":
+                gate_ok = True
         except Exception:
             gate_ok = True
     return md, raw, gate_ok

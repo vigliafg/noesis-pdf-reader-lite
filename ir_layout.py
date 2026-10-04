@@ -1008,6 +1008,10 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
         if c == "caption" and id(e) in used:
             return  # già emessa con la figura
         if c == "table":
+            if tuple(e["bbox"]) in rot_tables:
+                # tabella **ruotata**: non linearizzabile → immagine fedele
+                _emit_clip(e["bbox"], "tabella")
+                return
             # 1 colonna: pymupdf4llm può fondere voci → ricostruisci dalle righe
             if _table_is_single_col(seg):
                 rebuilt = _single_col_table_from_page(page, e["bbox"])
@@ -1076,6 +1080,7 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
                             seg = candidate
             out.append(seg)
 
+    rot_tables = {tuple(r) for r in main._rotated_table_rects(page, keep)}
     for e in ordered:
         emit(e)
     md = "\n\n".join(out)

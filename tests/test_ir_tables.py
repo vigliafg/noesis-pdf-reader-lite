@@ -115,5 +115,60 @@ class SideBySideTableSplitTests(unittest.TestCase):
         self.assertNotIn("TABLE 2", t4)
 
 
+@unittest.skipUnless(_OK, "pymupdf/ir_layout non disponibili")
+class RotatedTableTests(unittest.TestCase):
+    """Tabella **ruotata** 90°: segnalata dal gate e resa come immagine.
+
+    `corpus2/fe23.pdf` p342 (idx 341): la tabella ha testo verticale
+    (`dir` non orizzontale) → non linearizzabile. Il gate la segnala
+    ("tabella-ruotata") ma l'IR la rende come immagine, quindi la pipeline
+    completa non ricade su `current`.
+    """
+
+    _PDF = _ROOT / "corpus2" / "fe23.pdf"
+    _IDX = 341
+
+    def test_gate_flags_rotated_table(self):
+        if not self._PDF.exists():
+            self.skipTest("corpus2/fe23.pdf assente")
+        import pymupdf
+        import main
+        doc = pymupdf.open(self._PDF)
+        try:
+            _t, els = ir_layout._elements_from_chunk(
+                ir_layout.page_chunk(doc, self._IDX))
+            self.assertTrue(main._rotated_table_rects(doc[self._IDX], els))
+            ok, reason = main._ir_gate(doc[self._IDX], "x", els)
+            self.assertFalse(ok)
+            self.assertEqual(reason, "tabella-ruotata")
+        finally:
+            doc.close()
+
+    def test_pipeline_handles_rotated_table(self):
+        if not self._PDF.exists():
+            self.skipTest("corpus2/fe23.pdf assente")
+        import tempfile
+        import main
+        with tempfile.TemporaryDirectory() as d:
+            md, _raw, gate = main._apply_ir_on_page(
+                str(self._PDF), self._IDX, figures_dir=Path(d))
+        self.assertTrue(gate)  # gestita, non fallback
+        self.assertIn("data:image/jpeg", md)  # resa come immagine
+
+    def test_normal_table_not_flagged_rotated(self):
+        pdf = _ROOT / "corpus2" / "fe22.pdf"
+        if not pdf.exists():
+            self.skipTest("corpus2/fe22.pdf assente")
+        import pymupdf
+        import main
+        doc = pymupdf.open(pdf)
+        try:
+            _t, els = ir_layout._elements_from_chunk(
+                ir_layout.page_chunk(doc, 1100))
+            self.assertEqual(main._rotated_table_rects(doc[1100], els), [])
+        finally:
+            doc.close()
+
+
 if __name__ == "__main__":
     unittest.main()
