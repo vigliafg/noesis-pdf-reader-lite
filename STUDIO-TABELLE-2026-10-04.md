@@ -64,6 +64,8 @@ Le 4 colonne sono **allineate**; “Andexanet Alfa” e “Ciraparantag” separ
 - Titolo tabella spezzato tra celle (`ha22 p231`: “Differential Diagnosis | of Dementia”).
 - Intestazioni di sezione non **spanning** (`ha22 p231`, `ha22 p1977`).
 - Tabelle a **1 colonna** rese come testo semplice (`ha22 p1977` TABLE 257-5).
-- Artefatti di bleed nelle celle (`ox16 p506`: “…cause i”, “…occurring. i”).
+- Artefatti di bleed nelle celle (`ox16 p506`: “…cause i”, “…occurring. i”) —
+  **risolto in C.2**: `_strip_cell_junk` toglie `<br>X` (X singola lettera) a
+  fine cella solo se X non è una parola della pagina.
 - Recupero di tabelle **scartate** dal motore: i casi trovati (`ce24 p2480`)
   sono artefatti 1×1 degeneri, non contenuto reale → basso valore.
