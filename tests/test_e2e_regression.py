@@ -105,6 +105,34 @@ class BaselineMechanicsTests(unittest.TestCase):
         self.assertEqual(len(regs), 1)
         self.assertTrue(any("recall" in i for i in regs[0]["issues"]))
 
+    def test_class_aggregate_means(self):
+        entries = {
+            "a|ir|0": {"recall_pdf": 0.9, "order_score": 1.0, "body_len": 100,
+                       "figures": 0, "table_recall": None,
+                       "layout_class": "prosa"},
+            "b|ir|1": {"recall_pdf": 0.8, "order_score": 0.9, "body_len": 200,
+                       "figures": 0, "table_recall": None,
+                       "layout_class": "prosa"},
+        }
+        agg = e2e._class_aggregate(entries)
+        self.assertEqual(agg["prosa"]["n"], 2)
+        self.assertAlmostEqual(agg["prosa"]["recall_pdf"], 0.85)
+
+    def test_class_regression_detected(self):
+        rec = {
+            "pdf": "x.pdf", "pipeline": "ir", "page_idx": 0,
+            "order_score": 1.0, "body_len": 1000, "layout_class": "prosa",
+            "checks": {
+                "text": {"recall_pdf": 0.50},
+                "figures": {"embedded": 0},
+                "tables": {"recall": None},
+            },
+        }
+        classes = {"prosa": {"recall_pdf": 0.95, "order_score": 1.0,
+                             "body_len": 1000, "table_recall": None, "n": 5}}
+        regs = e2e._compare_baseline([rec], {}, classes)
+        self.assertTrue(any(r["key"] == "classe:prosa" for r in regs))
+
 
 @unittest.skipUnless(_OK, "pymupdf/e2e non disponibili")
 class CorpusRegressionTests(unittest.TestCase):

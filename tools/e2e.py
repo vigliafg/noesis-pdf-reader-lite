@@ -790,16 +790,44 @@ def _baseline_entry(rec: dict) -> dict:
         "body_len": rec["body_len"],
         "figures": c["figures"]["embedded"],
         "table_recall": c["tables"]["recall"],
+        "layout_class": rec.get("layout_class"),
     }
 
 
-def _load_baseline(path: Path) -> dict:
+def _class_aggregate(entries: dict) -> dict:
+    """Medie per **classe di layout** dalle voci di baseline (Fase 0.4)."""
+    groups: dict[str, list[dict]] = {}
+    for e in entries.values():
+        cls = e.get("layout_class")
+        if cls:
+            groups.setdefault(cls, []).append(e)
+    out: dict[str, dict] = {}
+    for cls, rows in groups.items():
+        def _mean(key: str):
+            vals = [r[key] for r in rows if r.get(key) is not None]
+            return round(sum(vals) / len(vals), 4) if vals else None
+
+        out[cls] = {
+            "n": len(rows),
+            "recall_pdf": _mean("recall_pdf"),
+            "order_score": _mean("order_score"),
+            "body_len": _mean("body_len"),
+            "table_recall": _mean("table_recall"),
+        }
+    return out
+
+
+def _load_baseline_doc(path: Path) -> dict:
     if not path.exists():
         return {}
     try:
-        return json.loads(path.read_text(encoding="utf-8")).get("entries", {})
+        return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
+
+
+def _load_baseline(path: Path) -> dict:
+    return _load_baseline_doc(path).get("entries", {})
 
 
 def _write_baseline(path: Path, records: list[dict]) -> None:
@@ -808,15 +836,23 @@ def _write_baseline(path: Path, records: list[dict]) -> None:
     entries.update({_baseline_key(r): _baseline_entry(r) for r in records})
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps({"version": _BASELINE_VERSION, "entries": entries},
+        json.dumps({"version": _BASELINE_VERSION, "entries": entries,
+                    "classes": _class_aggregate(entries)},
                    ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    print(f"Baseline scritta: {path} ({len(entries)} voci)")
+    print(f"Baseline scritta: {path} ({len(entries)} voci, "
+          f"{len(_class_aggregate(entries))} classi)")
 
 
-def _compare_baseline(records: list[dict], entries: dict) -> list[dict]:
-    """Annota ogni record con le regressioni rispetto al baseline."""
+def _compare_baseline(records: list[dict], entries: dict,
+                      classes: dict | None = None) -> list[dict]:
+    """Annota ogni record con le regressioni rispetto al baseline.
+
+    Oltre al confronto per pagina, se ``classes`` è fornito confronta le **medie
+    per classe di layout** (Fase 0.4): un fix che migliora la pagina bersaglio ma
+    peggiora la classe viene segnalato.
+    """
     regs: list[dict] = []
     for r in records:
         base = entries.get(_baseline_key(r))
@@ -838,6 +874,29 @@ def _compare_baseline(records: list[dict], entries: dict) -> list[dict]:
         r["regression"] = issues or None
         if issues:
             regs.append({"key": _baseline_key(r), "issues": issues})
+    if classes:
+        cur_classes = _class_aggregate(
+            {_baseline_key(r): _baseline_entry(r) for r in records})
+        for cls, cur in cur_classes.items():
+            base = classes.get(cls)
+            if not base:
+                continue
+            issues = []
+            if (base.get("recall_pdf") is not None
+                    and cur.get("recall_pdf") is not None
+                    and base["recall_pdf"] - cur["recall_pdf"] > TOL_RECALL):
+                issues.append(f"recall {base['recall_pdf']:.3f}->{cur['recall_pdf']:.3f}")
+            if (base.get("order_score") is not None
+                    and cur.get("order_score") is not None
+                    and base["order_score"] - cur["order_score"] > TOL_ORDER):
+                issues.append(f"order {base['order_score']:.3f}->{cur['order_score']:.3f}")
+            if (base.get("table_recall") is not None
+                    and cur.get("table_recall") is not None
+                    and base["table_recall"] - cur["table_recall"] > TOL_TABLE):
+                issues.append(
+                    f"tabella {base['table_recall']:.2f}->{cur['table_recall']:.2f}")
+            if issues:
+                regs.append({"key": f"classe:{cls}", "issues": issues})
     return regs
 
 
@@ -915,8 +974,9 @@ def run(argv: list[str] | None = None) -> int:
     if args.update_baseline:
         _write_baseline(Path(args.update_baseline), records)
     if args.baseline:
-        entries = _load_baseline(Path(args.baseline))
-        regs = _compare_baseline(records, entries)
+        doc_bl = _load_baseline_doc(Path(args.baseline))
+        entries = doc_bl.get("entries", {})
+        regs = _compare_baseline(records, entries, doc_bl.get("classes"))
         if regs:
             print(f"⚠ REGRESSIONI: {len(regs)}")
             for x in regs:

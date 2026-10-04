@@ -327,16 +327,27 @@ def _normalize_md_table(text: str) -> str:
 
 
 def _column_splits(elements: list[dict], page_width: float) -> list[float]:
-    """Confini di colonna dai soli blocchi di TESTO (le figure non 'pontano')."""
+    """Confini di colonna dalle sole geometrie dei box di TESTO (Fase 1).
+
+    Primario: il merge degli intervalli (comportamento consolidato del motore,
+    affidabile quando le colonne sono pulite). **Fallback**: la proiezione a
+    copertura di ``layout_proxies`` quando il merge **non trova** colonne — caso
+    in cui un box che "pontica" le colonne fa collassare il merge (difetto noto
+    "colonne collassate"). Così non si regredisce sulle pagine già corrette.
+    """
     import main  # lazy: main importa layout_engine
+    import layout_proxies
 
     texty = [e for e in elements
              if e["class"] in ("text", "section-header", "title")]
-    return main._detect_column_splits(
+    splits = main._detect_column_splits(
         [{"x0": e["bbox"][0], "x1": e["bbox"][2],
           "y0": e["bbox"][1], "y1": e["bbox"][3]} for e in texty],
         page_width,
     )
+    if splits:
+        return splits
+    return layout_proxies.column_splits(elements, page_width)
 
 
 def _group_figure_blocks(elements: list[dict], splits: list[float],
@@ -464,6 +475,23 @@ def _order(elements: list[dict], page_width: float) -> list[list[dict]]:
     return bands, seps, ncol
 
 
+def reorder_boxes(elements: list[dict], page_width: float) -> list[dict]:
+    """Sequenza **piatta** degli elementi in ordine di lettura (Fase 1).
+
+    Wrapper testabile di ``_order``: bande e separatori a tutta larghezza
+    interleavati esattamente come nell'emissione di ``build_markdown``. È il
+    punto in cui intervenire per l'ordine (float, colonne, refs) senza toccare
+    il GNN.
+    """
+    bands, seps, _ncol = _order(elements, page_width)
+    ordered: list[dict] = []
+    for i, band in enumerate(bands):
+        ordered.extend(band)
+        if i < len(seps):
+            ordered.append(seps[i])
+    return ordered
+
+
 def _attach_captions(elements: list[dict]) -> dict[int, list[dict]]:
     """Mappa picture→[didascalie] (didascalia subito sotto, stessa colonna)."""
     pics = [e for e in elements if e["class"] == "picture"]
@@ -587,7 +615,7 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
                 })
         keep2 = [e for e in keep2 if id(e) not in remove_ids] + tbl_synth
 
-    bands, seps, ncol = _order(keep2, pw)
+    ordered = reorder_boxes(keep2, pw)
 
     # figure (per il bleed): rect + righe del testo interno
     pics_keep = [e for e in keep if e["class"] == "picture"]
@@ -732,11 +760,8 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
                             seg = stripped
             out.append(seg)
 
-    for i, band in enumerate(bands):
-        for e in band:
-            emit(e)
-        if i < len(seps):
-            emit(seps[i])
+    for e in ordered:
+        emit(e)
     md = "\n\n".join(out)
     if return_meta:
         served = {
