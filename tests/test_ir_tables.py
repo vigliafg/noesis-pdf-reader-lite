@@ -170,5 +170,55 @@ class RotatedTableTests(unittest.TestCase):
             doc.close()
 
 
+@unittest.skipUnless(_OK, "pymupdf/ir_layout non disponibili")
+class GluedCellWordTests(unittest.TestCase):
+    """D1: parole incollate in cella → spazio ripristinato.
+
+    `corpus1/ha22.pdf` p118 (idx 117): la content map rende ``Drymouth``,
+    ``Swellingof arms or legs``, ``urinaryincontinence``. Lo spazio va rimesso
+    solo se le due parole sono **adiacenti sulla stessa riga** nella pagina.
+    """
+
+    _PDF = _ROOT / "corpus1" / "ha22.pdf"
+
+    def test_glued_words_respaced(self):
+        if not self._PDF.exists():
+            self.skipTest("corpus1/ha22.pdf assente")
+        md = _md(self._PDF, 117)
+        self.assertIn("Dry mouth", md)
+        self.assertIn("Swelling of arms or legs", md)
+        self.assertIn("Fecal and urinary incontinence", md)
+        self.assertNotIn("Drymouth", md)
+        self.assertNotIn("Swellingof", md)
+        self.assertNotIn("urinaryincontinence", md)
+
+
+@unittest.skipUnless(_OK, "pymupdf/ir_layout non disponibili")
+class TwoLevelHeaderTests(unittest.TestCase):
+    """D2: intestazione a 2 livelli (colspan+rowspan) → tabella piatta.
+
+    `corpus3/biorxiv_10.1101_2023.11.28.569048.pdf` p10 (idx 9): la content map
+    rende due righe di header (gruppo "Mutation dataset" + etichette di
+    colonna) e un'etichetta di riga in ``rowspan`` ("Mutability model"). Va
+    fusa in una tabella piatta con etichetta di riga + etichette di colonna.
+    """
+
+    _PDF = _ROOT / "corpus3" / "biorxiv_10.1101_2023.11.28.569048.pdf"
+
+    def test_header_flattened(self):
+        if not self._PDF.exists():
+            self.skipTest("biorxiv assente")
+        md = _md(self._PDF, 9)
+        hdr = [ln for ln in md.splitlines()
+               if "Mutability" in ln and "blood" in ln]
+        self.assertTrue(hdr, "header piatto assente")
+        for lbl in ("Mutability", "blood", "germline", "liver", "skin"):
+            self.assertIn(lbl, hdr[0])
+        # niente riga separata con le sole etichette di colonna
+        self.assertFalse(any(
+            ln.strip() == "| **blood** | **germline** | **liver** | **skin** |"
+            for ln in md.splitlines()))
+
+
 if __name__ == "__main__":
     unittest.main()

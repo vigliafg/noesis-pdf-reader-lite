@@ -326,35 +326,154 @@ def _normalize_md_table(text: str) -> str:
     return "\n".join(out)
 
 
-def _strip_cell_junk(md: str, page) -> str:
-    """Toglie dalle celle i token di 1 lettera che NON sono parole della pagina.
+def _adjacent_word_pairs(page) -> dict[str, tuple[str, str]]:
+    """Coppie di parole **adiacenti sulla stessa riga** → concatenazione.
 
-    Artefatto della content map: un carattere di controllo del font (es. ``\\x07``)
-    diventa ``<br>i`` in fondo a una cella (es. ox16 p506). Si rimuove **solo** se
-    il token non esiste come parola isolata nella pagina (niente falsi positivi
-    su articoli/lettere reali).
+    Serve a ripristinare lo spazio perso dalla content map dentro una cella
+    (``Drymouth`` → ``Dry mouth``, ``Swellingof`` → ``Swelling of``). Si divide
+    un token **solo** se la sua concatenazione coincide con due parole davvero
+    adiacenti nella pagina: rischio di falsi positivi praticamente nullo
+    (``otherwise`` non si spezza se ``other``/``wise`` non sono adiacenti).
+    """
+    try:
+        words = page.get_text("words")
+    except Exception:
+        return {}
+    words = sorted(words, key=lambda w: (round(w[1] / 2), w[0]))
+    pairs: dict[str, tuple[str, str]] = {}
+    for a, b in zip(words, words[1:]):
+        if abs(a[1] - b[1]) <= 2 and abs(a[3] - b[3]) <= 2:
+            key = (a[4] + b[4]).lower()
+            if len(key) >= 6 and a[4].strip() and b[4].strip():
+                pairs.setdefault(key, (a[4], b[4]))
+    return pairs
+
+
+def _strip_cell_junk(md: str, page) -> str:
+    """Toglie dalle celle i token di 1 lettera che NON sono parole della pagina
+    e ripristina lo spazio perso tra parole adiacenti.
+
+    - Artefatto della content map: un carattere di controllo del font (es.
+      ``\\x07``) diventa ``<br>i`` in fondo a una cella (es. ox16 p506). Si
+      rimuove **solo** se il token non esiste come parola isolata nella pagina.
+    - Spazio perso: ``Drymouth`` → ``Dry mouth`` (ha22 p118) solo se ``Dry`` e
+      ``mouth`` sono adiacenti sulla stessa riga nella pagina.
     """
     try:
         page_words = {w[4].strip().lower() for w in page.get_text("words")}
     except Exception:
         return md
+    glued = _adjacent_word_pairs(page)
 
     def _fix_cell(cell: str) -> str:
+        cell = cell.strip()
+
         def _rep(m):
             return "" if m.group(1).lower() not in page_words else m.group(0)
-        return re.sub(r"(?i)<br\s*/?>\s*([A-Za-z])\s*$", _rep, cell.strip())
+
+        cell = re.sub(r"(?i)<br\s*/?>\s*([A-Za-z])\s*$", _rep, cell)
+
+        def _resp(m):
+            tok = m.group(0)
+            low = tok.lower()
+            if low in page_words:
+                return tok
+            pair = glued.get(low)
+            if pair:
+                return pair[0] + " " + pair[1]
+            return tok
+
+        return re.sub(r"[A-Za-z][A-Za-z'\-]+", _resp, cell)
 
     out: list[str] = []
     for ln in (md or "").splitlines():
         s = ln.strip()
         if s.startswith("|") and s.endswith("|"):
-            cells = s.strip("|").split("|")
+            cells = s[1:-1].split("|")
             if all(set(c.strip()) <= set("-: ") for c in cells):
                 out.append(ln)
                 continue
             out.append("|" + "|".join(_fix_cell(c) for c in cells) + "|")
         else:
             out.append(ln)
+    return "\n".join(out)
+
+
+def _parse_md_rows(md: str) -> list[list[str]]:
+    """Righe di una tabella markdown, **preservando le celle vuote di bordo**.
+
+    ``s[1:-1].split("|")`` è corretto; ``s.strip("|").split("|")`` (usato
+    altrove) collassa le celle vuote iniziali/finali e sbaglia il conteggio
+    colonne (biorxiv p10).
+    """
+    rows: list[list[str]] = []
+    for ln in (md or "").splitlines():
+        s = ln.strip()
+        if s.startswith("|") and s.endswith("|"):
+            cells = s[1:-1].split("|")
+            if all(set(c.strip()) <= set("-: ") for c in cells):
+                continue
+            rows.append([c.strip() for c in cells])
+    return rows
+
+
+def _flatten_merged_header(md: str) -> str | None:
+    """Fonde un'intestazione a **2 livelli** (colspan + rowspan) in una piatta.
+
+    Content map tipica (biorxiv …569048 p10):
+        ||||**Mutation dataset**|||
+        |||**blood**|**germline**|**liver**|**skin**|
+        ||**blood**|0.028|…|
+        |**Mutability**<br>**model**|**germline**|…|
+
+    Riconosce: prima riga con **una sola** etichetta di gruppo in una colonna
+    >0, seconda riga con le etichette di colonna a partire da una colonna >0,
+    prima colonna quasi vuota (etichetta di riga in ``rowspan``). Ricostruisce
+    header + righe dati con la prima colonna = etichetta di riga.
+    """
+    rows = _parse_md_rows(md)
+    if len(rows) < 3:
+        return None
+    n = max(len(r) for r in rows)
+    if n < 3:
+        return None
+    rows = [r + [""] * (n - len(r)) for r in rows]
+    nz0 = [i for i, c in enumerate(rows[0]) if c]
+    nz1 = [i for i, c in enumerate(rows[1]) if c]
+    if len(nz0) != 1 or nz0[0] == 0:
+        return None
+    if len(nz1) < 2 or min(nz1) == 0:
+        return None
+    c0 = min(nz1)                      # prima colonna dei dati
+    col_labels = rows[1][c0:]
+    if any(not c for c in col_labels):
+        return None                    # etichette di colonna non contigue
+    corner_vals = {r[0] for r in rows[2:] if r[0]}
+    if len(corner_vals) > 1:
+        return None                    # più etichette di riga → non è rowspan
+    corner = next(iter(corner_vals), "")
+    group_label = rows[0][nz0[0]]
+    data: list[list[str]] = []
+    for r in rows[2:]:
+        label = r[c0 - 1] if c0 - 1 >= 0 else ""
+        vals = r[c0:c0 + len(col_labels)]
+        if not label and not any(vals):
+            continue
+        data.append([label] + vals)
+    if not data:
+        return None
+    ncol = 1 + len(col_labels)
+    out: list[str] = []
+    if group_label and group_label != corner:
+        gl = group_label.strip()
+        out.append(gl if gl.startswith("**") else f"**{gl}**")
+        out.append("")
+    header = [corner] + col_labels
+    out.append("| " + " | ".join(header) + " |")
+    out.append("|" + "|".join(["---"] * ncol) + "|")
+    for r in data:
+        r = (r + [""] * (ncol - len(r)))[:ncol]
+        out.append("| " + " | ".join(r) + " |")
     return "\n".join(out)
 
 
@@ -1046,7 +1165,9 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
                 # solo imperfetta: la griglia a copertura disallinea le celle
                 # quando la content map è corretta (es. fe22 p1101, titolo
                 # spezzato tra celle ma dati perfetti).
-                base = _normalize_md_table(_strip_cell_junk(seg, page))
+                stripped = _strip_cell_junk(seg, page)
+                flat = _flatten_merged_header(stripped)
+                base = flat if flat else _normalize_md_table(stripped)
                 chosen = base
                 grid = _grid_table_from_page(page, e["bbox"],
                                              _table_col_count(seg))
