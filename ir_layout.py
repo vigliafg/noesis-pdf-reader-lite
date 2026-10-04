@@ -731,7 +731,10 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
                     return
             else:
                 # grid: ricostruisci le celle dalle righe di pagina e usala SOLO
-                # se batte la content map (che su alcune pagine è garbled, es. p231)
+                # se la content map è **davvero rotta** (recall < 0.90), non se è
+                # solo imperfetta: la griglia a copertura disallinea le celle
+                # quando la content map è corretta (es. fe22 p1101, titolo
+                # spezzato tra celle ma dati perfetti).
                 base = _normalize_md_table(seg)
                 grid = _grid_table_from_page(page, e["bbox"],
                                              _table_col_count(seg))
@@ -742,8 +745,9 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
                         w[4] for w in page.get_text("words")
                         if r0 - 3 <= w[0] and w[2] <= r1 + 3
                         and ry0 - 3 <= w[1] and w[3] <= ry1 + 3)
-                    if (ref and main._word_recall(ref, grid)
-                            > main._word_recall(ref, base) + 0.02):
+                    base_r = main._word_recall(ref, base)
+                    grid_r = main._word_recall(ref, grid)
+                    if ref and base_r < 0.90 and grid_r > base_r + 0.02:
                         out.append(grid)
                         return
                 out.append(base)
