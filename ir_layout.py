@@ -553,6 +553,13 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
         c = e["class"]
         x0, y0, x1, y1 = e["bbox"]
         if c in _DROP_CLASSES:
+            # un chrome (header/footer) che in realtà contiene una **didascalia di
+            # figura** (es. ce24 p1775: FIGURE 154-1 in fondo pagina classificata
+            # `page-footer`) non va scartato: la si recupera come `caption`.
+            if c != "page-number" and _is_figure_caption(e.get("text", "")):
+                e = dict(e)
+                e["class"] = "caption"
+                keep.append(e)
             continue
         if c == "picture":
             w, h = x1 - x0, y1 - y0
@@ -692,22 +699,27 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
             _emit_clip((r[0] - 5, r[1] - 4, r[2] + 5, r[3] + 4), "equazione")
             return
         if c == "_figure_block":
-            # immagini ed etichette pannello in ordine di **riga** (y con
-            # tolleranza, poi x), poi la didascalia della figura
-            def _row(e2):
-                return (round(e2["bbox"][1] / 12), e2["bbox"][0])
-
-            pics = sorted(e["pics"], key=_row)
+            # Immagini e didascalie raggruppate **per riga**: figure distinte
+            # impilate verticalmente (es. Fig. 6.7 sopra Fig. 6.8) restano
+            # ciascuna con la propria didascalia, invece di mettere tutte le
+            # immagini prima di tutte le didascalie. I pannelli **affiancati**
+            # (stessa riga) restano insieme, poi le didascalie in ordine di y.
+            pics = sorted(e["pics"], key=lambda p: (round(p["bbox"][1] / 12),
+                                                    p["bbox"][0]))
+            rows: list[list[dict]] = []
             for p in pics:
-                _emit_image(p["bbox"])
-            caps = [cap for p in pics for cap in attached.get(id(p), [])]
-            panel = [x for x in caps if not _is_figure_caption(x["text"])]
-            figc = [x for x in caps if _is_figure_caption(x["text"])]
-            for x in (sorted(panel, key=_row)
-                      + sorted(figc, key=lambda x: x["bbox"][1])):
-                t = (x["text"] or "").strip()
-                if t:
-                    out.append(t)
+                if rows and abs(rows[-1][0]["bbox"][1] - p["bbox"][1]) <= 12:
+                    rows[-1].append(p)
+                else:
+                    rows.append([p])
+            for grp in rows:
+                for p in grp:
+                    _emit_image(p["bbox"])
+                caps = [cap for p in grp for cap in attached.get(id(p), [])]
+                for x in sorted(caps, key=lambda c: c["bbox"][1]):
+                    t = (x["text"] or "").strip()
+                    if t:
+                        out.append(t)
             return
         if c == "_table_block":
             if seg:
