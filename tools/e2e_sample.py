@@ -30,6 +30,14 @@ if str(_ROOT) not in sys.path:
 
 _CORPORA = ("corpus1", "corpus2", "corpus3")
 
+#: classi di layout del piano (Fase 0.1)
+_LAYOUT_CLASSES = ("prosa", "colonne/box-liste", "tabelle", "indici",
+                   "equazioni", "figure")
+
+#: metadati del campione corrente (impostati in ``main``, usati da ``aggregate``)
+sample_meta: dict = {}
+sample_classes: dict = {}
+
 
 def _list_pdfs(corpus: str) -> list[Path]:
     return sorted((_ROOT / corpus).glob("*.pdf"))
@@ -54,6 +62,77 @@ def build_sample(per_corpus: int, seed: int) -> dict:
         picks = rng.sample(pool, min(per_corpus, len(pool)))
         sample[corpus] = [{"pdf": p, "page": i} for p, i in sorted(picks)]
     return {"seed": seed, "per_corpus": per_corpus, "sample": sample}
+
+
+def _classify_page(doc, idx: int) -> str:
+    """Classe di layout di una pagina dai ``page_boxes`` (GNN)."""
+    import ir_layout
+    import layout_proxies
+
+    _t, els = ir_layout.page_elements(doc, idx)
+    return layout_proxies.layout_class(els, doc[idx].rect.width)
+
+
+def build_stratified_sample(per_class: int, seed: int, scan_max: int = 300) -> dict:
+    """Campione **stratificato per classe di layout** (Fase 0.1).
+
+    Scansiona fino a ``scan_max`` pagine (shuffle deterministico col seed),
+    classifica ciascuna con ``layout_proxies.layout_class`` e pesca fino a
+    ``per_class`` pagine per classe. Le pagine non classificate o con errore di
+    layout sono saltate. La scansione si ferma prima se tutte le classi sono
+    piene.
+    """
+    import pymupdf
+
+    rng = random.Random(seed)
+    pool: list[tuple[str, str, int]] = []
+    for corpus in _CORPORA:
+        for pdf in _list_pdfs(corpus):
+            try:
+                d = pymupdf.open(pdf)
+                n = len(d)
+                d.close()
+            except Exception:
+                continue
+            pool.extend((corpus, str(pdf.relative_to(_ROOT)), i) for i in range(n))
+    rng.shuffle(pool)
+    pool = pool[:scan_max]
+
+    buckets: dict[str, list[dict]] = defaultdict(list)
+    for k, (corpus, rel, i) in enumerate(pool):
+        try:
+            d = pymupdf.open(_ROOT / rel)
+            cls = _classify_page(d, i)
+            d.close()
+        except Exception:
+            continue
+        buckets[cls].append({"pdf": rel, "page": i, "layout_class": cls})
+        if (k + 1) % 25 == 0:
+            print(f"   scan {k + 1}/{len(pool)}: "
+                  + ", ".join(f"{c}={len(buckets.get(c, []))}"
+                              for c in _LAYOUT_CLASSES))
+        if all(len(buckets.get(c, [])) >= per_class for c in _LAYOUT_CLASSES):
+            break
+
+    sample, classes = _sample_buckets(buckets, per_class, rng)
+    return {"seed": seed, "per_class": per_class, "scan_max": scan_max,
+            "stratified": True, "classes": classes, "sample": sample}
+
+
+def _sample_buckets(buckets: dict[str, list[dict]], per_class: int,
+                    rng: random.Random) -> tuple[dict, dict]:
+    """Da classi→candidati a campione raggruppato per corpus (pura, testabile)."""
+    sample: dict[str, list[dict]] = {c: [] for c in _CORPORA}
+    classes: dict[str, int] = {}
+    for cls in _LAYOUT_CLASSES:
+        vals = sorted(buckets.get(cls, []), key=lambda v: (v["pdf"], v["page"]))
+        picked = rng.sample(vals, min(per_class, len(vals)))
+        classes[cls] = len(picked)
+        for v in picked:
+            sample[v["pdf"].split("/", 1)[0]].append(v)
+    for c in sample:
+        sample[c].sort(key=lambda v: (v["pdf"], v["page"]))
+    return sample, classes
 
 
 def _run_pdf(pdf: str, pages: list[int], out: Path, mode: str,
@@ -150,6 +229,11 @@ def aggregate(records: list[dict], out: Path) -> dict:
     ]
     for k, v in kinds.most_common():
         lines.append(f"- `{k}`: {v}")
+    if sample_classes:
+        lines += ["", "## Per classe di layout (campionate)", "",
+                  "| classe | pagine |", "|---|---|"]
+        for c in _LAYOUT_CLASSES:
+            lines.append(f"| {c} | {sample_classes.get(c, 0)} |")
     lines += ["", "## Per corpus", "",
               "| corpus | pagine | engine | text ok | fig ok | tbl ok | flag auto | difetti reali |",
               "|---|---|---|---|---|---|---|---|"]
@@ -192,7 +276,13 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Test E2E a campione (multi-corpus)")
     ap.add_argument("--build", action="store_true",
                     help="costruisci il campione casuale")
+    ap.add_argument("--stratified", action="store_true",
+                    help="campiona per classe di layout (Fase 0.1)")
     ap.add_argument("--per-corpus", type=int, default=20)
+    ap.add_argument("--per-class", type=int, default=8,
+                    help="pagine per classe con --stratified")
+    ap.add_argument("--scan-max", type=int, default=300,
+                    help="tetto di pagine scansionate per lo stratificato")
     ap.add_argument("--seed", type=int, default=20261005)
     ap.add_argument("--sample", default=None, help="sample.json esistente")
     ap.add_argument("--out", default="/tmp/opencode/e2e60")
@@ -205,9 +295,13 @@ def main() -> int:
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    global sample_meta
+    global sample_meta, sample_classes
     if args.build:
-        data = build_sample(args.per_corpus, args.seed)
+        if args.stratified:
+            data = build_stratified_sample(args.per_class, args.seed,
+                                           args.scan_max)
+        else:
+            data = build_sample(args.per_corpus, args.seed)
         (out / "sample.json").write_text(json.dumps(data, ensure_ascii=False,
                                                     indent=2), encoding="utf-8")
         print(f"Campione: {out/'sample.json'}")
@@ -219,6 +313,7 @@ def main() -> int:
             ap.error("serve --build o --sample")
         data = json.loads(sp.read_text(encoding="utf-8"))
     sample_meta = data["sample"]
+    sample_classes = data.get("classes") or {}
     records = run_sample(data, out, args.mode, args.advisor_retries,
                          args.advisor_delay, args.extra)
     aggregate(records, out)

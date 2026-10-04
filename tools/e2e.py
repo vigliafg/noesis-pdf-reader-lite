@@ -52,6 +52,7 @@ if str(_TOOLS) not in sys.path:
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import verify_pages as vp  # noqa: E402  (riuso di metriche e helper)
+import layout_proxies as lpx  # noqa: E402  (proxy + confidenza, Fase 0.3)
 
 # ── soglie del gate per tipo ────────────────────────────────────────────────
 RECALL_TEXT_MIN = 0.90      # recall della prosa (se la pagina ha prosa)
@@ -377,6 +378,20 @@ def _make_record(pdf: str, idx: int, pipe: str, truth: dict, md: str, plain: str
         order = vp._order_score(md, truth["elements"], truth["page_width"])
     except Exception:
         order = 1.0
+    # proxy + confidenza (Fase 0.3): il gate deterministico, se c'è, è un segnale
+    # forte; in via-app (gate=None) lo deduciamo dai controlli per tipo.
+    if gate is None:
+        gate_ok = all(checks[k]["ok"] for k in ("text", "figures", "tables"))
+        gate_reason = ""
+    else:
+        gate_ok = bool(gate.get("ok", True))
+        gate_reason = str(gate.get("reason", "") or "")
+    try:
+        proxies = lpx.all_proxies(truth.get("elements", []),
+                                  truth.get("page_width", 0.0), md,
+                                  gate_ok=gate_ok, gate_reason=gate_reason)
+    except Exception:  # pragma: no cover - il report non deve mai rompersi
+        proxies = {}
     return {
         "pdf": Path(pdf).name,
         "page_idx": idx,
@@ -393,6 +408,10 @@ def _make_record(pdf: str, idx: int, pipe: str, truth: dict, md: str, plain: str
         "gate": gate,
         "flags": flags,
         "verdict": "review" if flags else "auto-ok",
+        "proxies": proxies,
+        "confidence": proxies.get("confidence"),
+        "escalate": proxies.get("escalate"),
+        "layout_class": proxies.get("layout_class"),
         "arbitration": None,  # riempito in modalità visual/advisor
         "regression": None,   # riempito se --baseline
     }
@@ -487,6 +506,12 @@ def _write_reports(out: Path, records: list[dict], pipelines: list[str],
             "extraction_secs_sum": round(ext_sum, 2),
             "advisor_calls": len(arb_rows),
             "advisor_secs_sum": round(arb_sum, 2),
+            "escalations": sum(1 for r in records if r.get("escalate")),
+            "mean_confidence": round(
+                sum(r["confidence"] for r in records
+                    if r.get("confidence") is not None)
+                / max(1, sum(1 for r in records
+                              if r.get("confidence") is not None)), 4),
         }, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
@@ -494,6 +519,10 @@ def _write_reports(out: Path, records: list[dict], pipelines: list[str],
     for r in records:
         k = r.get("engine") or "?"
         eng_counts[k] = eng_counts.get(k, 0) + 1
+    confs = [r["confidence"] for r in records if r.get("confidence") is not None]
+    mean_conf = sum(confs) / len(confs) if confs else None
+    escalated = [r for r in records if r.get("escalate")]
+    esc_noflag = [r for r in escalated if not r["flags"]]
     lines = [
         f"# Harness E2E — {Path(pdf).name}",
         "",
@@ -501,6 +530,10 @@ def _write_reports(out: Path, records: list[dict], pipelines: list[str],
         f"- pipeline: {', '.join(pipelines)}",
         f"- engine (attribuzione): {', '.join(f'{k}={v}' for k, v in eng_counts.items())}",
         f"- pagine: {len({r['page_idx'] for r in records})}",
+        (f"- confidenza media: {mean_conf:.3f} · "
+         f"escalation: {len(escalated)}/{len(records)} "
+         f"(soglia {lpx.ESCALATION_THRESHOLD})"
+         if mean_conf is not None else "- confidenza: n/d"),
         f"- **tempo totale**: {total_secs:.1f}s" if total_secs is not None
         else "- tempo totale: n/d",
         f"- estrazione (somma record): {ext_sum:.1f}s",
@@ -530,13 +563,32 @@ def _write_reports(out: Path, records: list[dict], pipelines: list[str],
     if not flagged:
         lines.append("Nessuna: tutte le pagine passano i controlli automatici.")
     else:
-        lines.append("| pagina | pipeline | engine | flag | arbitraggio |")
-        lines.append("|---|---|---|---|---|")
+        lines.append("| pagina | pipeline | engine | conf | flag | arbitraggio |")
+        lines.append("|---|---|---|---|---|---|")
         for r in flagged:
             arb = (r.get("arbitration") or {}).get("verdict", "")
+            conf = r.get("confidence")
+            conf_s = f"{conf:.2f}" if conf is not None else "n/d"
             lines.append(
                 f"| {r['page_ui']} | {r['pipeline']} | {r.get('engine')} | "
-                f"{'; '.join(r['flags'])} | {arb} |"
+                f"{conf_s} | {'; '.join(r['flags'])} | {arb} |"
+            )
+    # valore aggiunto del proxy: pagine che il gate NON flagga ma la confidenza
+    # manda in escalation (obiettivo Fase 0: catturare ≥80% dei difetti reali).
+    if esc_noflag:
+        lines += ["", f"## Escalation proxy senza flag del gate ({len(esc_noflag)})", "",
+                  "| pagina | classe | conf | proxy debole |", "|---|---|---|---|"]
+        for r in esc_noflag:
+            prox = r.get("proxies") or {}
+            weak = min(
+                (("order", prox.get("order")), ("table", prox.get("table")),
+                 ("figure", prox.get("figure")), ("text", prox.get("text"))),
+                key=lambda kv: (kv[1] or {}).get("score", 1.0),
+            )
+            lines.append(
+                f"| {r['page_ui']} | {r.get('layout_class')} | "
+                f"{r.get('confidence'):.2f} | {weak[0]}="
+                f"{(weak[1] or {}).get('score', 1.0):.2f} |"
             )
     if regressions:
         lines += ["", f"## Regressioni ({len(regressions)})", "",
