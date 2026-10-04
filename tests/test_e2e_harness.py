@@ -145,6 +145,36 @@ class ChecksTests(unittest.TestCase):
             truth, "medicine cardiology patients treatment diagnosis", "same")
         self.assertEqual(e2e._flags(checks, None), [])
 
+    def test_index_high_recall_not_flagged(self):
+        # un indice reso bene (recall alto) NON è un difetto
+        truth = self._truth(
+            pdf_text="medicine cardiology patients treatment diagnosis",
+            ntexty=5, is_index=True,
+        )
+        checks = e2e._checks(
+            truth, "medicine cardiology patients treatment diagnosis", "same")
+        self.assertTrue(checks["text"]["ok"])
+        self.assertEqual(e2e._flags(checks, None), [])
+
+    def test_index_low_recall_flagged(self):
+        # indice con testo perso (recall basso) → segnalato
+        truth = self._truth(
+            pdf_text="medicine cardiology patients treatment diagnosis",
+            ntexty=5, is_index=True,
+        )
+        checks = e2e._checks(truth, "medicine", "")
+        self.assertFalse(checks["text"]["ok"])
+        self.assertIn("indice", checks["text"]["note"])
+
+    def test_real_pictures_filters_spurious(self):
+        els = [
+            {"class": "picture", "bbox": (10, 100, 20, 300)},    # margine
+            {"class": "picture", "bbox": (100, 100, 110, 110)},  # minuscolo
+            {"class": "picture", "bbox": (100, 20, 500, 60)},    # banner testa
+            {"class": "picture", "bbox": (100, 200, 400, 500)},  # reale
+        ]
+        self.assertEqual(len(ir_layout.real_pictures(els, 600, 800)), 1)
+
     def test_strip_base64_for_prompt(self):
         md = ("prima ![FIG 1](data:image/jpeg;base64,AAAA////) dopo "
               "e grezzo data:image/png;base64,BBBB fine")

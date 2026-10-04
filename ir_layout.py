@@ -506,6 +506,28 @@ def _is_figure_caption(text: str) -> bool:
     return bool(re.match(r"(?i)^\W*fig", (text or "").strip()))
 
 
+def real_pictures(elements: list[dict], page_width: float,
+                  page_height: float) -> list[dict]:
+    """``picture`` che l'IR considera **figure reali** (stesso filtro di
+    ``build_markdown``: niente etichette di margine, decorativi minuscoli o
+    banner in testa). Serve come ground truth per l'harness E2E.
+    """
+    out: list[dict] = []
+    for e in elements:
+        if e.get("class") != "picture":
+            continue
+        x0, y0, x1, y1 = e["bbox"]
+        w, h = x1 - x0, y1 - y0
+        if w < 40 and (x0 < 30 or x1 > page_width - 30):
+            continue
+        if w * h < 2500:
+            continue
+        if y1 <= 0.08 * page_height and h < 60:
+            continue
+        out.append(e)
+    return out
+
+
 def _separated_by_split(a: dict, b: dict, splits: list[float]) -> bool:
     """True se un confine di colonna sta **tra** due box (colonne diverse).
 

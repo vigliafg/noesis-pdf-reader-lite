@@ -129,17 +129,25 @@ def _page_truth(doc, idx: int, with_tables: bool = True) -> dict:
     ntexty = sum(
         1 for e in elements if e.get("class") in ("text", "section-header", "title")
     )
-    expected_figs = sum(1 for e in elements if e.get("class") == "picture")
+    expected_figs = len(ir_layout.real_pictures(
+        elements, page.rect.width, page.rect.height))
     table_text = ""
     if with_tables:
+        # ground truth = **parole di pagina** nella regione delle tabelle
+        # (robusto; `find_tables` dà celle garbled/parziali). Tabelle ruotate
+        # escluse (rese come immagine).
         try:
-            table_text = " ".join(
-                str(c)
-                for t in page.find_tables().tables
-                for row in (t.extract() or [])
-                for c in row
-                if c
-            )
+            rot = {tuple(r) for r in main._rotated_table_rects(page, elements)}
+            tbl_rects = [e["bbox"] for e in elements
+                         if e.get("class") == "table"
+                         and tuple(e["bbox"]) not in rot]
+            if tbl_rects:
+                def _in_tbl(b):
+                    cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+                    return any(r[0] <= cx <= r[2] and r[1] <= cy <= r[3]
+                               for r in tbl_rects)
+                table_text = " ".join(w[4] for w in page.get_text("words")
+                                      if _in_tbl(w[:4]))
         except Exception:
             table_text = ""
     return {
@@ -169,9 +177,9 @@ def _checks(truth: dict, md: str, plain: str) -> dict:
     if truth["ntexty"] > 2 and r_pdf < RECALL_TEXT_MIN:
         text_ok = False
         tnotes.append(f"recall {r_pdf:.2f}")
-    if truth["is_index"]:
+    if truth["is_index"] and r_pdf < RECALL_TEXT_MIN:
         text_ok = False
-        tnotes.append("indice")
+        tnotes.append(f"indice recall {r_pdf:.2f}")
 
     # ── figure (embedded base64) ──
     emb = re.findall(r"data:image/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+", md)
