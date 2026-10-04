@@ -785,9 +785,16 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
                         expected = _norm_words(stripped)
                         missing = expected - _norm_words(rebuilt)
                         if rebuilt and len(missing) <= max(1, int(0.1 * len(expected))):
-                            seg = rebuilt
+                            candidate = rebuilt
                         else:
-                            seg = stripped
+                            candidate = stripped
+                        # Guardia d'**integrità**: se la pulizia del bleed perde
+                        # troppo testo rispetto all'originale (es. la picture
+                        # ingloba un paragrafo, ce24 p1775), si tiene l'originale.
+                        orig_words = _norm_words(seg)
+                        lost = orig_words - _norm_words(candidate)
+                        if not orig_words or len(lost) <= 0.15 * len(orig_words):
+                            seg = candidate
             out.append(seg)
 
     for e in ordered:
