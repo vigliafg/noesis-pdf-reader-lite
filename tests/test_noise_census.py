@@ -39,9 +39,14 @@ class CountNoiseTests(unittest.TestCase):
         self.assertEqual(nz["orphan_bullet"], 1)
 
     def test_glued_digit_and_double_space(self):
-        nz = noise_census.count_noise("therapies60 and  more text")
+        # digit **dentro** la parola (bleed); l'apice "Nifurtimox1" non è rumore
+        nz = noise_census.count_noise("ther60apies and  more text")
         self.assertEqual(nz["glued_digit"], 1)
         self.assertEqual(nz["double_space"], 1)
+
+    def test_superscript_not_counted(self):
+        nz = noise_census.count_noise("Nifurtimox1 and Echinacea7 were given.")
+        self.assertEqual(nz["glued_digit"], 0)
 
     def test_empty_cell_and_ragged(self):
         md = "| a | b |\n|---|---|\n| x |  |\n| y | z | extra |\n"
@@ -75,6 +80,7 @@ class CosmeticCleanupTests(unittest.TestCase):
 @unittest.skipUnless(_OK, "dipendenze non disponibili")
 class RealPageCleanupTests(unittest.TestCase):
     _PDF = _ROOT / "corpus2" / "ox2.pdf"
+    _TO = _ROOT / "corpus2" / "to22.pdf"
 
     def test_definition_and_no_orphan_bullets(self):
         if not self._PDF.exists():
@@ -93,6 +99,25 @@ class RealPageCleanupTests(unittest.TestCase):
         self.assertIn("Definition", md)
         self.assertNotIn("Defi nition", md)
         self.assertNotRegex(md, r"(?m)^\s*[-*+]\s*$")
+
+    def test_heading_split_word_fixed_from_page(self):
+        # to22 p780: il motore spezza "Differences" in "Dif f erences"; il testo
+        # di pagina è pulito → l'header viene ricostruito.
+        if not self._TO.exists():
+            self.skipTest("corpus2/to22.pdf assente")
+        import pymupdf
+        import main
+        doc = pymupdf.open(self._TO)
+        try:
+            chunk = ir_layout.page_chunk(doc, 779)
+            md, _ = ir_layout.build_markdown(doc[779], doc, 779,
+                                             embed_figures=False,
+                                             return_meta=True, chunk=chunk)
+        finally:
+            doc.close()
+        md = main._cosmetic_ir(md)
+        self.assertIn("Physical Differences", md)
+        self.assertNotIn("Dif f erences", md)
 
 
 if __name__ == "__main__":

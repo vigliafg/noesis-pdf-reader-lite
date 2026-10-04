@@ -34,7 +34,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 #: pattern-spia non ambigui (catturano artefatti, non prosa legittima)
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ufffd]")
-_GLUED_DIGIT = re.compile(r"[a-z]{4,}\d")          # bleed: "ther60 apies"
+_GLUED_DIGIT = re.compile(r"[a-z]{4,}\d+[a-z]")   # bleed mid-word: "ther60apies"
 _DOUBLE_SPACE = re.compile(r"[A-Za-z]{2}  +[A-Za-z]{2}")
 #: frammento di parola spezzata ("Dif f erences"): euristico, ristretto alle
 #: intestazioni (dove l'artefatto del motore si manifesta)

@@ -88,5 +88,32 @@ class TableCellJunkTests(unittest.TestCase):
         self.assertIn("probability of the issue (re) occurring", md)
 
 
+@unittest.skipUnless(_OK, "pymupdf/ir_layout non disponibili")
+class SideBySideTableSplitTests(unittest.TestCase):
+    """Due tabelle **affiancate** fuse in un'unica griglia → separate.
+
+    `corpus2/fe22.pdf` p2685 (idx 2684): la content map fonde TABLE 2 e TABLE 4;
+    la griglia a copertura è pulita ma unica → si taglia al secondo marker.
+    """
+
+    _PDF = _ROOT / "corpus2" / "fe22.pdf"
+
+    def test_split_into_two_tables(self):
+        if not self._PDF.exists():
+            self.skipTest("corpus2/fe22.pdf assente")
+        md = _md(self._PDF, 2684)
+        import re as _re
+        blocks = [b for b in _re.split(r"\n\s*\n", md)
+                  if b.strip().startswith("|")]
+        headers = [b.splitlines()[0] for b in blocks]
+        t2 = next((h for h in headers if "TABLE 2" in h), None)
+        t4 = next((h for h in headers if "TABLE 4" in h), None)
+        self.assertIsNotNone(t2, headers)
+        self.assertIsNotNone(t4, headers)
+        # le due intestazioni non devono stare nella stessa riga-tabella
+        self.assertNotIn("TABLE 4", t2)
+        self.assertNotIn("TABLE 2", t4)
+
+
 if __name__ == "__main__":
     unittest.main()

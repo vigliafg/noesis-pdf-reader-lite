@@ -358,6 +358,36 @@ def _strip_cell_junk(md: str, page) -> str:
     return "\n".join(out)
 
 
+def _split_side_by_side_tables(seg: str):
+    """Divide una tabella che in realtà ne contiene **due affiancate**.
+
+    La content map a volte fonde due tabelle vicine in un'unica griglia (es.
+    fe22 p2685: TABLE 2 | TABLE 4). Se la prima riga contiene ≥2 marker
+    ``TABLE/FIG n`` in celle diverse, si taglia lì. Ritorna ``(sx, dx)`` o None.
+    """
+    rows = [ln for ln in (seg or "").splitlines() if ln.strip()]
+    if not rows or not rows[0].strip().startswith("|"):
+        return None
+    first = rows[0].strip().strip("|").split("|")
+    marks = [i for i, c in enumerate(first)
+             if re.match(r"(?i)^\s*\**\s*(?:table|fig)\s*\.?\s*\d", c.strip())]
+    if len(marks) < 2:
+        return None
+    cut = marks[1]
+    if not 0 < cut < len(first):
+        return None
+    left: list[str] = []
+    right: list[str] = []
+    for ln in rows:
+        s = ln.strip()
+        if not (s.startswith("|") and s.endswith("|")):
+            continue
+        cells = s.strip("|").split("|")
+        left.append("|" + "|".join(cells[:cut]) + "|")
+        right.append("|" + "|".join(cells[cut:]) + "|")
+    return "\n".join(left), "\n".join(right)
+
+
 def _column_splits(elements: list[dict], page_width: float) -> list[float]:
     """Confini di colonna dalle sole geometrie dei box di TESTO (Fase 1).
 
@@ -601,6 +631,58 @@ def _ligature_fixes(page) -> dict[str, str]:
                 if fixed != broken:
                     fixes[broken] = fixed
     return fixes
+
+
+def _page_text_in_bbox(page, bbox: tuple, pad: float = 2.0) -> str:
+    """Testo di pagina nel bbox, su una riga (spazi normalizzati)."""
+    try:
+        r = (bbox[0] - pad, bbox[1] - pad, bbox[2] + pad, bbox[3] + pad)
+        return " ".join(page.get_text("text", clip=r).split())
+    except Exception:
+        return ""
+
+
+def _heading_from_page(page, bbox: tuple, seg: str) -> str | None:
+    """Ricostruisce un **header** dal testo di pagina quando il motore lo spezza.
+
+    Il motore a volte divide una parola dell'header a un confine di decorazione
+    (es. to22 p780: ``Dif~~ f ~~erences`` mentre la pagina ha un unico span
+    ``Differences``). Si usa il testo di pagina **solo** se una sua parola
+    corrisponde alla concatenazione di ≥2 token del motore (split spurio):
+    decorazioni/markdown non fanno scattare nulla. Solo header su riga singola.
+    """
+    if (bbox[3] - bbox[1]) > 30:
+        return None
+    page_t = _page_text_in_bbox(page, bbox)
+    if not page_t or "\n" in page_t:
+        return None
+    core = re.sub(r"[*_`~]", "", re.sub(r"^[#\s]*", "", seg)).strip()
+
+    def _alnum(s: str) -> str:
+        return re.sub(r"[^a-z0-9]", "", s.lower())
+
+    ct = [t for t in core.split() if _alnum(t)]
+    pt = [t for t in page_t.split() if _alnum(t)]
+    if not ct or _alnum("".join(ct)) != _alnum("".join(pt)):
+        return None
+    i = 0
+    split_found = False
+    for p in pt:
+        pn = _alnum(p)
+        acc = ""
+        j = i
+        while j < len(ct) and len(acc) < len(pn):
+            acc += _alnum(ct[j])
+            j += 1
+        if acc != pn:
+            return None
+        if j - i > 1:
+            split_found = True
+        i = j
+    if not split_found or i != len(ct):
+        return None
+    prefix = re.match(r"^\s*#+\s*", seg)
+    return (prefix.group(0) if prefix else "") + page_t
 
 
 def _span_md(spans: list[dict]) -> str:
@@ -868,6 +950,10 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
     def emit(e: dict) -> None:
         c = e["class"]
         seg = (e["text"] or "").strip()
+        if c in ("section-header", "title") and seg:
+            fixed = _heading_from_page(page, e["bbox"], seg)
+            if fixed:
+                seg = fixed
         if c == "formula":
             # l'equazione è un grafico: il testo è perso (operatori/frazioni) →
             # la si rende come immagine del ritaglio
@@ -935,6 +1021,7 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
                 # quando la content map è corretta (es. fe22 p1101, titolo
                 # spezzato tra celle ma dati perfetti).
                 base = _normalize_md_table(_strip_cell_junk(seg, page))
+                chosen = base
                 grid = _grid_table_from_page(page, e["bbox"],
                                              _table_col_count(seg))
                 if grid.strip():
@@ -947,9 +1034,14 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
                     base_r = main._word_recall(ref, base)
                     grid_r = main._word_recall(ref, grid)
                     if ref and base_r < 0.90 and grid_r > base_r + 0.02:
-                        out.append(grid)
-                        return
-                out.append(base)
+                        chosen = grid
+                # due tabelle **affiancate** fuse in una griglia: separale
+                split = _split_side_by_side_tables(chosen)
+                if split:
+                    out.append(_normalize_md_table(split[0]))
+                    out.append(_normalize_md_table(split[1]))
+                    return
+                out.append(chosen)
                 return
         if seg:
             # Bleed: se il blocco si sovrappone a una figura, togli le etichette
