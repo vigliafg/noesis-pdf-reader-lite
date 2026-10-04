@@ -373,12 +373,15 @@ class EngineAttributionTests(unittest.TestCase):
             self.assertEqual(engine, "ir")
             self.assertTrue(ok)
 
-    def test_engine_current_on_index(self):
+    def test_engine_ir_on_index(self):
+        # dallo Stadio D.5 l'IR gestisce gli indici con un percorso dedicato:
+        # niente più fallback a `current`.
         with tempfile.TemporaryDirectory() as d:
             pdf = Path(d) / "idx.pdf"
             self._index_pdf(pdf)
-            engine, _ok = e2e._engine_used(str(pdf), 0, Path(d) / "fig")
-            self.assertEqual(engine, "current")
+            engine, ok = e2e._engine_used(str(pdf), 0, Path(d) / "fig")
+            self.assertEqual(engine, "ir")
+            self.assertTrue(ok)
 
     def test_make_record_engine_defaults_to_pipe(self):
         truth = {"elements": [], "page_width": 595.0, "pdf_text": "",

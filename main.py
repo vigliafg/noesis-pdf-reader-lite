@@ -1042,18 +1042,17 @@ def _looks_like_index(page_text: str) -> bool:
 def _ir_gate(page, md: str, elements: list[dict]) -> tuple[bool, str]:
     """Gate d'integrità per la pipeline IR (testo/figure/tabelle).
 
-    False (→ fallback a ``current``) se: body vuoto; pagina d'**indice** (IR fonde
-    le voci); **recall** del testo sotto soglia (cattura le celle di tabella
-    perse). Le pagine a sole figure non vengono penalizzate (il testo-figura è
-    escluso dal confronto).
+    False (→ fallback a ``current``) se: body vuoto; **recall** del testo sotto
+    soglia (cattura le celle di tabella perse). Le pagine a sole figure non
+    vengono penalizzate (il testo-figura è escluso dal confronto). Le pagine
+    d'**indice** sono gestite da un percorso dedicato in ``ir_layout``
+    (``index_markdown``), quindi non forzano più il fallback.
     """
     if not (md or "").strip():
         return False, "vuoto"
     page_text = _page_text_no_figures(page, elements)
     if _norm_text(page_text).strip() == "":
         return True, "solo-figure"  # pagina di sole figure: niente prosa da perdere
-    if _looks_like_index(page_text):
-        return False, "indice"
     # recall della prosa: solo se c'è testo sufficiente (evita i falsi positivi
     # sulle pagine-grafico, dove le etichette degli assi non sono prosa).
     ntexty = sum(1 for e in elements

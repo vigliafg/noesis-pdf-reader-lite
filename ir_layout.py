@@ -526,6 +526,104 @@ def _attach_captions(elements: list[dict]) -> dict[int, list[dict]]:
     return attached, used
 
 
+def _span_md(spans: list[dict]) -> str:
+    """Markdown di una riga dai suoi span (grassetto ``**`` e corsivo ``_``)."""
+    parts: list[str] = []
+    for s in spans or []:
+        t = s.get("text", "")
+        if not t:
+            continue
+        lead = " " if t[:1].isspace() else ""
+        trail = " " if t[-1:].isspace() else ""
+        core = t.strip()
+        if core:
+            flags = s.get("flags", 0) or 0
+            if flags & 2:       # italic
+                core = "_" + core + "_"
+            if flags & 16:      # bold
+                core = "**" + core + "**"
+        parts.append(lead + core + trail)
+    return re.sub(r"[ \t]{2,}", " ", "".join(parts)).strip()
+
+
+def _is_index_page(page, elements: list[dict]) -> bool:
+    """True se la pagina è un indice (content map **o** righe fisiche).
+
+    La content map può **fondere** le voci in poche righe: in tal caso il
+    rilevatore sui box non scatta, quindi si guardano le righe fisiche della
+    pagina (le stesse usate da ``index_markdown``).
+    """
+    import layout_proxies
+    if layout_proxies._looks_like_index(elements):
+        return True
+    lines: list[str] = []
+    try:
+        for blk in page.get_text("dict").get("blocks", []):
+            if blk.get("type") != 0:
+                continue
+            for ln in blk.get("lines", []):
+                t = "".join(s.get("text", "") for s in ln.get("spans", [])).strip()
+                if t:
+                    lines.append(t)
+    except Exception:
+        return False
+    if len(lines) < 15:
+        return False
+    hits = sum(1 for ln in lines if layout_proxies._INDEX_ENTRY_RE.search(ln))
+    return hits >= 0.4 * len(lines)
+
+
+def index_markdown(page, elements: list[dict], page_width: float) -> str:
+    """Markdown dedicato per una pagina d'**indice**: una voce per riga.
+
+    La content map di PyMuPDF4LLM **fonde** le voci in un unico paragrafo; qui
+    si ricostruisce la struttura riga-per-riga dalle righe fisiche della pagina,
+    ordinate per colonna (sx→dx) e top→bottom. Le continuazioni che contengono
+    **solo numeri di pagina** (es. ``2185``) si riuniscono alla voce precedente.
+    Chrome (header/footer) esclusi.
+    """
+    splits = _column_splits(elements, page_width)
+    chrome = [e["bbox"] for e in elements
+              if e.get("class") in _DROP_CLASSES]
+
+    def _in_chrome(bb) -> bool:
+        cx, cy = (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2
+        return any(r[0] - 2 <= cx <= r[2] + 2 and r[1] - 2 <= cy <= r[3] + 2
+                   for r in chrome)
+
+    def _col(x: float) -> int:
+        return sum(1 for s in splits if x > s)
+
+    rows: list[tuple[int, float, float, str]] = []
+    try:
+        d = page.get_text("dict")
+    except Exception:
+        return ""
+    for blk in d.get("blocks", []):
+        if blk.get("type") != 0:
+            continue
+        for ln in blk.get("lines", []):
+            bb = ln.get("bbox", (0, 0, 0, 0))
+            if _in_chrome(bb):
+                continue
+            txt = _span_md(ln.get("spans", []))
+            if not txt:
+                continue
+            rows.append((_col((bb[0] + bb[2]) / 2), bb[1], bb[0], txt))
+    if not rows:
+        return ""
+    rows.sort(key=lambda r: (r[0], r[1], r[2]))
+
+    out: list[str] = []
+    only_nums = re.compile(r"^[\d,;\s\u2013\u2014\-]+[a-z]?\.?$")
+    for _c, _y, _x, txt in rows:
+        if out and only_nums.match(txt) and re.search(r"\d", txt):
+            out[-1] = out[-1].rstrip() + " " + txt
+        else:
+            out.append(txt)
+    return "\n".join(out)
+
+
 def build_markdown(page, doc, page_index: int, figures_dir=None,
                    embed_figures: bool = True, return_meta: bool = False,
                    chunk: dict | None = None):
@@ -545,6 +643,18 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
     else:
         text, els = _elements_from_chunk(chunk)
     pw = page.rect.width
+
+    # Percorso dedicato per le pagine d'**indice**: la content map fonde le voci
+    # in un paragrafo, quindi si ricostruisce riga-per-riga (vedi index_markdown).
+    # Solo se non ci sono tabelle/figure: un indice non ne ha, e così una
+    # eventuale misclassificazione non scarta contenuto strutturato.
+    if (_is_index_page(page, els)
+            and not any(e.get("class") in ("table", "picture") for e in els)):
+        md = index_markdown(page, els, pw)
+        if md.strip():
+            if return_meta:
+                return md, {"captions": set(), "rects": []}
+            return md
 
     # scarta chrome, etichette di margine e `picture` **spurie** (decorativi)
     ph = page.rect.height
