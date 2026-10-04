@@ -47,8 +47,8 @@ _ORDER_WEIGHTS = {
 }
 
 _MD_IMG_RE = re.compile(r"data:image/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+")
-#: voce d'indice: "termine .... 123" oppure "termine, 123" a fine riga
-_INDEX_ENTRY_RE = re.compile(r"(?:\s\d{1,4}\s*$)|(?:\.{2,}\s*\d{1,4}\s*$)")
+#: voce d'indice: "termine, 123" oppure "termine, 123–125" (come il motore)
+_INDEX_ENTRY_RE = re.compile(r",\s*\d{1,4}(?:[–\-]\d{1,4})?[a-z]?\b")
 _PIPE_ROW_RE = re.compile(r"^\|.*\|$")
 
 
@@ -362,14 +362,19 @@ def text_proxy(elements: list[dict], page_width: float = 0.0) -> dict:
 
 # ── classe di layout (per campionamento stratificato) ───────────────────────
 def _looks_like_index(elements: list[dict]) -> bool:
+    """True se la pagina è un **indice** (molte voci "termine, numero").
+
+    Tarato sui ``page_boxes`` (pochi blocchi, non le molte righe del testo
+    grezzo): basta una forte densità di voci, non un numero assoluto di righe.
+    """
     lines: list[str] = []
     for e in elements:
         if e.get("class") in TEXTY_CLASSES:
             lines.extend(ln for ln in (e.get("text") or "").splitlines() if ln.strip())
-    if len(lines) < 15:
+    if len(lines) < 5:
         return False
     hits = sum(1 for ln in lines if _INDEX_ENTRY_RE.search(ln))
-    return hits >= 0.4 * len(lines)
+    return hits >= max(4, 0.4 * len(lines))
 
 
 def layout_class(elements: list[dict], page_width: float) -> str:

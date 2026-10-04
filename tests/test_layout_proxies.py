@@ -150,9 +150,16 @@ class LayoutClassTests(unittest.TestCase):
                          "figure")
 
     def test_indici(self):
-        text = "\n".join(f"term{i} .... {i}" for i in range(20))
+        text = "\n".join(f"term{i}, {i}" for i in range(20))
         self.assertEqual(lp.layout_class([el("text", 50, 100, 300, 500, text)], PAGE_W),
                          "indici")
+
+    def test_not_index_for_prose(self):
+        text = "\n".join(f"this is a normal prose line number {i}"
+                         for i in range(20))
+        self.assertNotEqual(
+            lp.layout_class([el("text", 50, 100, 300, 500, text)], PAGE_W),
+            "indici")
 
 
 class ConfidenceTests(unittest.TestCase):

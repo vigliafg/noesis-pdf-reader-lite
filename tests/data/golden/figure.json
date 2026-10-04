@@ -1,0 +1,65 @@
+{
+  "class": "figure",
+  "pages": [
+    {
+      "pdf": "corpus1/co23.pdf",
+      "page": 611,
+      "page_ui": 612,
+      "layout_class": "figure",
+      "structure": {
+        "has_table": false,
+        "has_picture": true,
+        "has_formula": false,
+        "n_columns": 2
+      },
+      "proxies": {
+        "order": 0.8333,
+        "table": 1.0,
+        "figure": 1.0,
+        "text": 0.9857,
+        "confidence": 0.9
+      },
+      "advisor": null
+    },
+    {
+      "pdf": "corpus2/ox2.pdf",
+      "page": 646,
+      "page_ui": 647,
+      "layout_class": "figure",
+      "structure": {
+        "has_table": false,
+        "has_picture": true,
+        "has_formula": false,
+        "n_columns": 3
+      },
+      "proxies": {
+        "order": 1.0,
+        "table": 1.0,
+        "figure": 1.0,
+        "text": 0.985,
+        "confidence": 0.991
+      },
+      "advisor": null
+    },
+    {
+      "pdf": "corpus3/arxiv_2609.33753.pdf",
+      "page": 11,
+      "page_ui": 12,
+      "layout_class": "figure",
+      "structure": {
+        "has_table": false,
+        "has_picture": true,
+        "has_formula": false,
+        "n_columns": 2
+      },
+      "proxies": {
+        "order": 0.7273,
+        "table": 1.0,
+        "figure": 1.0,
+        "text": 1.0,
+        "confidence": 0.8364
+      },
+      "advisor": null
+    }
+  ]
+}

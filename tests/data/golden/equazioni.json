@@ -1,0 +1,25 @@
+{
+  "class": "equazioni",
+  "pages": [
+    {
+      "pdf": "corpus3/arxiv_2609.33753.pdf",
+      "page": 10,
+      "page_ui": 11,
+      "layout_class": "equazioni",
+      "structure": {
+        "has_table": false,
+        "has_picture": true,
+        "has_formula": true,
+        "n_columns": 1
+      },
+      "proxies": {
+        "order": 1.0,
+        "table": 1.0,
+        "figure": 1.0,
+        "text": 1.0,
+        "confidence": 1.0
+      },
+      "advisor": null
+    }
+  ]
+}

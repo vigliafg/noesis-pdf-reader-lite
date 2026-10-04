@@ -1,0 +1,65 @@
+{
+  "class": "indici",
+  "pages": [
+    {
+      "pdf": "corpus1/ha22.pdf",
+      "page": 4076,
+      "page_ui": 4077,
+      "layout_class": "indici",
+      "structure": {
+        "has_table": false,
+        "has_picture": false,
+        "has_formula": false,
+        "n_columns": 3
+      },
+      "proxies": {
+        "order": 0.8333,
+        "table": 1.0,
+        "figure": 1.0,
+        "text": 1.0,
+        "confidence": 0.9
+      },
+      "advisor": null
+    },
+    {
+      "pdf": "corpus1/ha22.pdf",
+      "page": 4101,
+      "page_ui": 4102,
+      "layout_class": "indici",
+      "structure": {
+        "has_table": false,
+        "has_picture": false,
+        "has_formula": false,
+        "n_columns": 2
+      },
+      "proxies": {
+        "order": 0.8333,
+        "table": 1.0,
+        "figure": 1.0,
+        "text": 0.8333,
+        "confidence": 0.9
+      },
+      "advisor": null
+    },
+    {
+      "pdf": "corpus2/na25.pdf",
+      "page": 858,
+      "page_ui": 859,
+      "layout_class": "indici",
+      "structure": {
+        "has_table": false,
+        "has_picture": false,
+        "has_formula": false,
+        "n_columns": 2
+      },
+      "proxies": {
+        "order": 0.8333,
+        "table": 1.0,
+        "figure": 1.0,
+        "text": 0.9,
+        "confidence": 0.9
+      },
+      "advisor": null
+    }
+  ]
+}

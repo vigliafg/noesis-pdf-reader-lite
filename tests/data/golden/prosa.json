@@ -1,0 +1,25 @@
+{
+  "class": "prosa",
+  "pages": [
+    {
+      "pdf": "corpus2/al17.pdf",
+      "page": 872,
+      "page_ui": 873,
+      "layout_class": "prosa",
+      "structure": {
+        "has_table": false,
+        "has_picture": false,
+        "has_formula": false,
+        "n_columns": 1
+      },
+      "proxies": {
+        "order": 1.0,
+        "table": 1.0,
+        "figure": 1.0,
+        "text": 1.0,
+        "confidence": 1.0
+      },
+      "advisor": null
+    }
+  ]
+}
