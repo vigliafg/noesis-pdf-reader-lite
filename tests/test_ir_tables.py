@@ -68,5 +68,25 @@ class TableCellAlignmentTests(unittest.TestCase):
         self.assertIn("factor Xa variant", md)
 
 
+@unittest.skipUnless(_OK, "pymupdf/ir_layout non disponibili")
+class TableCellJunkTests(unittest.TestCase):
+    """Artefatto di cella: ``<br>i`` da un carattere di controllo del font.
+
+    `corpus2/ox16.pdf` p506 (idx 505): la content map appende ``<br>i`` a fine
+    cella. Il token non è una parola della pagina → va rimosso.
+    """
+
+    _PDF = _ROOT / "corpus2" / "ox16.pdf"
+
+    def test_control_char_artifact_removed(self):
+        if not self._PDF.exists():
+            self.skipTest("corpus2/ox16.pdf assente")
+        md = _md(self._PDF, 505)
+        self.assertNotIn("<br>i", md)
+        # il contenuto reale della cella resta
+        self.assertIn("To eliminate the cause", md)
+        self.assertIn("probability of the issue (re) occurring", md)
+
+
 if __name__ == "__main__":
     unittest.main()

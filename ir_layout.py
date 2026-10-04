@@ -326,6 +326,38 @@ def _normalize_md_table(text: str) -> str:
     return "\n".join(out)
 
 
+def _strip_cell_junk(md: str, page) -> str:
+    """Toglie dalle celle i token di 1 lettera che NON sono parole della pagina.
+
+    Artefatto della content map: un carattere di controllo del font (es. ``\\x07``)
+    diventa ``<br>i`` in fondo a una cella (es. ox16 p506). Si rimuove **solo** se
+    il token non esiste come parola isolata nella pagina (niente falsi positivi
+    su articoli/lettere reali).
+    """
+    try:
+        page_words = {w[4].strip().lower() for w in page.get_text("words")}
+    except Exception:
+        return md
+
+    def _fix_cell(cell: str) -> str:
+        def _rep(m):
+            return "" if m.group(1).lower() not in page_words else m.group(0)
+        return re.sub(r"(?i)<br\s*/?>\s*([A-Za-z])\s*$", _rep, cell.strip())
+
+    out: list[str] = []
+    for ln in (md or "").splitlines():
+        s = ln.strip()
+        if s.startswith("|") and s.endswith("|"):
+            cells = s.strip("|").split("|")
+            if all(set(c.strip()) <= set("-: ") for c in cells):
+                out.append(ln)
+                continue
+            out.append("|" + "|".join(_fix_cell(c) for c in cells) + "|")
+        else:
+            out.append(ln)
+    return "\n".join(out)
+
+
 def _column_splits(elements: list[dict], page_width: float) -> list[float]:
     """Confini di colonna dalle sole geometrie dei box di TESTO (Fase 1).
 
@@ -857,7 +889,7 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
                 # solo imperfetta: la griglia a copertura disallinea le celle
                 # quando la content map è corretta (es. fe22 p1101, titolo
                 # spezzato tra celle ma dati perfetti).
-                base = _normalize_md_table(seg)
+                base = _normalize_md_table(_strip_cell_junk(seg, page))
                 grid = _grid_table_from_page(page, e["bbox"],
                                              _table_col_count(seg))
                 if grid.strip():
