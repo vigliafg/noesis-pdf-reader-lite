@@ -2124,15 +2124,14 @@ def _cosmetic_ir(md: str) -> str:
     return md
 
 
-def _apply_ir_on_page(path: str, page_num: int, figures_dir=None, exclude=()):
-    """Markdown della pagina con la pipeline IR + **figura-detection unita**.
+# ── scelta IR vs `current` (gate + chooser) ─────────────────────────────────
+_CHOOSER_FIG_RECALL_SLACK = 0.15   # IR può perdere recall se porta più figure
+_CHOOSER_RECALL_MARGIN = 0.02      # recall (quasi) migliore → IR
 
-    Una **sola** passata di layout (``page_chunk``), usata sia per la content map
-    sia come "raw" per la cache. Le figure vengono dalla content map (classe
-    ``picture``) e, in più, dalle didascalie rilevate da ``_link_figures``
-    (current): così non si perdono né le figure del modello né i flowchart con
-    didascalia "Figure n". Restituisce ``(markdown, raw)``.
-    """
+
+def _apply_ir_on_page_full(path: str, page_num: int, figures_dir=None, exclude=()):
+    """Come ``_apply_ir_on_page`` ma restituisce anche ``elements`` e il motivo
+    del gate (servono al chooser IR/current)."""
     import ir_layout
 
     with pymupdf.open(path) as doc:
@@ -2148,14 +2147,69 @@ def _apply_ir_on_page(path: str, page_num: int, figures_dir=None, exclude=()):
         raw = chunk.get("text", "") or ""
         try:
             _t, elements = ir_layout._elements_from_chunk(chunk)
-            gate_ok, _reason = _ir_gate(page, md, elements)
-            # tabella ruotata: l'IR la rende come immagine (fedele), quindi è
-            # "gestita" — non si ricade su `current` (che qui è peggiore).
-            if not gate_ok and _reason == "tabella-ruotata":
-                gate_ok = True
         except Exception:
+            elements = []
+        gate_ok, reason = _ir_gate(page, md, elements)
+        # tabella ruotata: l'IR la rende come immagine (fedele), quindi è
+        # "gestita" — non si ricade su `current` (che qui è peggiore).
+        if not gate_ok and reason == "tabella-ruotata":
             gate_ok = True
+    return md, raw, gate_ok, elements, reason
+
+
+def _apply_ir_on_page(path: str, page_num: int, figures_dir=None, exclude=()):
+    """Markdown della pagina con la pipeline IR + **figura-detection unita**.
+
+    Una **sola** passata di layout (``page_chunk``), usata sia per la content map
+    sia come "raw" per la cache. Restituisce ``(markdown, raw, gate_ok)``.
+    """
+    md, raw, gate_ok, _els, _reason = _apply_ir_on_page_full(
+        path, page_num, figures_dir, exclude)
     return md, raw, gate_ok
+
+
+def _choose_output(page, elements: list[dict], ir_md: str, cur_md: str) -> str:
+    """Sceglie l'output migliore tra IR e ``current`` quando il gate è incerto.
+
+    Preferisce **IR** se porta più figure di ``current`` e non perde troppo
+    recall (il testo "perso" è dentro l'immagine, che IR incorpora), oppure se
+    ha recall nettamente migliore. Altrimenti resta ``current``: **non si
+    peggiora mai l'output attuale** se IR è chiaramente peggiore.
+    """
+    ref = _page_text_no_figures(page, elements)
+    if _norm_text(ref).strip() == "":
+        return ir_md  # pagina di sole figure: IR le incorpora
+    r_ir = _word_recall(ref, _strip_images(ir_md))
+    r_cur = _word_recall(ref, _strip_images(cur_md))
+    f_ir = ir_md.count("data:image")
+    f_cur = cur_md.count("data:image")
+    if f_ir > f_cur and r_ir >= r_cur - _CHOOSER_FIG_RECALL_SLACK:
+        return ir_md
+    if r_ir >= r_cur + _CHOOSER_RECALL_MARGIN:
+        return ir_md
+    return cur_md
+
+
+def _select_page_output(path: str, page_num: int, figures_dir=None):
+    """Decisione completa di pagina: gate + chooser IR/``current``.
+
+    Restituisce ``(testo, engine, raw)`` con ``engine`` in ``{"ir", "current"}``.
+    Usata sia dall'app sia dall'harness E2E per coerenza.
+    """
+    md, raw, gate_ok, elements, _reason = _apply_ir_on_page_full(
+        path, page_num, figures_dir)
+    if not (md and _norm_text(md).strip()):
+        with pymupdf.open(path) as doc:
+            cur_md, _ = _apply_engine_on_page(
+                doc[page_num], raw, figures_dir=figures_dir, page_num=page_num)
+        return cur_md, "current", raw
+    if gate_ok:
+        return md, "ir", raw
+    with pymupdf.open(path) as doc:
+        cur_md, _ = _apply_engine_on_page(
+            doc[page_num], raw, figures_dir=figures_dir, page_num=page_num)
+        chosen = _choose_output(doc[page_num], elements, md, cur_md)
+    return chosen, ("ir" if chosen is md else "current"), raw
 
 
 # Markdown structural patterns protected during translation.
@@ -3265,12 +3319,12 @@ class ExtractThread(QThread):
         # IR restituisce anche il "raw" da mettere in cache.
         if _pipeline_mode() == "ir" and not self._include and not self._exclude:
             try:
-                md, ir_raw, gate_ok = _apply_ir_on_page(
+                sel_text, _engine, ir_raw = _select_page_output(
                     self._path, self._page_num, self._figures_dir)
                 if raw is None:
                     raw = ir_raw  # riusa la stessa passata anche in fallback
-                if md and gate_ok and _norm_text(md).strip():
-                    text, label = md, "auto"
+                if sel_text and _norm_text(sel_text).strip():
+                    text, label = sel_text, "auto"
             except Exception:
                 text = ""
         if not text:

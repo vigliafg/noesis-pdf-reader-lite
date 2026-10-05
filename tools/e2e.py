@@ -258,19 +258,17 @@ def _engine_used(pdf: str, idx: int, figures_dir) -> tuple[str, bool]:
     """Quale pipeline ha prodotto il testo finale nell'app: ``ir`` o ``current``.
 
     L'``ExtractThread`` non espone la pipeline usata (l'etichetta è ``"auto"`` in
-    entrambi i casi). La ricaviamo in modo **deterministico**: l'app usa IR se e
-    solo se ``_apply_ir_on_page`` restituisce md non vuoto **e** il gate passa;
-    altrimenti ricade su ``current``.
+    entrambi i casi). La ricaviamo in modo **deterministico** con la stessa
+    decisione dell'app (``main._select_page_output``: gate + chooser IR/current).
     """
     import main
 
     try:
-        md, _raw, gate_ok = main._apply_ir_on_page(pdf, idx, figures_dir=figures_dir)
+        _text, engine, _raw = main._select_page_output(
+            pdf, idx, figures_dir=figures_dir)
     except Exception:
         return "current", False
-    if md and gate_ok and main._norm_text(md).strip():
-        return "ir", True
-    return "current", bool(gate_ok)
+    return engine, engine == "ir"
 
 
 # ── percorso APP reale (MainWindow + ExtractThread) ─────────────────────────
