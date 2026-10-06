@@ -507,28 +507,81 @@ def _split_side_by_side_tables(seg: str):
     return "\n".join(left), "\n".join(right)
 
 
+def _column_splits_robust(blocks: list[dict], page_width: float,
+                          min_gap: float | None = None,
+                          max_cross: int = 1) -> list[float]:
+    """Confini di colonna robusti ai **blocchi a ponte** (fallback del motore).
+
+    Per ogni candidato confine si contano i blocchi che lo **attraversano** e si
+    misura il gutter (spazio vuoto reale): si sceglie il confine con **meno
+    attraversamenti** e, a parità, il gutter più ampio, con blocchi su entrambi i
+    lati. Il merge degli intervalli collassa le colonne quando un box "pontica"
+    (nota a piè di pagina, titolo sfuggito); qui viene tollerato. Ricorsivo.
+    """
+    if min_gap is None:
+        min_gap = max(5.0, 0.01 * page_width)
+
+    def _best_split(bs: list[dict]) -> float | None:
+        xs = sorted({b["x0"] for b in bs} | {b["x1"] for b in bs})
+        cand: list[tuple[int, float, float]] = []
+        for i in range(len(xs) - 1):
+            s = (xs[i] + xs[i + 1]) / 2
+            left = [b for b in bs if b["x1"] <= s]
+            right = [b for b in bs if b["x0"] >= s]
+            if not left or not right:
+                continue
+            cross = sum(1 for b in bs if b["x0"] < s < b["x1"])
+            gutter = min(b["x0"] for b in right) - max(b["x1"] for b in left)
+            if gutter < min_gap:
+                continue
+            cand.append((cross, -gutter, s))
+        if not cand:
+            return None
+        cross, _neg, s = min(cand)
+        return s if cross <= max_cross else None
+
+    out: list[float] = []
+
+    def _rec(bs: list[dict], depth: int) -> None:
+        if depth > 3 or len(bs) < 2:
+            return
+        s = _best_split(bs)
+        if s is None:
+            return
+        left = [b for b in bs if (b["x0"] + b["x1"]) / 2 < s]
+        right = [b for b in bs if (b["x0"] + b["x1"]) / 2 >= s]
+        _rec(left, depth + 1)
+        out.append(s)
+        _rec(right, depth + 1)
+
+    _rec(list(blocks), 0)
+    return sorted(out)
+
+
 def _column_splits(elements: list[dict], page_width: float) -> list[float]:
     """Confini di colonna dalle sole geometrie dei box di TESTO (Fase 1).
 
     Primario: il merge degli intervalli (comportamento consolidato del motore,
-    affidabile quando le colonne sono pulite). **Fallback**: la proiezione a
-    copertura di ``layout_proxies`` quando il merge **non trova** colonne — caso
-    in cui un box che "pontica" le colonne fa collassare il merge (difetto noto
-    "colonne collassate"). Così non si regredisce sulle pagine già corrette.
+    affidabile quando le colonne sono pulite). **Fallback 1**: la proiezione a
+    copertura di ``layout_proxies`` quando il merge **non trova** colonne.
+    **Fallback 2**: ``_column_splits_robust`` quando anche la proiezione fallisce
+    (gutter stretto o più blocchi a ponte) — caso delle pagine con note/titoli
+    che attraversano il confine.
     """
     import main  # lazy: main importa layout_engine
     import layout_proxies
 
     texty = [e for e in elements
              if e["class"] in ("text", "section-header", "title")]
-    splits = main._detect_column_splits(
-        [{"x0": e["bbox"][0], "x1": e["bbox"][2],
-          "y0": e["bbox"][1], "y1": e["bbox"][3]} for e in texty],
-        page_width,
-    )
+    boxes = [{"x0": e["bbox"][0], "x1": e["bbox"][2],
+              "y0": e["bbox"][1], "y1": e["bbox"][3]} for e in texty]
+    splits = main._detect_column_splits(boxes, page_width)
     if splits:
         return splits
-    return layout_proxies.column_splits(elements, page_width)
+    splits = layout_proxies.column_splits(elements, page_width)
+    if splits:
+        return splits
+    return _column_splits_robust(boxes, page_width)
 
 
 def _group_figure_blocks(elements: list[dict], splits: list[float],

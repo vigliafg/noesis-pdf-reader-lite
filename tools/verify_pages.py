@@ -210,6 +210,12 @@ def _reference_units(elements: list[dict], page_width: float) -> list[dict]:
              if e["class"] in ("text", "section-header", "title")]
     if not prose:
         return []
+    # separatori di banda: QUALSIASI blocco a piena larghezza (testo a tutta
+    # pagina, tabelle o figure ampie) → un footnote/blocco sotto le colonne
+    # finisce nella banda giusta invece di essere letto prima della colonna
+    # destra.
+    all_full = [e for e in elements
+                if e.get("w", 0) >= 0.6 * page_width]
     full = [e for e in prose if e["w"] >= 0.6 * page_width]
     body = [e for e in prose if e["w"] < 0.6 * page_width]
     splits = _column_splits_robust(
@@ -222,18 +228,16 @@ def _reference_units(elements: list[dict], page_width: float) -> list[dict]:
         mid = (e["bbox"][0] + e["bbox"][2]) / 2
         return sum(1 for s in splits if mid > s)
 
-    seps = sorted(full, key=lambda e: e["bbox"][1])
+    seps = sorted(all_full, key=lambda e: e["bbox"][1])
     sep_y = [e["bbox"][1] for e in seps]
     bands: list[list[dict]] = [[] for _ in range(len(seps) + 1)]
     for e in body:
         band = sum(1 for y in sep_y if e["bbox"][1] >= y)
         bands[band].append(e)
     ordered: list[dict] = []
-    for i, b in enumerate(bands):
+    for b in bands:
         b.sort(key=lambda e: (_col(e), e["bbox"][1], e["bbox"][0]))
         ordered.extend(b)
-        if i < len(seps):
-            ordered.append(seps[i])
     return [{"text": e["text"], "bbox": e["bbox"], "cls": e["class"],
              "col": -1 if e["w"] >= 0.6 * page_width else _col(e)}
             for e in ordered]

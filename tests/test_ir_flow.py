@@ -138,5 +138,29 @@ class GuidingCaseTests(unittest.TestCase):
                         "colonna sinistra spezzata dall'intreccio")
 
 
+@unittest.skipUnless(_IR, "pymupdf/ir_layout non disponibili")
+class BridgingBlockOrderTests(unittest.TestCase):
+    """co23 p540: una nota a piè di pagina che attraversa il centro faceva
+    collassare le colonne → ordine intrecciato. Il fallback robusto del motore
+    (``_column_splits_robust``) deve ripristinare l'ordine colonna-major."""
+
+    def test_co23_p540_column_major(self):
+        pdf = _ROOT / "corpus1" / "co23.pdf"
+        if not pdf.exists():
+            self.skipTest("corpus1/co23.pdf assente")
+        doc = pymupdf.open(pdf)
+        try:
+            chunk = ir_layout.page_chunk(doc, 539)
+            md = ir_layout.build_markdown(doc[539], doc, 539,
+                                          embed_figures=False, chunk=chunk)
+            _t, els = ir_layout.page_elements(doc, 539)
+            fi = vp._flow_score(md, els, doc[539].rect.width)
+        finally:
+            doc.close()
+        self.assertGreaterEqual(
+            fi["flow"], 0.95,
+            f"co23 p540: colonne non ripristinate (flow={fi['flow']})")
+
+
 if __name__ == "__main__":
     unittest.main()
