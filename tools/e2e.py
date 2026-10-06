@@ -175,7 +175,12 @@ def _checks(truth: dict, md: str, plain: str) -> dict:
     # ── testo ──
     tnotes: list[str] = []
     text_ok = True
-    if not (md or "").strip() and truth["pdf_text"].strip():
+    # pagina senza contenuto reale (es. "This page intentionally left blank"):
+    # un md vuoto è corretto → nessun difetto di testo.
+    ref_long = vp._long_words(truth["pdf_text"])
+    if len(ref_long) < 3:
+        text_ok = True
+    elif not (md or "").strip() and truth["pdf_text"].strip():
         text_ok, _ = False, tnotes.append("body vuoto")
     if truth["ntexty"] > 2 and r_pdf < RECALL_TEXT_MIN:
         text_ok = False
