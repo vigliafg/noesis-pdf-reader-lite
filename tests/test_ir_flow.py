@@ -93,13 +93,14 @@ class FlowMetricTests(unittest.TestCase):
 
 @unittest.skipUnless(_IR, "pymupdf/ir_layout non disponibili")
 class GuidingCaseTests(unittest.TestCase):
-    """Caso guida p103: il rilevatore DEVE segnalare l'intreccio.
+    """Caso guida p103: figura a 1,5 colonne -> colonne intrecciate.
 
-    Nota: dopo il fix del motore (``build_markdown`` -> ordine colonna-major)
-    questo test va aggiornato a ``flow >= 0.95``.
+    Dopo il fix del motore (``_group_figure_blocks``: una figura singolo-pannello
+    che attraversa lo split non è più a tutta larghezza) l'ordine deve essere
+    **colonna-major**: ``flow >= 0.95``.
     """
 
-    def test_p103_flow_detected(self):
+    def test_p103_column_major(self):
         if not _PDF.exists():
             self.skipTest("corpus1/ha22.pdf assente")
         doc = pymupdf.open(_PDF)
@@ -111,8 +112,30 @@ class GuidingCaseTests(unittest.TestCase):
             fi = vp._flow_score(md, els, doc[_PAGE].rect.width)
         finally:
             doc.close()
-        self.assertLess(fi["flow"], 0.95,
-                        f"p103: intreccio non rilevato (flow={fi['flow']})")
+        self.assertGreaterEqual(
+            fi["flow"], 0.95,
+            f"p103: ordine non colonna-major (flow={fi['flow']})")
+
+    def test_p103_left_column_contiguous(self):
+        # la colonna sinistra non deve essere spezzata dalla colonna destra
+        if not _PDF.exists():
+            self.skipTest("corpus1/ha22.pdf assente")
+        doc = pymupdf.open(_PDF)
+        try:
+            chunk = ir_layout.page_chunk(doc, _PAGE)
+            md = ir_layout.build_markdown(doc[_PAGE], doc, _PAGE,
+                                          embed_figures=False, chunk=chunk)
+        finally:
+            doc.close()
+        pos_kidney = md.find("kidney transplantation")
+        pos_summary = md.find("In summary, there are many ways")
+        pos_national = md.find("National Academy of Medicine")
+        self.assertGreaterEqual(pos_kidney, 0)
+        self.assertGreaterEqual(pos_summary, 0)
+        self.assertGreaterEqual(pos_national, 0)
+        # la coda della colonna sinistra precede la colonna destra
+        self.assertLess(pos_summary, pos_national,
+                        "colonna sinistra spezzata dall'intreccio")
 
 
 if __name__ == "__main__":

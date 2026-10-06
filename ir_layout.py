@@ -554,9 +554,15 @@ def _group_figure_blocks(elements: list[dict], splits: list[float],
     for c in clusters:
         c["x0"] = min(p["bbox"][0] for p in c["pics"])
         c["x1"] = max(p["bbox"][2] for p in c["pics"])
+        # A tutta larghezza SOLO se è davvero larga, oppure se è una figura
+        # **multi-pannello** che attraversa le colonne (i pannelli restano
+        # insieme). Una figura **singolo-pannello** che attraversa lo split
+        # (es. 1,5 colonne) NON è a tutta larghezza: resta nella sua colonna,
+        # altrimenti spezza la colonna di testo e intreccia le righe.
         c["spanning"] = (
             (c["x1"] - c["x0"]) >= 0.6 * page_width
-            or any(c["x0"] < s < c["x1"] for s in splits)
+            or (len(c["pics"]) >= 2
+                and any(c["x0"] < s < c["x1"] for s in splits))
         )
     return clusters
 
