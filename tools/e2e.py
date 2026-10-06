@@ -128,7 +128,7 @@ def _page_truth(doc, idx: int, with_tables: bool = True) -> dict:
         _t, elements = ir_layout.page_elements(doc, idx)
     except Exception:
         elements = []
-    pdf_text = main._page_text_no_figures(page, elements)
+    pdf_text = main._page_text_no_figures(page, elements, exclude_chrome=True)
     ntexty = sum(
         1 for e in elements if e.get("class") in ("text", "section-header", "title")
     )

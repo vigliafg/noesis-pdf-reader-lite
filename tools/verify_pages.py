@@ -59,9 +59,17 @@ def _strip_images(t: str) -> str:
     return re.sub(r"data:[^\s)]+", " ", t)
 
 
-def _page_text_no_figures(page, elements: list[dict]) -> str:
-    """Testo della pagina escludendo le regioni `picture` (rese nell'immagine)."""
+def _page_text_no_figures(page, elements: list[dict],
+                          exclude_chrome: bool = True) -> str:
+    """Testo della pagina escludendo le regioni `picture` (rese nell'immagine).
+
+    Con ``exclude_chrome=True`` (default) esclude anche testatine/piè di
+    pagina/numero pagina: chrome, non contenuto.
+    """
     pics = [e["bbox"] for e in elements if e["class"] == "picture"]
+    if exclude_chrome:
+        pics += [e["bbox"] for e in elements
+                 if e["class"] in ("page-header", "page-footer", "page-number")]
 
     def _inside(b) -> bool:
         x0, y0, x1, y1 = b["bbox"]

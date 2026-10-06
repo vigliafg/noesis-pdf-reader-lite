@@ -1029,13 +1029,20 @@ def _rotated_table_rects(page, elements: list[dict]) -> list[tuple]:
     return []
 
 
-def _page_text_no_figures(page, elements: list[dict]) -> str:
+def _page_text_no_figures(page, elements: list[dict],
+                          exclude_chrome: bool = False) -> str:
     """Testo della pagina escludendo le regioni ``picture`` (rese nell'immagine).
 
-    Esclude anche le **tabelle ruotate**, che l'IR rende come immagine.
+    Esclude anche le **tabelle ruotate**, che l'IR rende come immagine. Con
+    ``exclude_chrome=True`` esclude anche testatine/piè di pagina/numero pagina:
+    sono chrome, non contenuto (Golden Rule: il recall non deve penalizzarli).
     """
     pics = [e["bbox"] for e in elements if e.get("class") == "picture"]
     pics += _rotated_table_rects(page, elements)
+    if exclude_chrome:
+        pics += [e["bbox"] for e in elements
+                 if e.get("class") in ("page-header", "page-footer",
+                                       "page-number")]
 
     def _inside(b) -> bool:
         x0, y0, x1, y1 = b["bbox"]
