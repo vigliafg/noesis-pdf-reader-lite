@@ -136,6 +136,38 @@ class ChecksTests(unittest.TestCase):
         checks = e2e._checks(truth, "alpha", "alpha")
         self.assertFalse(checks["tables"]["ok"])
 
+    def _two_col_truth(self) -> dict:
+        els = [
+            {"class": "text", "bbox": (50, 50, 290, 120), "w": 240,
+             "text": "alpha beta gamma delta epsilon zeta left one"},
+            {"class": "text", "bbox": (50, 200, 290, 270), "w": 240,
+             "text": "eta theta iota kappa lambda mu left two"},
+            {"class": "text", "bbox": (320, 50, 560, 120), "w": 240,
+             "text": "nu xi omicron pi rho sigma right one"},
+            {"class": "text", "bbox": (320, 200, 560, 270), "w": 240,
+             "text": "tau upsilon phi chi psi omega right two"},
+        ]
+        return self._truth(elements=els, page_width=600.0)
+
+    def test_flow_flag_on_interleaved_columns(self):
+        # Golden Rule #1: colonne intrecciate = difetto anche con contenuto ok
+        md = ("alpha beta gamma delta epsilon zeta left one "
+              "nu xi omicron pi rho sigma right one "
+              "eta theta iota kappa lambda mu left two "
+              "tau upsilon phi chi psi omega right two")
+        checks = e2e._checks(self._two_col_truth(), md, md)
+        self.assertFalse(checks["flow"]["ok"])
+        self.assertIn("flow", " ".join(e2e._flags(checks, None)))
+
+    def test_flow_ok_on_correct_order(self):
+        md = ("alpha beta gamma delta epsilon zeta left one "
+              "eta theta iota kappa lambda mu left two "
+              "nu xi omicron pi rho sigma right one "
+              "tau upsilon phi chi psi omega right two")
+        checks = e2e._checks(self._two_col_truth(), md, md)
+        self.assertTrue(checks["flow"]["ok"])
+        self.assertEqual(e2e._flags(checks, None), [])
+
     def test_clean_page_has_no_flags(self):
         truth = self._truth(
             pdf_text="medicine cardiology patients treatment diagnosis",

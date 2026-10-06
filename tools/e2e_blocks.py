@@ -106,8 +106,8 @@ def _write_blocks_report(out: Path, blocks: list[list[dict]]) -> None:
             lines.append("_nessun record_")
             lines.append("")
             continue
-        lines += ["| pagina | engine | conf | recall | order | fig | tbl | flag | verdetto |",
-                  "|---|---|---|---|---|---|---|---|---|"]
+        lines += ["| pagina | engine | conf | recall | flow | order | fig | tbl | flag | verdetto |",
+                  "|---|---|---|---|---|---|---|---|---|---|"]
         for r in recs:
             c = r["checks"]
             v = (r.get("arbitration") or {}).get("verdict")
@@ -116,7 +116,8 @@ def _write_blocks_report(out: Path, blocks: list[list[dict]]) -> None:
             lines.append(
                 f"| {r['pdf']} p{r['page_ui']} | {r.get('engine')} | "
                 f"{conf if conf is None else round(conf, 2)} | "
-                f"{c['text']['recall_pdf']:.3f} | {r['order_score']:.2f} | "
+                f"{c['text']['recall_pdf']:.3f} | "
+                f"{r.get('flow_score', 1.0):.2f} | {r['order_score']:.2f} | "
                 f"{c['figures']['embedded']}/{c['figures']['expected']} | "
                 f"{'ok' if c['tables']['ok'] else 'KO'} | "
                 f"{'; '.join(r['flags'])[:60]} | {vs} |")

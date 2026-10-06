@@ -59,6 +59,9 @@ RECALL_TEXT_MIN = 0.90      # recall della prosa (se la pagina ha prosa)
 RECALL_RENDER_MIN = 0.99    # recall markdown → resa (plain)
 RECALL_TABLE_MIN = 0.85     # recall delle celle di tabella
 MIN_FIGURE_BYTES = 1000     # una figura embedded più piccola è sospetta
+# Golden Rule #1 (REGOLE-TEST.md): fedeltà = contenuto E flusso di lettura.
+# Un flusso < FLOW_MIN è un difetto GRAVE, anche con recall 1.0.
+FLOW_MIN = 0.95             # fedeltà minima dell'ordine di lettura (LIS/n)
 
 _ADVISOR_DEFAULT_MODEL = "meta/muse-spark-1.3-contributor"
 _ADVISOR_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -204,6 +207,18 @@ def _checks(truth: dict, md: str, plain: str) -> dict:
             tbl_ok = False
             tnotes2.append(f"celle recall {tbl_recall:.2f}")
 
+    # ── flusso di lettura (Golden Rule #1) ──
+    try:
+        flow_info = vp._flow_score(md, truth.get("elements", []),
+                                   truth.get("page_width", 0.0))
+    except Exception:
+        flow_info = {"flow": 1.0, "n": 0, "found": 0, "lis": 0,
+                     "transitions": 0}
+    flow = flow_info["flow"]
+    flow_ok = flow >= FLOW_MIN
+    fnotes2 = [] if flow_ok else [f"ordine {flow:.2f} "
+                                  f"(transizioni {flow_info['transitions']})"]
+
     checks = {
         "text": {
             "ok": text_ok, "recall_pdf": round(r_pdf, 4),
@@ -217,13 +232,18 @@ def _checks(truth: dict, md: str, plain: str) -> dict:
             "ok": tbl_ok, "recall": None if tbl_recall is None else round(tbl_recall, 4),
             "note": "; ".join(tnotes2),
         },
+        "flow": {
+            "ok": flow_ok, "score": flow, "n": flow_info["n"],
+            "found": flow_info["found"], "transitions": flow_info["transitions"],
+            "note": "; ".join(fnotes2),
+        },
     }
     return checks
 
 
 def _flags(checks: dict, gate: dict | None) -> list[str]:
     out: list[str] = []
-    for kind in ("text", "figures", "tables"):
+    for kind in ("text", "flow", "figures", "tables"):
         c = checks.get(kind) or {}
         if not c.get("ok", True):
             out.append(f"{kind}: {c.get('note', '')}".strip().rstrip(":"))
@@ -387,7 +407,7 @@ def _make_record(pdf: str, idx: int, pipe: str, truth: dict, md: str, plain: str
     # proxy + confidenza (Fase 0.3): il gate deterministico, se c'è, è un segnale
     # forte; in via-app (gate=None) lo deduciamo dai controlli per tipo.
     if gate is None:
-        gate_ok = all(checks[k]["ok"] for k in ("text", "figures", "tables"))
+        gate_ok = all(checks[k]["ok"] for k in ("text", "flow", "figures", "tables"))
         gate_reason = ""
     else:
         gate_ok = bool(gate.get("ok", True))
@@ -410,6 +430,8 @@ def _make_record(pdf: str, idx: int, pipe: str, truth: dict, md: str, plain: str
         "body_len": len(md),
         "plain_len": len(plain),
         "order_score": round(order, 3),
+        "flow_score": checks["flow"]["score"],
+        "flow_transitions": checks["flow"]["transitions"],
         "checks": checks,
         "gate": gate,
         "flags": flags,
@@ -430,7 +452,7 @@ def _print_rec(rec: dict) -> None:
         f"body={rec['body_len']:7d} text={c['text']['recall_pdf']:.3f} "
         f"fig={c['figures']['embedded']}/{c['figures']['expected']} "
         f"tbl={'ok' if c['tables']['ok'] else 'KO'} "
-        f"order={rec['order_score']:.2f} "
+        f"order={rec['order_score']:.2f} flow={rec.get('flow_score', 1.0):.2f} "
         f"{'✓' if not rec['flags'] else '⚠ ' + '; '.join(rec['flags'])}"
     )
 
@@ -438,6 +460,7 @@ def _print_rec(rec: dict) -> None:
 # ── difetti ─────────────────────────────────────────────────────────────────
 # I flag automatici sono grossolani: mappati sulla stessa tassonomia.
 _AUTO_KIND = {"tables": "table_content", "text": "text_missing",
+              "flow": "text_order",
               "figures": "figure_missing", "gate": "other"}
 
 
@@ -547,8 +570,8 @@ def _write_reports(out: Path, records: list[dict], pipelines: list[str],
         "",
         "## Medie per pipeline",
         "",
-        "| pipeline | secs | text recall | order | figure ok | tabelle ok | flag |",
-        "|---|---|---|---|---|---|---|",
+        "| pipeline | secs | text recall | flow | order | figure ok | tabelle ok | flag |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for p in pipelines:
         rows = [r for r in records if r["pipeline"] == p]
@@ -561,6 +584,7 @@ def _write_reports(out: Path, records: list[dict], pipelines: list[str],
         lines.append(
             f"| {p} | {sum(r['secs'] for r in rows)/n:.2f} | "
             f"{sum(r['checks']['text']['recall_pdf'] for r in rows)/n:.3f} | "
+            f"{sum(r.get('flow_score', 1.0) for r in rows)/n:.3f} | "
             f"{sum(r['order_score'] for r in rows)/n:.3f} | "
             f"{fig_ok}/{n} | {tbl_ok}/{n} | {flags}/{n} |"
         )
@@ -644,7 +668,9 @@ def _write_review(out: Path, pdf: str, records: list[dict], doc) -> None:
     index = [
         "# Review visivo — pagine flaggate",
         "",
-        "Per ogni voce: apri la PNG (pagina originale) e il markdown, poi giudica.",
+        "Per ogni voce: apri la PNG (pagina originale) e il markdown, poi giudica",
+        "**due assi**: (a) CONTENUTO, (b) FLUSSO DI LETTURA (Golden Rule #1:",
+        "colonne/righe intrecciate = difetto GRAVE anche se le parole ci sono).",
         "",
     ]
     for r in flagged:
@@ -660,6 +686,8 @@ def _write_review(out: Path, pdf: str, records: list[dict], doc) -> None:
         index += [
             f"## p{r['page_ui']} — {r['pipeline']}",
             f"- flag: {'; '.join(r['flags'])}",
+            f"- flow (Golden Rule #1): {r.get('flow_score', 1.0):.2f} "
+            f"(soglia {FLOW_MIN}); transizioni colonna {r.get('flow_transitions', 0)}",
             f"- PNG pagina: `{png.name}`",
             f"- markdown: `{md_dst.name}`",
             "",
@@ -780,6 +808,7 @@ def _run_advisor(out: Path, records: list[dict], doc, model: str, key: str,
 _BASELINE_VERSION = 1
 TOL_RECALL = 0.01   # calo massimo ammesso sul recall della prosa
 TOL_ORDER = 0.02    # calo massimo ammesso sull'order score
+TOL_FLOW = 0.02     # calo massimo ammesso sul flow (Golden Rule #1)
 TOL_BODY = 0.20     # calo massimo (frazione) sul body_len
 TOL_TABLE = 0.05    # calo massimo ammesso sul recall delle tabelle
 
@@ -793,6 +822,7 @@ def _baseline_entry(rec: dict) -> dict:
     return {
         "recall_pdf": c["text"]["recall_pdf"],
         "order_score": rec["order_score"],
+        "flow_score": rec.get("flow_score", 1.0),
         "body_len": rec["body_len"],
         "figures": c["figures"]["embedded"],
         "table_recall": c["tables"]["recall"],
@@ -817,6 +847,7 @@ def _class_aggregate(entries: dict) -> dict:
             "n": len(rows),
             "recall_pdf": _mean("recall_pdf"),
             "order_score": _mean("order_score"),
+            "flow_score": _mean("flow_score"),
             "body_len": _mean("body_len"),
             "table_recall": _mean("table_recall"),
         }
@@ -870,6 +901,9 @@ def _compare_baseline(records: list[dict], entries: dict,
             issues.append(f"recall {base['recall_pdf']:.3f}->{cur['recall_pdf']:.3f}")
         if base["order_score"] - cur["order_score"] > TOL_ORDER:
             issues.append(f"order {base['order_score']:.3f}->{cur['order_score']:.3f}")
+        if base.get("flow_score", 1.0) - cur.get("flow_score", 1.0) > TOL_FLOW:
+            issues.append(
+                f"flow {base.get('flow_score', 1.0):.3f}->{cur.get('flow_score', 1.0):.3f}")
         if base["body_len"] and cur["body_len"] < base["body_len"] * (1 - TOL_BODY):
             issues.append(f"body {base['body_len']}->{cur['body_len']}")
         if cur["figures"] < base["figures"]:
@@ -896,6 +930,11 @@ def _compare_baseline(records: list[dict], entries: dict,
                     and cur.get("order_score") is not None
                     and base["order_score"] - cur["order_score"] > TOL_ORDER):
                 issues.append(f"order {base['order_score']:.3f}->{cur['order_score']:.3f}")
+            if (base.get("flow_score") is not None
+                    and cur.get("flow_score") is not None
+                    and base["flow_score"] - cur["flow_score"] > TOL_FLOW):
+                issues.append(
+                    f"flow {base['flow_score']:.3f}->{cur['flow_score']:.3f}")
             if (base.get("table_recall") is not None
                     and cur.get("table_recall") is not None
                     and base["table_recall"] - cur["table_recall"] > TOL_TABLE):

@@ -133,6 +133,180 @@ def _order_score(md: str, elements: list[dict], page_width: float) -> float:
     return max(0.0, 1.0 - extra / (len(cols) - 1))
 
 
+def _lis_length(seq: list[int]) -> int:
+    """Lunghezza della più lunga sottosequenza strettamente crescente (O(n log n))."""
+    import bisect
+
+    tails: list[int] = []
+    for x in seq:
+        i = bisect.bisect_left(tails, x)
+        if i == len(tails):
+            tails.append(x)
+        else:
+            tails[i] = x
+    return len(tails)
+
+
+def _column_splits_robust(blocks: list[dict], page_width: float,
+                          min_gap: float | None = None,
+                          max_cross: int = 1) -> list[float]:
+    """Splits di colonna robusti (gap di whitespace + tolleranza ai blocchi a ponte).
+
+    Per ogni candidato confine ``s`` si contano i blocchi che lo **attraversano**
+    e si misura il gutter (spazio vuoto reale): si sceglie il confine con **meno
+    attraversamenti** e, a parità, il gutter più ampio, richiedendo blocchi su
+    entrambi i lati. Il rilevatore del motore collassa le colonne quando un
+    blocco (es. un titolo) attraversa il confine; qui viene tollerato.
+    """
+    if min_gap is None:
+        min_gap = max(5.0, 0.01 * page_width)
+
+    def _best_split(bs: list[dict]) -> float | None:
+        xs = sorted({b["x0"] for b in bs} | {b["x1"] for b in bs})
+        cand: list[tuple[int, float, float]] = []
+        for i in range(len(xs) - 1):
+            s = (xs[i] + xs[i + 1]) / 2
+            left = [b for b in bs if b["x1"] <= s]
+            right = [b for b in bs if b["x0"] >= s]
+            if not left or not right:
+                continue
+            cross = sum(1 for b in bs if b["x0"] < s < b["x1"])
+            gutter = (min(b["x0"] for b in right)
+                      - max(b["x1"] for b in left))
+            if gutter < min_gap:
+                continue
+            cand.append((cross, -gutter, s))
+        if not cand:
+            return None
+        cross, _neg, s = min(cand)
+        return s if cross <= max_cross else None
+
+    out: list[float] = []
+
+    def _rec(bs: list[dict], depth: int) -> None:
+        if depth > 3 or len(bs) < 2:
+            return
+        s = _best_split(bs)
+        if s is None:
+            return
+        left = [b for b in bs if (b["x0"] + b["x1"]) / 2 < s]
+        right = [b for b in bs if (b["x0"] + b["x1"]) / 2 >= s]
+        _rec(left, depth + 1)
+        out.append(s)
+        _rec(right, depth + 1)
+
+    _rec(list(blocks), 0)
+    return sorted(out)
+
+
+def _reference_units(elements: list[dict], page_width: float) -> list[dict]:
+    """Unità di prosa in **ordine naturale di lettura** (riferimento geometrico).
+
+    Indipendente dall'ordine emesso dal motore: bande delimitate dai blocchi a
+    piena larghezza, poi ordine **colonna-major** (sinistra→destra,
+    alto→basso) dentro ogni banda. È l'ordine che un lettore segue davvero.
+    """
+    prose = [e for e in elements
+             if e["class"] in ("text", "section-header", "title")]
+    if not prose:
+        return []
+    full = [e for e in prose if e["w"] >= 0.6 * page_width]
+    body = [e for e in prose if e["w"] < 0.6 * page_width]
+    splits = _column_splits_robust(
+        [{"x0": e["bbox"][0], "x1": e["bbox"][2],
+          "y0": e["bbox"][1], "y1": e["bbox"][3]} for e in body],
+        page_width,
+    ) if body else []
+
+    def _col(e: dict) -> int:
+        mid = (e["bbox"][0] + e["bbox"][2]) / 2
+        return sum(1 for s in splits if mid > s)
+
+    seps = sorted(full, key=lambda e: e["bbox"][1])
+    sep_y = [e["bbox"][1] for e in seps]
+    bands: list[list[dict]] = [[] for _ in range(len(seps) + 1)]
+    for e in body:
+        band = sum(1 for y in sep_y if e["bbox"][1] >= y)
+        bands[band].append(e)
+    ordered: list[dict] = []
+    for i, b in enumerate(bands):
+        b.sort(key=lambda e: (_col(e), e["bbox"][1], e["bbox"][0]))
+        ordered.extend(b)
+        if i < len(seps):
+            ordered.append(seps[i])
+    return [{"text": e["text"], "bbox": e["bbox"], "cls": e["class"],
+             "col": -1 if e["w"] >= 0.6 * page_width else _col(e)}
+            for e in ordered]
+
+
+def _flow_score(md: str, elements: list[dict], page_width: float,
+                min_units: int = 3, anchor_words: int = 6) -> dict:
+    """Fedeltà del **flusso di lettura** dell'md rispetto all'ordine naturale.
+
+    Golden Rule #1 (vedi ``REGOLE-TEST.md``): unità = blocchi di prosa in
+    ordine geometrico colonna-major. Per ogni unità si cercano **tutte** le
+    occorrenze a parola intera delle sue prime parole nell'md, poi si assegna
+    in modo **greedy crescente** (ogni unità prende la prima occorrenza dopo la
+    precedente): il massimo numero di unità collocabili in ordine. Il punteggio
+    è ``assegnate / unità_trovate``: ``1.0`` = flusso perfetto, basso =
+    colonne/righe intrecciate.
+
+    Restituisce ``{flow, n, found, lis, transitions, seq}``.
+    """
+    units = _reference_units(elements, page_width)
+    n_units = len(units)
+    if n_units < min_units:
+        return {"flow": 1.0, "n": n_units, "found": 0, "lis": n_units,
+                "transitions": 0, "seq": []}
+    # Guard: il flow si applica solo a layout a 2+ colonne con **prosa reale**
+    # (>=2 blocchi `text` per colonna). Evita i falsi positivi su pagine
+    # figura/sidebar, dove i "lati" non sono colonne di prosa.
+    col_text: dict[int, int] = {}
+    for u in units:
+        if u["col"] >= 0 and u["cls"] == "text":
+            col_text[u["col"]] = col_text.get(u["col"], 0) + 1
+    cols_present = {u["col"] for u in units if u["col"] >= 0}
+    if len(cols_present) >= 2 and any(
+            col_text.get(c, 0) < 2 for c in cols_present):
+        return {"flow": 1.0, "n": n_units, "found": 0, "lis": n_units,
+                "transitions": 0, "seq": []}
+    M = " " + _norm(md) + " "
+    occ_list: list[list[int]] = []
+    for u in units:
+        words = _norm(_strip_images(u["text"])).split()
+        anchor = " ".join(words[:anchor_words])
+        occ: list[int] = []
+        if len(anchor) >= 12:
+            pat = " " + anchor + " "
+            start = 0
+            while True:
+                i = M.find(pat, start)
+                if i < 0:
+                    break
+                occ.append(i)
+                start = i + 1
+        occ_list.append(occ)
+    n_occ = sum(1 for o in occ_list if o)
+    if n_occ < min_units:
+        return {"flow": 1.0, "n": n_units, "found": n_occ,
+                "lis": n_occ, "transitions": 0, "seq": []}
+    last = -1
+    assigned: list[tuple[int, int, int]] = []  # (rank, pos, col)
+    for rank, occ in enumerate(occ_list):
+        cand = [p for p in occ if p > last]
+        if cand:
+            p = min(cand)
+            last = p
+            assigned.append((rank, p, units[rank]["col"]))
+    flow = len(assigned) / n_occ
+    cols = [c for _, _, c in assigned if c >= 0]
+    transitions = sum(1 for a, b in zip(cols, cols[1:]) if a != b)
+    return {"flow": round(flow, 4), "n": n_units, "found": n_occ,
+            "lis": len(assigned), "transitions": transitions,
+            "seq": [(r, c, " ".join(units[r]["text"].split())[:40])
+                    for r, _, c in assigned]}
+
+
 def _last_block_height(text_edit) -> float:
     from PyQt6.QtGui import QTextCursor
 
