@@ -28,11 +28,29 @@ Conseguenze operative:
 
 | parametro | valore | significato |
 |---|---|---|
-| `FLOW_MIN` | **0,95** | sotto questa soglia la pagina è difettosa per ordine |
+| `FLOW_MIN` | **0,95** | soglia **diagnostica** del flusso (LIS su blocchi) |
+| `INT_MAX` | **0** | **criterio di bocciatura**: inversioni ammesse (nessuna) |
+| `UNASSIGNED_MAX` | **0** | unità di prosa non collocabili in ordine crescente |
 | unità di riferimento | blocchi di prosa | ordine geometrico colonna-major |
 | punteggio | **LIS / n** | frazione di unità nella più lunga sottosequenza in ordine corretto (1,0 = perfetto) |
 | pagine a 1 colonna | `flow = 1,0` | non applicabile |
 | pagine con < 3 unità | `flow = 1,0` | non applicabile |
+
+### Ordine stringente (rafforzamento 2026-10-07)
+
+Il criterio primario **non è una soglia** ma **zero intrecci**: l'md deve
+riprodurre l'ordine naturale **parola per parola e riga dopo riga**.
+
+| criterio | misura | soglia |
+|---|---|---|
+| intreccio (inversioni) | coppie di unità con ancora univoca fuori ordine | **0** |
+| unità fuori ordine | blocchi non collocabili in ordine crescente (greedy) | **0** |
+| contenuto mancante | `missing` a parole (≥ 4) | **0** |
+| contenuto spurio/duplicato | `extra` / duplicazioni | **0** |
+| chrome nell'md | testatine/piè di pagina/numero pagina | **0** |
+
+`FLOW_MIN = 0,95` resta come **diagnostica**; la **bocciatura** scatta con
+`inversioni > 0` **oppure** `fuori-ordine > 0`.
 
 ## Le altre regole
 
@@ -48,6 +66,32 @@ Conseguenze operative:
 - **R7 — Niente regressioni**: ogni fix validato su pagine **tenute fuori**
   dal campione bersaglio; mai sostituire automaticamente l'output
   deterministico.
+
+## Ordine stringente — regole R8–R12 (rafforzamento 2026-10-07)
+
+- **R8 — Contenuto a livello di parola**: oltre a `recall` (parole ≥ 4), si
+  misura **`content_precision`** (penalizza testo spurio/duplicato); pagine a 1
+  colonna → `1,00`. Target: `missing = 0` e `extra = 0` dopo normalizzazione
+  lessicale (sillabazione, legature, unicode).
+- **R9 — Ordine stringente**: `inversioni = 0` **e** `fuori-ordine = 0` su
+  unità di prosa in ordine geometrico colonna-major. Qualsiasi intreccio è
+  `text_order` a severità **alta**.
+- **R10 — Struttura**: tabelle cella-per-cella, figure non vuote con didascalia
+  agganciata, heading e liste integri.
+- **R11 — Pulizia dell'output**: nessun chrome nell'md, nessun blocco
+  duplicato/frammento orfano.
+- **R12 — Determinismo e regressione**: stesso input → md **byte-identico**;
+  tolleranza **0** su recall/order/flow/tables/figures rispetto alla baseline.
+
+## Protocollo di arbitrato stringente
+
+- Due run indipendenti (**G** casuale + **H** stratificato per classe) più
+  pagine **held-out**.
+- Revisione **avversariale**: si cercano attivamente i difetti e si campionano
+  **anche le pagine pulite** per scoprire i difetti **mancati**.
+- **Golden set** di pagine verificate a mano (contenuto + ordine).
+- Accettazione: **0 falsi positivi e 0 falsi negativi** del verdetto automatico
+  rispetto all'arbitrato; **0 difetti reali** su 500 pagine.
 
 ## Come si applica
 
