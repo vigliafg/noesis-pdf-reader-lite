@@ -99,3 +99,50 @@ Motivazione:
 **Raccomandazione**: continuare sulla linea `layout-order`; **non** fare il merge
 su `main` finché non si azzerano i 7 difetti reali e non si porta la metrica a
 0 FP/0 FN su due run di conferma.
+
+---
+
+# Aggiornamento post-fix (2026-10-07)
+
+Dopo il verdetto sono stati applicati fix mirati e validati con un **terzo run
+(I)** (seed `20261014`, 250 pagine nuove):
+
+## Fix applicati
+- **`b12a86e` — rilevatore colonne robusto prima della proiezione a copertura.**
+  `layout_proxies.column_splits` restituiva split **spuri** (dentro una colonna)
+  → le colonne collassavano → interleaving. Risolve **4 difetti reali**:
+  `co26 p1316` (inv 63→0), `ce24 p238` (17→0), `co26 p610` (18→0, struttura
+  recuperata), `co23 p877` (1→0).
+- **`9e5e3c1` — revert del tentativo "ordine per sotto-regione".** Ordinava bene
+  `pa19 p1274` ma rendeva il **riferimento** (misura dell'ordine) troppo
+  rumoroso (over-split su pagine a colonne omogenee → 16 flag su run I, quasi
+  tutti falsi positivi). Ripristinato lo stato pulito.
+
+## Run I (validazione, 250 pagine nuove)
+| | valore |
+|---|---|
+| flow (LIS) | **1.0000** — 0 pagine < 0.95 |
+| auto pulite | **245/250** (5 flag: 4 `text_order` + 1 `table_content`) |
+| ordini reali (arbitro) | **1** (`ne17 p261`, passi numerati di una figura) |
+| tabelle reali | 1 (`su19 p819`) |
+| falsi positivi | 3 (inversioni spurie, flow 1.00) |
+
+## Stato aggiornato
+- **Difetti di flusso (intreccio colonne): 0** su run I — la classe "split
+  spuri → colonne collassate" è **risolta**.
+- **Restano**: `pa19 p1274` / `cu25 p761` (aperture di capitolo a **layout
+  misto** 2/3 colonne) e `ne17 p261` (passi numerati di figura). La fix
+  "sotto-regione" è pronta concettualmente ma richiede un **riferimento
+  affidabile** per essere misurata senza falsi positivi.
+- **Metrica**: il rilevamento colonne del riferimento va reso coerente col
+  motore (o migliorato) per portare i falsi positivi a 0.
+
+## Verdetto aggiornato
+**Ancora NON pronto per il merge**, ma in **netto miglioramento**: 4 difetti
+reali di ordine risolti, flusso perfetto su un run nuovo. Prima del merge:
+1. ordine **per banda** per le aperture di capitolo a layout misto
+   (`pa19 p1274`, `cu25 p761`);
+2. passi numerati di figura (`ne17 p261`);
+3. riferimento a **0 falsi positivi** (rilevamento colonne coerente col motore);
+4. **2 run di conferma** con 0 difetti reali e 0 FP/0 FN.
+
