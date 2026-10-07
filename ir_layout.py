@@ -578,10 +578,15 @@ def _column_splits(elements: list[dict], page_width: float) -> list[float]:
     splits = main._detect_column_splits(boxes, page_width)
     if splits:
         return splits
-    splits = layout_proxies.column_splits(elements, page_width)
-    if splits:
-        return splits
-    return _column_splits_robust(boxes, page_width)
+    # Fallback 1: rilevatore **robusto** (tollera i blocchi a ponte, gutter
+    # stretto). È più affidabile della proiezione a copertura, che su alcune
+    # pagine restituisce split **spurii** (dentro una colonna) e fa collassare le
+    # colonne → interleaving (es. co26 p1316, ce24 p238).
+    robust = _column_splits_robust(boxes, page_width)
+    if robust:
+        return robust
+    # Fallback 2: proiezione a copertura (storico).
+    return layout_proxies.column_splits(elements, page_width)
 
 
 def _group_figure_blocks(elements: list[dict], splits: list[float],
