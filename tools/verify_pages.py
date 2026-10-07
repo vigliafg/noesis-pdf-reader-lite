@@ -48,9 +48,10 @@ def _parse_pages(spec: str) -> list[int]:
 
 
 def _norm(t: str) -> str:
+    t = t.replace("\u00ad", "")            # soft hyphen (discrezionale) → rimosso
     t = t.lower()
-    t = re.sub(r"-\s*\n\s*", "", t)
-    t = re.sub(r"-\s+(?=[a-z])", "", t)
+    t = re.sub(r"-\s*\n\s*", "", t)        # trattino a fine riga → unisce
+    t = re.sub(r"-\s*(?=[a-z])", "", t)    # trattino (con/senza spazio) prima di lettera
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", t)).strip()
 
 

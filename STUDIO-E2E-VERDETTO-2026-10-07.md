@@ -146,3 +146,50 @@ reali di ordine risolti, flusso perfetto su un run nuovo. Prima del merge:
 3. riferimento a **0 falsi positivi** (rilevamento colonne coerente col motore);
 4. **2 run di conferma** con 0 difetti reali e 0 FP/0 FN.
 
+---
+
+# Aggiornamento post-fix "ordine per banda" (2026-10-07) — run J
+
+Applicato il fix **`4ab8893` — ordine per banda** (layout misti 2/3 colonne) e
+validato con un **quarto run (J)** (seed `20261015`, 250 pagine nuove).
+
+## Fix
+- **`_band_regions`** (`ir_layout.py`): la struttura-colonna si ricava **sempre
+  dalla sola prosa** (motore e riferimento ottengono le stesse regioni). Se il
+  band ha struttura coerente (rilevatore robusto non vuoto) **non si divide**;
+  si divide **solo se il globale fallisce** (`[]`), fondendo i tratti
+  consecutivi con struttura compatibile (`_COL_TOL=12`).
+- **`_order`**: per banda usa il robusto per-banda (allineato al riferimento).
+- **`_reference_units`**: usa `_band_regions` + robusto per-banda.
+- **`_norm`**: rimosso il **soft hyphen** (U+00AD) e reso coerente il trattino
+  (`-`/`- ` prima di lettera) → risolve l'artefatto di ancoraggio.
+
+## Run J (250 pagine nuove)
+| | valore |
+|---|---|
+| **flow (LIS)** | **1.0000** — 0 pagine < 0.95 |
+| **ordine stringente** | **inversioni=0, fuori-ordine=0** su tutte le 250 pagine |
+| auto pulite | **248/250** |
+| difetti reali IR (arbitro) | **0** |
+| falsi positivi | 1 (`ha22 p3355`: pannello EEG letto come tabella) |
+| non-IR | 1 (`zenodo p4`: baseline `current` su cirillico) |
+| figure mancanti | 0 |
+
+## Stato aggiornato
+- **Difetti di flusso: 0**; **difetti di ordine stringente: 0** su run J.
+- **Risolta** la classe "aperture di capitolo a layout misto" (`pa19 p1274`,
+  `cu25 p761`, `cu25 p1290` → 0) e azzerati i falsi positivi del riferimento
+  (`fe22 p951/p2267/p2964/p1850/p1902/p4242`).
+- **Residuo noto**: `ha22 p2547` (apertura di capitolo con sidebar ACK/FURTHER
+  READING sopra il corpo) — **ambiguo** (il md è difendibile; il riferimento
+  unisce le due regioni).
+
+## Verdetto aggiornato
+**Pronto per un run di conferma.** Su 250 pagine casuali nuove: **0 difetti
+reali IR**, flow perfetto, ordine stringente 0, 0 figure mancanti. Il criterio
+"intreccio = 0" è **soddisfatto** su run J. Prima del merge su `main`:
+1. **secondo run di conferma** (0 difetti reali, 0 FP/0 FN);
+2. valutare `ha22 p2547` (ambiguo) al golden set;
+3. ridurre il FP del proxy tabelle (figura multi-pannello scambiata per tabella).
+
+
