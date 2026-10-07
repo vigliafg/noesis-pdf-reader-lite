@@ -224,6 +224,21 @@ def _checks(truth: dict, md: str, plain: str) -> dict:
     fnotes2 = [] if flow_ok else [f"ordine {flow:.2f} "
                                   f"(transizioni {flow_info['transitions']})"]
 
+    # ── ordine stringente (Golden Rule #1 rafforzata): inversioni = 0 ──
+    # REPORT MODE: registrato nel record ma non concorre ancora al verdetto
+    # (taratura a 0 FP/0 FN prima della promozione a bloccante).
+    try:
+        order_info = vp._order_report(md, truth.get("elements", []),
+                                      truth.get("page_width", 0.0))
+    except Exception:
+        order_info = {"inversions": 0, "unassigned": 0, "units": 0,
+                      "unique": 0, "found": 0, "content_recall": 1.0,
+                      "content_precision": 1.0, "missing": 0, "extra": 0}
+    order_ok = order_info["inversions"] == 0 and order_info["unassigned"] == 0
+    onotes = ([] if order_ok
+              else [f"inversioni {order_info['inversions']}, "
+                    f"fuori-ordine {order_info['unassigned']}"])
+
     checks = {
         "text": {
             "ok": text_ok, "recall_pdf": round(r_pdf, 4),
@@ -242,13 +257,23 @@ def _checks(truth: dict, md: str, plain: str) -> dict:
             "found": flow_info["found"], "transitions": flow_info["transitions"],
             "note": "; ".join(fnotes2),
         },
+        "order": {
+            "ok": order_ok, "inversions": order_info["inversions"],
+            "unassigned": order_info["unassigned"],
+            "units": order_info["units"], "unique": order_info["unique"],
+            "found": order_info["found"],
+            "content_recall": order_info["content_recall"],
+            "content_precision": order_info["content_precision"],
+            "missing": order_info["missing"], "extra": order_info["extra"],
+            "note": "; ".join(onotes),
+        },
     }
     return checks
 
 
 def _flags(checks: dict, gate: dict | None) -> list[str]:
     out: list[str] = []
-    for kind in ("text", "flow", "figures", "tables"):
+    for kind in ("text", "order", "flow", "figures", "tables"):
         c = checks.get(kind) or {}
         if not c.get("ok", True):
             out.append(f"{kind}: {c.get('note', '')}".strip().rstrip(":"))
@@ -412,7 +437,8 @@ def _make_record(pdf: str, idx: int, pipe: str, truth: dict, md: str, plain: str
     # proxy + confidenza (Fase 0.3): il gate deterministico, se c'è, è un segnale
     # forte; in via-app (gate=None) lo deduciamo dai controlli per tipo.
     if gate is None:
-        gate_ok = all(checks[k]["ok"] for k in ("text", "flow", "figures", "tables"))
+        gate_ok = all(checks[k]["ok"] for k in ("text", "order", "flow",
+                                                "figures", "tables"))
         gate_reason = ""
     else:
         gate_ok = bool(gate.get("ok", True))
@@ -437,6 +463,13 @@ def _make_record(pdf: str, idx: int, pipe: str, truth: dict, md: str, plain: str
         "order_score": round(order, 3),
         "flow_score": checks["flow"]["score"],
         "flow_transitions": checks["flow"]["transitions"],
+        "order_inversions": checks["order"]["inversions"],
+        "order_unassigned": checks["order"]["unassigned"],
+        "order_units": checks["order"]["units"],
+        "order_content_recall": checks["order"]["content_recall"],
+        "order_content_precision": checks["order"]["content_precision"],
+        "order_missing": checks["order"]["missing"],
+        "order_extra": checks["order"]["extra"],
         "checks": checks,
         "gate": gate,
         "flags": flags,
@@ -465,7 +498,7 @@ def _print_rec(rec: dict) -> None:
 # ── difetti ─────────────────────────────────────────────────────────────────
 # I flag automatici sono grossolani: mappati sulla stessa tassonomia.
 _AUTO_KIND = {"tables": "table_content", "text": "text_missing",
-              "flow": "text_order",
+              "order": "text_order", "flow": "text_order",
               "figures": "figure_missing", "gate": "other"}
 
 

@@ -319,6 +319,105 @@ def _flow_score(md: str, elements: list[dict], page_width: float,
                     for r, _, c in assigned]}
 
 
+def _page_lines_no_figures(page, elements: list[dict]) -> list[tuple]:
+    """Righe di testo della pagina in ordine geometrico **naturale**, escluse le
+    regioni che non sono prosa di flusso: figure, tabelle (valutate a parte),
+    chrome (testatine/piè/numero) e tabelle ruotate.
+
+    Restituisce ``[(bbox, testo), ...]`` in ordine colonna-major per banda.
+    """
+    import main
+
+    excl = [e["bbox"] for e in elements if e.get("class") == "picture"]
+    excl += [e["bbox"] for e in elements if e.get("class") == "table"]
+    excl += [e["bbox"] for e in elements
+             if e.get("class") in ("page-header", "page-footer", "page-number")]
+    try:
+        excl += [tuple(r) for r in main._rotated_table_rects(page, elements)]
+    except Exception:
+        pass
+
+    def _inside(b) -> bool:
+        x0, y0, x1, y1 = b
+        for px0, py0, px1, py1 in excl:
+            if x0 >= px0 - 2 and x1 <= px1 + 2 and y0 >= py0 - 2 and y1 <= py1 + 2:
+                return True
+        return False
+
+    lines: list[tuple] = []
+    for blk in page.get_text("dict").get("blocks", []):
+        if blk.get("type") != 0 or _inside(blk["bbox"]):
+            continue
+        for ln in blk["lines"]:
+            txt = "".join(s["text"] for s in ln["spans"])
+            if txt.strip():
+                lines.append((ln["bbox"], txt))
+    return lines
+
+
+def _order_report(md: str, elements: list[dict], page_width: float,
+                  anchor_words: int = 6) -> dict:
+    """**Ordine stringente** (Golden Rule #1 rafforzata) a livello di **blocco**.
+
+    Unità = blocchi di prosa in ordine geometrico colonna-major. Per ogni unità
+    si cerca la posizione nell'md:
+    - ``inversions`` = coppie di unità con **ancora univoca** fuori ordine
+      (0 = nessun intreccio);
+    - ``unassigned`` = unità non collocabili in ordine crescente (greedy), come
+      nel ``_flow_score``.
+
+    Obiettivo: **inversioni = 0 e unassigned = 0**. Include
+    ``content_recall``/``content_precision`` a parole (≥ 4).
+    """
+    units = _reference_units(elements, page_width)
+    M = " " + _norm(_strip_images(md)) + " "
+    occ_list: list[list[int]] = []
+    for u in units:
+        words = _norm(_strip_images(u["text"])).split()
+        anchor = " ".join(words[:anchor_words])
+        occ: list[int] = []
+        if len(anchor) >= 12:
+            s = 0
+            while True:
+                i = M.find(" " + anchor + " ", s)
+                if i < 0:
+                    break
+                occ.append(i)
+                s = i + 1
+        occ_list.append(occ)
+
+    unique = [(rank, occ[0]) for rank, occ in enumerate(occ_list) if len(occ) == 1]
+    inv = sum(1 for a in range(len(unique))
+              for b in range(a + 1, len(unique))
+              if unique[a][1] > unique[b][1])
+
+    last = -1
+    assigned = 0
+    n_occ = 0
+    for occ in occ_list:
+        if occ:
+            n_occ += 1
+        cand = [p for p in occ if p > last]
+        if cand:
+            last = min(cand)
+            assigned += 1
+    unassigned = n_occ - assigned
+
+    ref_words: set[str] = set()
+    for u in units:
+        ref_words |= {w for w in _norm(_strip_images(u["text"])).split()
+                      if len(w) >= 4}
+    md_words = {w for w in _norm(_strip_images(md)).split() if len(w) >= 4}
+    rec = 1.0 if not ref_words else len(ref_words & md_words) / len(ref_words)
+    prec = 1.0 if not md_words else len(ref_words & md_words) / len(md_words)
+    return {
+        "inversions": inv, "unassigned": unassigned, "units": len(units),
+        "unique": len(unique), "found": n_occ,
+        "content_recall": round(rec, 4), "content_precision": round(prec, 4),
+        "missing": len(ref_words - md_words), "extra": len(md_words - ref_words),
+    }
+
+
 def _last_block_height(text_edit) -> float:
     from PyQt6.QtGui import QTextCursor
 
