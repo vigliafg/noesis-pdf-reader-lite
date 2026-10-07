@@ -207,34 +207,66 @@ def _column_splits_robust(blocks: list[dict], page_width: float,
     return sorted(out)
 
 
+def _split_hgaps(band: list[dict], page_width: float) -> list[list[dict]]:
+    """Divide un band in sotto-regioni da un gap orizzontale a **tutta
+    larghezza** (nessun elemento lo attraversa, gap >= ~18px).
+
+    Serve ai layout misti: le colonne si rilevano **localmente** per
+    sotto-regione (box a 2 colonne sopra, ``KEY TERMS`` a 3 sotto).
+    """
+    if len(band) <= 1:
+        return [list(band)]
+    min_gap = max(18.0, 0.025 * page_width)
+    ivs = sorted((e["bbox"][1], e["bbox"][3]) for e in band)
+    merged = [list(ivs[0])]
+    for a, b in ivs[1:]:
+        if a <= merged[-1][1] + 0.5:
+            merged[-1][1] = max(merged[-1][1], b)
+        else:
+            merged.append([a, b])
+    cuts = [(merged[i][1] + merged[i + 1][0]) / 2
+            for i in range(len(merged) - 1)
+            if merged[i + 1][0] - merged[i][1] >= min_gap]
+    if not cuts:
+        return [list(band)]
+    regions: list[list[dict]] = []
+    cur: list[dict] = []
+    for e in sorted(band, key=lambda e: e["bbox"][1]):
+        while cuts and e["bbox"][1] >= cuts[0]:
+            if cur:
+                regions.append(cur)
+            cur = []
+            cuts.pop(0)
+        cur.append(e)
+    if cur:
+        regions.append(cur)
+    return regions
+
+
 def _reference_units(elements: list[dict], page_width: float) -> list[dict]:
     """Unità di prosa in **ordine naturale di lettura** (riferimento geometrico).
 
     Indipendente dall'ordine emesso dal motore: bande delimitate dai blocchi a
-    piena larghezza, poi ordine **colonna-major** (sinistra→destra,
-    alto→basso) dentro ogni banda. È l'ordine che un lettore segue davvero.
+    piena larghezza, poi ordine **colonna-major** dentro ogni banda. Ogni banda è
+    divisa in sotto-regioni da gap orizzontali a tutta larghezza, con colonne
+    rilevate **localmente** (layout misti).
     """
     prose = [e for e in elements
              if e["class"] in ("text", "section-header", "title")]
     if not prose:
         return []
-    # separatori di banda: QUALSIASI blocco a piena larghezza (testo a tutta
-    # pagina, tabelle o figure ampie) → un footnote/blocco sotto le colonne
-    # finisce nella banda giusta invece di essere letto prima della colonna
-    # destra.
     all_full = [e for e in elements
                 if e.get("w", 0) >= 0.6 * page_width]
-    full = [e for e in prose if e["w"] >= 0.6 * page_width]
     body = [e for e in prose if e["w"] < 0.6 * page_width]
-    splits = _column_splits_robust(
+    global_splits = _column_splits_robust(
         [{"x0": e["bbox"][0], "x1": e["bbox"][2],
           "y0": e["bbox"][1], "y1": e["bbox"][3]} for e in body],
         page_width,
     ) if body else []
 
-    def _col(e: dict) -> int:
+    def _gcol(e: dict) -> int:
         mid = (e["bbox"][0] + e["bbox"][2]) / 2
-        return sum(1 for s in splits if mid > s)
+        return sum(1 for s in global_splits if mid > s)
 
     seps = sorted(all_full, key=lambda e: e["bbox"][1])
     sep_y = [e["bbox"][1] for e in seps]
@@ -244,10 +276,31 @@ def _reference_units(elements: list[dict], page_width: float) -> list[dict]:
         bands[band].append(e)
     ordered: list[dict] = []
     for b in bands:
-        b.sort(key=lambda e: (_col(e), e["bbox"][1], e["bbox"][0]))
-        ordered.extend(b)
+        regions = _split_hgaps(b, page_width)
+        if len(regions) > 1:
+            counts = {
+                len(_column_splits_robust(
+                    [{"x0": e["bbox"][0], "x1": e["bbox"][2],
+                      "y0": e["bbox"][1], "y1": e["bbox"][3]} for e in r],
+                    page_width)) for r in regions
+            }
+            if len(counts) == 1:
+                regions = [b]
+        for region in regions:
+            splits = _column_splits_robust(
+                [{"x0": e["bbox"][0], "x1": e["bbox"][2],
+                  "y0": e["bbox"][1], "y1": e["bbox"][3]} for e in region],
+                page_width,
+            ) if region else []
+
+            def _col(e: dict, _s: list[float] = splits) -> int:
+                mid = (e["bbox"][0] + e["bbox"][2]) / 2
+                return sum(1 for s in _s if mid > s)
+
+            ordered.extend(sorted(
+                region, key=lambda e: (_col(e), e["bbox"][1], e["bbox"][0])))
     return [{"text": e["text"], "bbox": e["bbox"], "cls": e["class"],
-             "col": -1 if e["w"] >= 0.6 * page_width else _col(e)}
+             "col": -1 if e["w"] >= 0.6 * page_width else _gcol(e)}
             for e in ordered]
 
 

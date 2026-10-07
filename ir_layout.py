@@ -723,23 +723,61 @@ def _separated_by_split(a: dict, b: dict, splits: list[float]) -> bool:
     return any(ax1 <= s <= bx0 or bx1 <= s <= ax0 for s in splits)
 
 
+def _split_band_hgaps(band: list[dict], page_width: float) -> list[list[dict]]:
+    """Divide un band in **sotto-regioni** separate da un gap orizzontale a
+    tutta larghezza (nessun elemento lo attraversa).
+
+    Serve ai layout **misti** (es. box a 2 colonne sopra, ``KEY TERMS`` a 3
+    colonne sotto): dentro ogni sotto-regione le colonne si rilevano
+    **localmente**, così l'ordine è corretto invece di applicare splits globali.
+    Il gap deve essere ampio (>= ~18px) e **senza elementi che lo attraversano**,
+    quindi su una normale pagina a 2 colonne (colonne sfasate) non scatta.
+    """
+    if len(band) <= 1:
+        return [list(band)]
+    min_gap = max(18.0, 0.025 * page_width)
+    ivs = sorted((e["y0"], e["bbox"][3]) for e in band)
+    merged = [list(ivs[0])]
+    for a, b in ivs[1:]:
+        if a <= merged[-1][1] + 0.5:
+            merged[-1][1] = max(merged[-1][1], b)
+        else:
+            merged.append([a, b])
+    cuts = [(merged[i][1] + merged[i + 1][0]) / 2
+            for i in range(len(merged) - 1)
+            if merged[i + 1][0] - merged[i][1] >= min_gap]
+    if not cuts:
+        return [list(band)]
+    regions: list[list[dict]] = []
+    cur: list[dict] = []
+    for e in sorted(band, key=lambda e: e["y0"]):
+        while cuts and e["y0"] >= cuts[0]:
+            if cur:
+                regions.append(cur)
+            cur = []
+            cuts.pop(0)
+        cur.append(e)
+    if cur:
+        regions.append(cur)
+    return regions
+
+
 def _order(elements: list[dict], page_width: float) -> list[list[dict]]:
     """Restituisce gli elementi divisi in bande (lista di liste), in ordine.
 
     Una banda è delimitata dagli elementi a **tutta larghezza**; dentro la banda
     l'ordine è: colonna per colonna (sinistra→destra), top→bottom. Gli elementi
     a tutta larghezza sono separatori (banda a sé, emessi al loro posto).
+
+    Ogni banda è inoltre divisa in **sotto-regioni** da gap orizzontali a tutta
+    larghezza, e le colonne si rilevano **localmente** per sotto-regione: così i
+    layout misti (2 colonne sopra, 3 sotto) sono ordinati correttamente.
     """
     full = [e for e in elements if e["w"] >= 0.6 * page_width]
     body = [e for e in elements if e["w"] < 0.6 * page_width]
 
-    splits = _column_splits(body, page_width)
-
-    def col(e: dict) -> int:
-        mid = (e["bbox"][0] + e["bbox"][2]) / 2
-        return sum(1 for s in splits if mid > s)
-
-    ncol = len(splits) + 1
+    global_splits = _column_splits(body, page_width)
+    ncol = len(global_splits) + 1
 
     # bande: indice = numero di separatori con y0 <= elemento.y0
     seps = sorted(full, key=lambda e: e["y0"])
@@ -749,9 +787,30 @@ def _order(elements: list[dict], page_width: float) -> list[list[dict]]:
     for e in body:
         band = sum(1 for y in sep_y if e["y0"] >= y)
         bands[band].append(e)
+
+    out: list[list[dict]] = []
     for b in bands:
-        b.sort(key=lambda e: (col(e), e["y0"], e["bbox"][0]))
-    return bands, seps, ncol
+        regions = _split_band_hgaps(b, page_width)
+        if len(regions) > 1:
+            # dividi SOLO se le sotto-regioni hanno un numero di colonne
+            # diverso (layout misto). Se la struttura è omogenea, il gap è solo
+            # un salto tra paragrafi di una normale pagina a colonne → nessuno
+            # split (evita di interlacciare le colonne).
+            counts = {len(_column_splits(r, page_width)) for r in regions}
+            if len(counts) == 1:
+                regions = [b]
+        ordered_b: list[dict] = []
+        for region in regions:
+            splits = _column_splits(region, page_width)
+
+            def col(e: dict, _s: list[float] = splits) -> int:
+                mid = (e["bbox"][0] + e["bbox"][2]) / 2
+                return sum(1 for s in _s if mid > s)
+
+            ordered_b.extend(
+                sorted(region, key=lambda e: (col(e), e["y0"], e["bbox"][0])))
+        out.append(ordered_b)
+    return out, seps, ncol
 
 
 def reorder_boxes(elements: list[dict], page_width: float) -> list[dict]:
