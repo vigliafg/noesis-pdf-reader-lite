@@ -723,23 +723,122 @@ def _separated_by_split(a: dict, b: dict, splits: list[float]) -> bool:
     return any(ax1 <= s <= bx0 or bx1 <= s <= ax0 for s in splits)
 
 
+_COL_TOL = 12.0
+
+
+def _prose_boxes(elements: list[dict]) -> list[dict]:
+    """Box dei soli blocchi di **prosa** (le colonne si definiscono sul testo)."""
+    return [{"x0": e["bbox"][0], "x1": e["bbox"][2],
+             "y0": e["bbox"][1], "y1": e["bbox"][3]}
+            for e in elements
+            if e["class"] in ("text", "section-header", "title")]
+
+
+def _compatible_splits(a: list[float], b: list[float]) -> bool:
+    """True se due strutture-colonna sono **la stessa**: stesso numero di colonne
+    e confini entro ``_COL_TOL`` (assorbe il rumore di 1–2px)."""
+    if len(a) != len(b):
+        return False
+    return all(abs(x - y) <= _COL_TOL for x, y in zip(a, b))
+
+
+def _split_band_hgaps(band: list[dict], page_width: float,
+                      min_gap: float | None = None) -> list[list[dict]]:
+    """Divide un band nei tratti separati da un gap orizzontale a **tutta
+    larghezza** (nessun elemento lo attraversa, gap >= ``min_gap``)."""
+    if len(band) <= 1:
+        return [list(band)]
+    if min_gap is None:
+        min_gap = max(18.0, 0.025 * page_width)
+    ivs = sorted((e["y0"], e["bbox"][3]) for e in band)
+    merged = [list(ivs[0])]
+    for a, b in ivs[1:]:
+        if a <= merged[-1][1] + 0.5:
+            merged[-1][1] = max(merged[-1][1], b)
+        else:
+            merged.append([a, b])
+    cuts = [(merged[i][1] + merged[i + 1][0]) / 2
+            for i in range(len(merged) - 1)
+            if merged[i + 1][0] - merged[i][1] >= min_gap]
+    if not cuts:
+        return [list(band)]
+    regions: list[list[dict]] = []
+    cur: list[dict] = []
+    for e in sorted(band, key=lambda e: e["y0"]):
+        while cuts and e["y0"] >= cuts[0]:
+            if cur:
+                regions.append(cur)
+            cur = []
+            cuts.pop(0)
+        cur.append(e)
+    if cur:
+        regions.append(cur)
+    return regions
+
+
+def _band_regions(band: list[dict], page_width: float) -> list[list[dict]]:
+    """Sotto-regioni del band con struttura-colonna **omogenea**.
+
+    La struttura si ricava **sempre dalla sola prosa** (le colonne si definiscono
+    sul testo): così motore e riferimento (che passa il band di sola prosa)
+    ottengono le **stesse** regioni. Se il band ha già una struttura coerente
+    (il rilevatore globale trova le colonne), NON si divide: è una pagina a
+    colonne omogenee con semplici salti tra sezioni (es. Ferri a 3 colonne). Si
+    divide solo quando il rilevatore globale **fallisce** (``[]``): lì la
+    struttura è **mista** (2 colonne sopra, 3 sotto) e va risolta localmente,
+    fondendo i tratti consecutivi con struttura compatibile.
+    """
+    prose = [e for e in band
+             if e["class"] in ("text", "section-header", "title")]
+    if len(prose) <= 1 or _column_splits_robust(_prose_boxes(prose), page_width):
+        return [list(band)]
+    regs = _split_band_hgaps(prose, page_width)
+    if len(regs) <= 1:
+        return [list(band)]
+    merged: list[list[dict]] = [regs[0]]
+    for r in regs[1:]:
+        a = _column_splits_robust(_prose_boxes(merged[-1]), page_width)
+        b = _column_splits_robust(_prose_boxes(r), page_width)
+        if _compatible_splits(a, b):
+            merged[-1] = merged[-1] + r
+        else:
+            merged.append(r)
+    if len(merged) <= 1:
+        return [list(band)]
+    # confini y tra le sotto-regioni (a metà del gap) e assegnazione di TUTTI
+    # gli elementi del band (prosa e non) alla sotto-regione giusta.
+    bounds = [(max(e["bbox"][3] for e in merged[i])
+               + min(e["y0"] for e in merged[i + 1])) / 2
+              for i in range(len(merged) - 1)]
+    out: list[list[dict]] = [[] for _ in merged]
+    for e in band:
+        i = 0
+        while i < len(bounds) and e["y0"] >= bounds[i]:
+            i += 1
+        out[i].append(e)
+    return out
+
+
 def _order(elements: list[dict], page_width: float) -> list[list[dict]]:
     """Restituisce gli elementi divisi in bande (lista di liste), in ordine.
 
     Una banda è delimitata dagli elementi a **tutta larghezza**; dentro la banda
     l'ordine è: colonna per colonna (sinistra→destra), top→bottom. Gli elementi
     a tutta larghezza sono separatori (banda a sé, emessi al loro posto).
+
+    I **layout misti** (2 colonne sopra, 3 sotto nella stessa banda) sono gestiti
+    dividendo la banda in sotto-regioni a struttura omogenea, con colonne rilevate
+    **localmente** (vedi ``_band_regions``).
     """
     full = [e for e in elements if e["w"] >= 0.6 * page_width]
     body = [e for e in elements if e["w"] < 0.6 * page_width]
 
-    splits = _column_splits(body, page_width)
+    global_splits = _column_splits(body, page_width)
+    ncol = len(global_splits) + 1
 
-    def col(e: dict) -> int:
+    def col_with(e: dict, splits: list[float]) -> int:
         mid = (e["bbox"][0] + e["bbox"][2]) / 2
         return sum(1 for s in splits if mid > s)
-
-    ncol = len(splits) + 1
 
     # bande: indice = numero di separatori con y0 <= elemento.y0
     seps = sorted(full, key=lambda e: e["y0"])
@@ -749,9 +848,27 @@ def _order(elements: list[dict], page_width: float) -> list[list[dict]]:
     for e in body:
         band = sum(1 for y in sep_y if e["y0"] >= y)
         bands[band].append(e)
+
+    out: list[list[dict]] = []
     for b in bands:
-        b.sort(key=lambda e: (col(e), e["y0"], e["bbox"][0]))
-    return bands, seps, ncol
+        regions = _band_regions(b, page_width)
+        if len(regions) <= 1:
+            # Stesso rilevatore del riferimento (robusto), così motore e metro
+            # non divergono; fallback ai globali se il robusto non trova colonne.
+            splits = (_column_splits_robust(_prose_boxes(b), page_width)
+                      or global_splits)
+            b.sort(key=lambda e: (col_with(e, splits),
+                                  e["y0"], e["bbox"][0]))
+            out.append(b)
+            continue
+        ordered_b: list[dict] = []
+        for region in regions:
+            splits = _column_splits_robust(_prose_boxes(region), page_width)
+            ordered_b.extend(sorted(
+                region, key=lambda e: (col_with(e, splits),
+                                       e["y0"], e["bbox"][0])))
+        out.append(ordered_b)
+    return out, seps, ncol
 
 
 def reorder_boxes(elements: list[dict], page_width: float) -> list[dict]:

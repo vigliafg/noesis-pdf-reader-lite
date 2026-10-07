@@ -224,17 +224,18 @@ def _reference_units(elements: list[dict], page_width: float) -> list[dict]:
     # destra.
     all_full = [e for e in elements
                 if e.get("w", 0) >= 0.6 * page_width]
-    full = [e for e in prose if e["w"] >= 0.6 * page_width]
     body = [e for e in prose if e["w"] < 0.6 * page_width]
-    splits = _column_splits_robust(
+    global_splits = _column_splits_robust(
         [{"x0": e["bbox"][0], "x1": e["bbox"][2],
           "y0": e["bbox"][1], "y1": e["bbox"][3]} for e in body],
         page_width,
     ) if body else []
 
-    def _col(e: dict) -> int:
+    def _col(e: dict, splits: list[float]) -> int:
         mid = (e["bbox"][0] + e["bbox"][2]) / 2
         return sum(1 for s in splits if mid > s)
+
+    import ir_layout
 
     seps = sorted(all_full, key=lambda e: e["bbox"][1])
     sep_y = [e["bbox"][1] for e in seps]
@@ -244,10 +245,28 @@ def _reference_units(elements: list[dict], page_width: float) -> list[dict]:
         bands[band].append(e)
     ordered: list[dict] = []
     for b in bands:
-        b.sort(key=lambda e: (_col(e), e["bbox"][1], e["bbox"][0]))
-        ordered.extend(b)
+        regions = ir_layout._band_regions(b, page_width)
+        if len(regions) <= 1:
+            splits = (_column_splits_robust(
+                [{"x0": e["bbox"][0], "x1": e["bbox"][2],
+                  "y0": e["bbox"][1], "y1": e["bbox"][3]} for e in b],
+                page_width) or global_splits)
+            b.sort(key=lambda e: (_col(e, splits),
+                                  e["bbox"][1], e["bbox"][0]))
+            ordered.extend(b)
+            continue
+        for region in regions:
+            splits = _column_splits_robust(
+                [{"x0": e["bbox"][0], "x1": e["bbox"][2],
+                  "y0": e["bbox"][1], "y1": e["bbox"][3]} for e in region],
+                page_width,
+            )
+            ordered.extend(sorted(
+                region, key=lambda e: (_col(e, splits),
+                                       e["bbox"][1], e["bbox"][0])))
     return [{"text": e["text"], "bbox": e["bbox"], "cls": e["class"],
-             "col": -1 if e["w"] >= 0.6 * page_width else _col(e)}
+             "col": -1 if e["w"] >= 0.6 * page_width
+             else _col(e, global_splits)}
             for e in ordered]
 
 
