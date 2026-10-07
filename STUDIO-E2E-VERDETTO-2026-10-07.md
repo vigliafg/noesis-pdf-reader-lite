@@ -192,4 +192,46 @@ reali IR**, flow perfetto, ordine stringente 0, 0 figure mancanti. Il criterio
 2. valutare `ha22 p2547` (ambiguo) al golden set;
 3. ridurre il FP del proxy tabelle (figura multi-pannello scambiata per tabella).
 
+---
+
+# Run K — secondo run di conferma (2026-10-07)
+
+Campione **nuovo** (seed `20261016`), 250 pagine, `--mode auto --via-app`.
+Motore invariato rispetto a J; harness dopo `b690160` (`_norm` soft hyphen).
+
+## Auto vs arbitrato
+
+| | valore |
+|---|---|
+| auto pulite | 247/250 (3 flag) |
+| **difetti reali IR (arbitro)** | **0** |
+| falsi positivi | 2 (`co23 p32` flow/order, `mw15 p261` text) |
+| non riproducibile | 1 (`biorxiv … p35` figure) |
+
+Verifica di copertura (250 pagine, confronto md run ↔ IR di HEAD):
+**245/250 = IR**, 4 = `current` (di cui **2 misattribuite** a `ir`), 1 anomalo.
+
+- `co23 p32`: l'md del run è **byte-identico a `current`** (misattribuzione);
+  l'IR di HEAD dà flow `1.00`, inversioni `0` → **FP**.
+- `mw15 p261`: 6 parole "perse" = 4 di **testatina** (chrome non escluso per
+  tolleranza bbox) + 2 artefatti di **normalizzazione trattino** → **FP**.
+- `biorxiv … p35`: IR di HEAD **incorpora la figura** (`fig 1/1`); l'output del
+  run è anomalo → **non riproducibile**.
+
+## Difetti di harness/app emersi
+
+1. `tools/e2e.py::_engine_used` **ri-deriva** la pipeline invece di osservarla
+   → misattribuzioni `ir`/`current`.
+2. `main.ExtractThread` **fallback silenzioso** a `current` (senza segnalarlo).
+3. `main._page_text_no_figures`: tolleranza bbox chrome troppo stretta.
+4. `tools/verify_pages.py::_norm`: trattini composti/spaziati non riconciliati.
+
+## Verdetto run K
+**Motore IR: 0 difetti reali su 250 pagine** (J + K = **500 pagine** senza
+difetti riproducibili; contenuto + flusso soddisfatti). Il verdetto automatico
+**non è ancora un gate a 0 FP/0 FN**: 2 FP di metrica e 2 misattribuzioni di
+pipeline. Prima del merge: correggere attribuzione/fallback e i due FP di
+metrica, poi ri-eseguire un run di conferma pulito. Studio
+`STUDIO-E2E-250k-2026-10-07.md`.
+
 
