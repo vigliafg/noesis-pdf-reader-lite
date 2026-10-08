@@ -304,15 +304,21 @@ def _render_plain(panel, md: str) -> str:
     return panel.toPlainText() or ""
 
 
-def _engine_used(pdf: str, idx: int, figures_dir) -> tuple[str, bool]:
+def _engine_used(pdf: str, idx: int, figures_dir,
+                 observed: str | None = None) -> tuple[str, bool]:
     """Quale pipeline ha prodotto il testo finale nell'app: ``ir`` o ``current``.
 
-    L'``ExtractThread`` non espone la pipeline usata (l'etichetta è ``"auto"`` in
-    entrambi i casi). La ricaviamo in modo **deterministico** con la stessa
-    decisione dell'app (``main._select_page_output``: gate + chooser IR/current).
+    L'attribuzione primaria è **osservata** (``observed``), cioè la pipeline che
+    l'``ExtractThread`` dichiara di aver usato (memorizzata nel record finalizzato
+    della cache insieme al testo): così un eventuale fallback a ``current`` non
+    viene mai spacciato per IR. Solo in mancanza dell'osservazione si ricade
+    sulla **ri-derivazione** deterministica (``main._select_page_output``), usata
+    dai test e dal percorso diretto.
     """
     import main
 
+    if observed in ("ir", "current"):
+        return observed, observed == "ir"
     try:
         _text, engine, _raw = main._select_page_output(
             pdf, idx, figures_dir=figures_dir)
@@ -348,12 +354,18 @@ def _run_via_app(pdf: str, pages: list[int], pipelines: list[str], out: Path,
                     time.sleep(0.02)
                 qapp.processEvents()
                 cached = win._final_text_cache.get(key)
-                text, label, elapsed = cached if cached else ("", "", 0.0)
+                if cached:
+                    text, label, elapsed = cached[0], cached[1], cached[2]
+                    # pipeline **osservata** (4° campo, revisione ≥ 2)
+                    observed = cached[3] if len(cached) >= 4 else None
+                else:
+                    text, label, elapsed, observed = "", "", 0.0, None
                 body = getattr(win.text_panel, "_page_body", "") or ""
                 plain = win.text_panel.origin_panel.toPlainText() or ""
                 png = win.text_panel.origin_panel.grab()
                 # attribuzione: quale pipeline ha davvero prodotto il testo
-                engine, _gate_ok = _engine_used(pdf, idx, win._get_images_dir())
+                engine, _gate_ok = _engine_used(
+                    pdf, idx, win._get_images_dir(), observed=observed)
                 rec = _make_record(
                     pdf, idx, pipe, truth[idx], body, plain,
                     secs=round(elapsed or (time.perf_counter() - t0), 2),

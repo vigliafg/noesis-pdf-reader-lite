@@ -1029,6 +1029,12 @@ def _rotated_table_rects(page, elements: list[dict]) -> list[tuple]:
     return []
 
 
+#: Tolleranza bbox (pt) per riconoscere un blocco di pagina come **chrome**
+#: (testatina/piè di pagina/numero). Più ampia di quella delle figure: il
+#: blocco eccede di qualche punto il bbox dell'elemento e va comunque escluso.
+_CHROME_BBOX_SLACK = 6.0
+
+
 def _page_text_no_figures(page, elements: list[dict],
                           exclude_chrome: bool = False) -> str:
     """Testo della pagina escludendo le regioni ``picture`` (rese nell'immagine).
@@ -1039,22 +1045,34 @@ def _page_text_no_figures(page, elements: list[dict],
     """
     pics = [e["bbox"] for e in elements if e.get("class") == "picture"]
     pics += _rotated_table_rects(page, elements)
+    chrome: list[tuple] = []
     if exclude_chrome:
-        pics += [e["bbox"] for e in elements
-                 if e.get("class") in ("page-header", "page-footer",
-                                       "page-number")]
+        chrome = [e["bbox"] for e in elements
+                  if e.get("class") in ("page-header", "page-footer",
+                                        "page-number")]
 
-    def _inside(b) -> bool:
+    def _inside(b, rects, slack: float) -> bool:
         x0, y0, x1, y1 = b["bbox"]
-        for px0, py0, px1, py1 in pics:
-            if x0 >= px0 - 2 and x1 <= px1 + 2 and y0 >= py0 - 2 and y1 <= py1 + 2:
+        for px0, py0, px1, py1 in rects:
+            if (x0 >= px0 - slack and x1 <= px1 + slack
+                    and y0 >= py0 - slack and y1 <= py1 + slack):
                 return True
         return False
 
     parts: list[str] = []
     try:
         for blk in page.get_text("dict").get("blocks", []):
-            if blk.get("type") != 0 or _inside(blk):
+            if blk.get("type") != 0:
+                continue
+            # figure/tabelle ruotate: la tolleranza resta stretta (2 pt), così
+            # non si esclude prosa adiacente alla figura.
+            if _inside(blk, pics, 2):
+                continue
+            # chrome (testatine/piè/numero pagina): tolleranza più ampia. Il
+            # blocco di pagina eccede spesso di qualche punto il bbox
+            # dell'elemento (es. `mw15 p261`: blocco a y0≈20.5 vs header a 23),
+            # e va comunque riconosciuto come chrome (R5: non è contenuto).
+            if chrome and _inside(blk, chrome, _CHROME_BBOX_SLACK):
                 continue
             for ln in blk["lines"]:
                 parts.append("".join(s["text"] for s in ln["spans"]))
@@ -1971,7 +1989,9 @@ def _setup_bundled_tesseract() -> None:
 #: ogni volta che un fix cambia il markdown finale: al load i "final" salvati con
 #: una revisione diversa vengono **scartati** (i "raw" restano), così l'engine
 #: rigira da solo e l'utente non rivede output vecchi dopo un aggiornamento.
-_CACHE_REVISION = 1
+#: La revisione 2 aggiunge la **pipeline reale** (`ir`/`current`) al record
+#: finalizzato: i "final" di revisione 1 non la contengono e vengono scartati.
+_CACHE_REVISION = 2
 
 
 def _extract_pymupdf4llm(
@@ -3292,8 +3312,8 @@ class ExtractThread(QThread):
     whole pipeline runs here and the GUI thread only displays the result.
     """
 
-    result_ready = pyqtSignal(int, int, str, str, str, float)
-    # generation, page_num, text, label, raw, elapsed
+    result_ready = pyqtSignal(int, int, str, str, str, float, str)
+    # generation, page_num, text, label, raw, elapsed, engine
 
     def __init__(
         self,
@@ -3315,25 +3335,39 @@ class ExtractThread(QThread):
         self._include = include
         self._raw = raw
         self._figures_dir = figures_dir
+        # Pipeline che ha prodotto il testo finale ("ir"|"current") e flag di
+        # fallback: valorizzati in ``run`` e osservabili dall'esterno.
+        self.engine = "current"
+        self.fallback = False
 
     def run(self):
         t0 = time.perf_counter()
         raw = self._raw  # dalla cache, se c'è (None altrimenti)
         text, label = "", ""
+        # Pipeline che ha **davvero** prodotto il testo ("ir" o "current").
+        # Non è mai silenziosa: va registrata nel record/cache, così l'harness
+        # può osservarla senza ri-derivarla (attribuzione corretta) e un
+        # eventuale fallback resta visibile (R12/determinismo).
+        engine = "current"
+        self.fallback = False
         # Pipeline IR (content map), solo senza zone manuali (che richiedono il
         # motore "current"). Guardia anti-body=0: se IR non produce testo, ricade
         # sulla pipeline attuale (es. pagine quasi vuote). Una **sola** passata:
         # IR restituisce anche il "raw" da mettere in cache.
         if _pipeline_mode() == "ir" and not self._include and not self._exclude:
             try:
-                sel_text, _engine, ir_raw = _select_page_output(
+                sel_text, sel_engine, ir_raw = _select_page_output(
                     self._path, self._page_num, self._figures_dir)
                 if raw is None:
                     raw = ir_raw  # riusa la stessa passata anche in fallback
                 if sel_text and _norm_text(sel_text).strip():
                     text, label = sel_text, "auto"
+                    engine = sel_engine  # "ir" oppure "current" (chooser)
             except Exception:
-                text = ""
+                # Fallback da IR a `current` per eccezione: **segnalato** (non
+                # silenzioso), così l'attribuzione e il determinismo restano
+                # verificabili dall'harness.
+                text, self.fallback = "", True
         if not text:
             if raw is None:
                 raw = _extract_pymupdf4llm(
@@ -3344,9 +3378,11 @@ class ExtractThread(QThread):
                 exclude=self._exclude, include=self._include,
                 figures_dir=self._figures_dir,
             )
+            engine = "current"
+        self.engine = engine
         elapsed = time.perf_counter() - t0
         self.result_ready.emit(
-            self._generation, self._page_num, text, label, raw, elapsed
+            self._generation, self._page_num, text, label, raw, elapsed, engine
         )
 
 
@@ -5096,7 +5132,7 @@ class MainWindow(QMainWindow):
         key = (page_num, ocr_lang, self._zones_key(page_num))
         cached = self._final_text_cache.get(key)
         if cached is not None:
-            text, label, elapsed = cached
+            text, label, elapsed = cached[0], cached[1], cached[2]
             self._last_result = (text, label, elapsed)
             self._last_elapsed = elapsed
             self._display_last_result()
@@ -5143,14 +5179,17 @@ class MainWindow(QMainWindow):
         label: str,
         raw: str,
         elapsed: float,
+        engine: str = "ir",
     ):
         """Slot: background pipeline finished (stale results are ignored)."""
         if generation != self._extract_generation:
             return
         ocr_lang = _tess_lang_code(get_source_lang())
         self._extraction_cache[(page_num, ocr_lang)] = raw
+        # La pipeline realmente usata (`ir`/`current`) è parte del record
+        # finalizzato: l'harness la **osserva** da qui (non la ri-deriva).
         self._final_text_cache[(page_num, ocr_lang, self._zones_key(page_num))] = (
-            text, label, elapsed,
+            text, label, elapsed, engine,
         )
         self._save_extraction_cache()
         if page_num == self._current_page:
@@ -5279,12 +5318,14 @@ class MainWindow(QMainWindow):
                     if (
                         finals_ok
                         and isinstance(final, (list, tuple))
-                        and len(final) == 3
+                        and len(final) >= 3
                         and isinstance(final[0], str)
                     ):
-                        # il "final" persistito è il caso auto (nessuna zona)
+                        # il "final" persistito è il caso auto (nessuna zona).
+                        # Revisione ≥ 2: 4° campo = pipeline reale (ir|current).
+                        engine = str(final[3]) if len(final) >= 4 else "ir"
                         self._final_text_cache[(page, lang, "()")] = (
-                            final[0], final[1], float(final[2]),
+                            final[0], final[1], float(final[2]), engine,
                         )
 
     def _save_extraction_cache(self):
@@ -5296,7 +5337,8 @@ class MainWindow(QMainWindow):
             entry: dict[str, object] = {"raw": raw}
             final = self._final_text_cache.get((page, lang, "()"))
             if final is not None:
-                entry["final"] = [final[0], final[1], final[2]]
+                # 4° campo: pipeline reale (ir|current), se nota.
+                entry["final"] = list(final[:4])
             pages.setdefault(str(page), {})[lang] = entry
         payload = {
             "revision": _CACHE_REVISION,

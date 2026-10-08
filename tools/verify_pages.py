@@ -51,8 +51,17 @@ def _norm(t: str) -> str:
     t = t.replace("\u00ad", "")            # soft hyphen (discrezionale) → rimosso
     t = t.lower()
     t = re.sub(r"-\s*\n\s*", "", t)        # trattino a fine riga → unisce
-    t = re.sub(r"-\s*(?=[a-z])", "", t)    # trattino (con/senza spazio) prima di lettera
+    # Trattino **composto** tra due lettere, con o senza spazi **orizzontali**:
+    # unisce (`new - onset` ↔ `New-onset`, `long-term` ↔ `long- term`). Solo
+    # spazi/tab (non newline): un trattino a inizio riga (es. un elenco "- voce")
+    # non deve fondersi con l'ultima parola della riga precedente.
+    t = re.sub(r"(?<=[a-z])[ \t]*-[ \t]*(?=[a-z])", "", t)
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", t)).strip()
+
+
+#: Tolleranza bbox (pt) per riconoscere un blocco come **chrome** (testatina/
+#: piè/numero): più ampia di quella delle figure (il blocco eccede il bbox).
+_CHROME_BBOX_SLACK = 6.0
 
 
 def _strip_images(t: str) -> str:
@@ -68,20 +77,24 @@ def _page_text_no_figures(page, elements: list[dict],
     pagina/numero pagina: chrome, non contenuto.
     """
     pics = [e["bbox"] for e in elements if e["class"] == "picture"]
+    chrome: list[tuple] = []
     if exclude_chrome:
-        pics += [e["bbox"] for e in elements
-                 if e["class"] in ("page-header", "page-footer", "page-number")]
+        chrome = [e["bbox"] for e in elements
+                  if e["class"] in ("page-header", "page-footer", "page-number")]
 
-    def _inside(b) -> bool:
+    def _inside(b, rects, slack: float) -> bool:
         x0, y0, x1, y1 = b["bbox"]
-        for px0, py0, px1, py1 in pics:
-            if x0 >= px0 - 2 and x1 <= px1 + 2 and y0 >= py0 - 2 and y1 <= py1 + 2:
+        for px0, py0, px1, py1 in rects:
+            if (x0 >= px0 - slack and x1 <= px1 + slack
+                    and y0 >= py0 - slack and y1 <= py1 + slack):
                 return True
         return False
 
     parts: list[str] = []
     for blk in page.get_text("dict").get("blocks", []):
-        if blk.get("type") != 0 or _inside(blk):
+        if blk.get("type") != 0 or _inside(blk, pics, 2):
+            continue
+        if chrome and _inside(blk, chrome, _CHROME_BBOX_SLACK):
             continue
         for ln in blk["lines"]:
             parts.append("".join(s["text"] for s in ln["spans"]))
