@@ -2324,6 +2324,46 @@ def _cosmetic_ir(md: str) -> str:
     return md
 
 
+def _page_alpha_tokens(page) -> set[str]:
+    """Token alfabetici della pagina (lowercased), da ``get_text("text")``.
+
+    Letto sulla pagina **pristina** (prima dell'OCR). ``text`` unisce gli span
+    adiacenti, quindi ricostruisce le parole intere (es. ``Esophageal`` anche
+    quando l'iniziale è in grassetto) — al contrario di ``get_text("words")``.
+    """
+    toks: set[str] = set()
+    try:
+        for t in re.findall(r"[A-Za-z]+", page.get_text("text") or ""):
+            if len(t) >= 2:
+                toks.add(t.lower())
+    except Exception:
+        pass
+    return toks
+
+
+#: iniziale in grassetto staccata dalla parola (mnemoniche/drop-cap).
+_BOLD_INIT_RE = re.compile(r"\*\*([A-Za-z])\*\* ([a-z][A-Za-z]*)")
+
+
+def _fix_bold_initials(md: str, vocab: set[str]) -> str:
+    """Unisce l'iniziale in grassetto alla parola **solo** se la forma unita è
+    una parola realmente presente nella pagina (grounded).
+
+    ``**E** sophageal`` → ``**E**sophageal`` (mnemonica ERP: la parola esiste).
+    **Non** tocca «vitamin **D** deficiency» perché ``Ddeficiency`` non è una
+    parola di pagina. Deterministico, nessun dizionario esterno.
+    """
+    if not vocab or not md:
+        return md
+
+    def repl(m: re.Match) -> str:
+        if (m.group(1) + m.group(2)).lower() in vocab:
+            return f"**{m.group(1)}**{m.group(2)}"
+        return m.group(0)
+
+    return _BOLD_INIT_RE.sub(repl, md)
+
+
 # ── scelta IR vs `current` (gate + chooser) ─────────────────────────────────
 _CHOOSER_FIG_RECALL_SLACK = 0.15   # IR può perdere recall se porta più figure
 _CHOOSER_RECALL_MARGIN = 0.02      # recall (quasi) migliore → IR
@@ -2336,6 +2376,9 @@ def _apply_ir_on_page_full(path: str, page_num: int, figures_dir=None, exclude=(
 
     with pymupdf.open(path) as doc:
         page = doc[page_num]
+        # vocabolo di pagina **pristino** (prima che l'OCR di pymupdf4llm la muti):
+        # serve al fix grounded dell'iniziale in grassetto.
+        vocab = _page_alpha_tokens(page)
         chunk = ir_layout.page_chunk(doc, page_num)  # UNA sola passata
         md, meta = ir_layout.build_markdown(
             page, doc, page_num, figures_dir=figures_dir,
@@ -2354,6 +2397,7 @@ def _apply_ir_on_page_full(path: str, page_num: int, figures_dir=None, exclude=(
                            exclude=exclude, skip_captions=meta["captions"],
                            skip_rects=meta["rects"])
         md = _cosmetic_ir(md)
+        md = _fix_bold_initials(md, vocab)
         raw = chunk.get("text", "") or ""
         gate_ok, reason = _ir_gate(page, md, elements)
         # tabella ruotata: l'IR la rende come immagine (fedele), quindi è
