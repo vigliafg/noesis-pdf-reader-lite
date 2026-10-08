@@ -129,8 +129,8 @@ etichettato; gli **invarianti** controlleranno lo **scheletro**. Non si mescolan
   separatori di banda; la gestione dedicata nell'albero resta da affinare.
 - [~] **Integrazione diagnostica opt-in** in `ir_layout.build_markdown`
   (`order_log`, default off → output identico) + `tools/measure_order.py`.
-- [ ] Solo dopo (se i numeri lo giustificano): valutare l'uso **produttore** in
-  runtime, sostituendo `reorder_boxes` — mai etichette/emissione.
+- [x] ~~Uso **produttore** in runtime~~ — **non giustificato** dai numeri:
+  esperimento **parcheggiato** (vedi §8). Mai etichette/emissione.
 
 ## 7. Integrazione diagnostica (opt-in, non distruttiva)
 
@@ -166,3 +166,30 @@ concentrati e costituiscono una **mappa di dove guardare**, non una prova che il
 page model sia migliore. Limiti della misura: copre solo i blocchi
 **abbinnati** (su alcune pagine `engine_unmatched` è alto) e non vede i difetti
 **dentro** una tabella (`ce24 p480` → 1 foglia).
+
+## 8. Esito: tabelle → esperimento PARCHEGGIATO
+
+Ultimo tentativo: emettere le pagine-tabella dalla **griglia** del page model,
+valutando con la metrica del gate (`tools/verify_pages._order_report`; `inv` =
+inversioni, `recall` = copertura parole ≥ 4):
+
+| pagina | ENGINE inv / recall | PAGE-MODEL inv / recall |
+|---|---|---|
+| `ce24 p480` | 136 / 1.00 | 116 / 0.98 |
+| `ce24 p489` | 0 / 1.00 | 0 / 1.00 |
+| `ha22 p1977` | 0 / 1.00 | 0 / 1.00 |
+| `plos…0059363 p8` | 0 / 1.00 | **18** / 1.00 |
+| `su19 p383` | 0 / 1.00 | **3** / 1.00 |
+
+Dove il motore è già corretto il page model **regredisce** (la serializzazione
+riga-major di una "pagina-tabella" intreccia dove il motore è colonna-major);
+sul caso difficile (`ce24 p480`) migliora **marginalmente** (136→116) e **perde
+recall** (testo di cella da `table.extract()`, con typo `afetr`). La griglia è
+*strutturalmente* più corretta (allineamento, header non garbled) ma **non
+abbastanza** da battere il motore.
+
+**Verdetto: parcheggiato** come esperimento (per l'emissione). Restano utili e
+riusabili gli **invarianti** (`tools/measure_page_model.py`), il **confronto
+d'ordine** (`tools/measure_order.py`) e l'hook `order_log`. I difetti reali
+rimasti (`ce24 p480`, `su19 p1050`, `arxiv p30`) sono di **rendering/emissione**
+in `main.py`, non di geometria.
