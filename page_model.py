@@ -1023,10 +1023,6 @@ class _Builder:
             out.append((bb, tbl))
         return out
 
-    def _order(self, blocks: list[dict], gaps: list[tuple]) -> list[dict]:
-        """Deprecato: l'ordine è ora il traversal di ``_assemble``."""
-        raise NotImplementedError
-
 
 def _iou(a: tuple, b: tuple) -> float:
     ix = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
