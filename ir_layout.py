@@ -1265,7 +1265,7 @@ def index_markdown(page, elements: list[dict], page_width: float) -> str:
 
 def build_markdown(page, doc, page_index: int, figures_dir=None,
                    embed_figures: bool = True, return_meta: bool = False,
-                   chunk: dict | None = None):
+                   chunk: dict | None = None, order_log: list | None = None):
     """Markdown della pagina ricostruito dalla content map (ordine di lettura).
 
     Con ``return_meta=True`` restituisce ``(markdown, meta)`` dove ``meta`` è
@@ -1387,6 +1387,12 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
 
     # box a tutta larghezza (es. "Key Points"): contenuto contiguo, non intrecciato
     ordered = reorder_boxes(keep2, pw, boxes=_full_width_boxes(page, pw))
+
+    # hook diagnostico **opt-in** (default off): registra l'ordine emesso senza
+    # alterarlo; usato per confrontarlo con un ordine indipendente (page model).
+    if order_log is not None:
+        order_log.extend({"class": e.get("class", ""), "bbox": tuple(e["bbox"])}
+                         for e in ordered)
 
     # figure (per il bleed): rect + righe del testo interno
     pics_keep = [e for e in keep if e["class"] == "picture"]

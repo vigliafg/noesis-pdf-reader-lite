@@ -1040,17 +1040,28 @@ def _cover(inner: tuple, outer: tuple) -> float:
     return (ix * iy) / a
 
 
-def build_page_document(pdf_path: str, page_index: int) -> DoclingDocument:
-    """Costruisce la rappresentazione logica (Docling-like) di **una pagina**."""
+def build_page_model_from_page(page, page_no: int,
+                               name: str = "") -> DoclingDocument:
+    """Come ``build_page_document`` ma da una ``page`` **già aperta**.
+
+    Serve a integrarsi in una pipeline esistente senza riaprire il PDF
+    (``page_no`` è 1-based).
+    """
     global PymupdfRect
     import pymupdf
     PymupdfRect = pymupdf.Rect
+    b = _Builder(page, page_no)
+    model = b.build()
+    model.name = name or getattr(page.parent, "name", "")
+    return model
+
+
+def build_page_document(pdf_path: str, page_index: int) -> DoclingDocument:
+    """Costruisce la rappresentazione logica (Docling-like) di **una pagina**."""
+    import pymupdf
     with pymupdf.open(pdf_path) as doc:
-        page = doc[page_index]
-        b = _Builder(page, page_index + 1)
-        model = b.build()
-        model.name = pdf_path
-        return model
+        return build_page_model_from_page(doc[page_index], page_index + 1,
+                                          name=pdf_path)
 
 
 if __name__ == "__main__":
