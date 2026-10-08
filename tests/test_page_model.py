@@ -59,6 +59,29 @@ class SchemaTests(unittest.TestCase):
 class BuildPageTests(unittest.TestCase):
     _PDF = _ROOT / "corpus2" / "fe22.pdf"
 
+    def test_independent_of_engine_run(self):
+        # ``build_markdown`` (pymupdf4llm) aggiunge un layer OCR alla page: il
+        # page model deve leggere una page **pristina** (riaperta) e restare
+        # identico a prima del run del motore.
+        import importlib
+        try:
+            pymupdf = importlib.import_module("pymupdf")
+            ir_layout = importlib.import_module("ir_layout")
+        except Exception:
+            self.skipTest("pymupdf/ir_layout non disponibili")
+        pdf = _ROOT / "corpus3" / "arxiv_2609.38133.pdf"
+        if not pdf.exists():
+            self.skipTest("corpus3/arxiv_2609.38133.pdf assente")
+        a = pm.build_page_document(str(pdf), 13).to_dict()
+        with pymupdf.open(str(pdf)) as doc:
+            chunk = ir_layout.page_chunk(doc, 13)
+            ir_layout.build_markdown(doc[13], doc, 13, embed_figures=False,
+                                     chunk=chunk)
+        b = pm.build_page_document(str(pdf), 13).to_dict()
+        self.assertEqual(a["geometry"], b["geometry"])
+        self.assertEqual(len(a["texts"]), len(b["texts"]))
+        self.assertEqual(len(a["groups"]), len(b["groups"]))
+
     def test_build_two_column_page(self):
         if not self._PDF.exists():
             self.skipTest("corpus2/fe22.pdf assente")

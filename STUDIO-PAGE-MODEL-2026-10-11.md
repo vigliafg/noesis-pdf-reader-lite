@@ -145,11 +145,20 @@ motore, l'integrazione resta **accanto** alla pipeline (mai produttore, per ora)
   per **copertura** (frazione del blocco dentro la foglia) e conta le
   **inversioni** (Kendall) tra i due ordini; non tocca l'md.
 
-Run: 4 difetti + **50 held-out** (seed `20261024`), 54 pagine totali.
-Risultato: **44/54 senza inversioni**, **38/4328** inversioni (0,009). Peggiori:
-`fe22 p1038` **13** (difetto noto — il page model lo conferma), poi
-`arxiv_2609.38133 p14` 8, `fe23 p362` 4, `to22 p380` 4, `arxiv p30` 3,
-`arxiv_2609.38151 p19` 2.
+**Prerequisito di indipendenza** (emerso dal run): `page_chunk`/`build_markdown`
+(pymupdf4llm) aggiungono un **layer OCR** alla `page`. Se il page model legge la
+**stessa** page dopo il motore, legge testo mutato e cambia albero (verificato su
+`arxiv_2609.38133 p14`: 2 colonne → ordine diverso). Serve una page **pristina**:
+il tool **riapre** il PDF; a runtime l'ordine geometrico va estratto **prima**
+del motore (o da un handle separato). Test di regressione in
+`tests/test_page_model.py::test_independent_of_engine_run`.
+
+Run (page **pristina**): 4 difetti + **50 held-out** (seed `20261024`), 54
+pagine. Risultato: **45/54 senza inversioni**, **30/4327** inversioni (0,007).
+Peggiori: `fe22 p1038` **13** (difetto noto — il page model lo conferma), poi
+`fe23 p362` 4, `to22 p380` 4, `arxiv p30` 3, `arxiv_2609.38151 p19` 2.
+Col run "sporco" (page non pristina) `arxiv_2609.38133 p14` mostrava 8
+inversioni; con la page pristina → **0**: era un **artefatto** del layer OCR.
 
 Lettura **onesta**: l'ordine emesso dal motore coincide con quello geometrico
 indipendente sulla grande maggioranza delle pagine; i disaccordi sono pochi e

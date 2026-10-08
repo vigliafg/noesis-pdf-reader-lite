@@ -145,7 +145,10 @@ def main() -> int:
             except Exception as e:  # noqa: BLE001
                 print(f"ERR  {Path(pdf).name} p{page}: {e!r}")
                 continue
-            pmd = page_model.build_page_model_from_page(p, page, name=pdf).to_dict()
+        # il page model DEVE leggere una page **pristina**: ``build_markdown``
+        # (via pymupdf4llm) aggiunge un layer OCR alla page → si riapre il PDF,
+        # altrimenti lo "scheletro indipendente" leggerebbe testo mutato.
+        pmd = page_model.build_page_document(pdf, page - 1).to_dict()
         res = _compare(_pm_body_order(pmd), log)
         rows.append((Path(pdf).name, page, res))
         mark = "*" if res["inversions"] else " "
