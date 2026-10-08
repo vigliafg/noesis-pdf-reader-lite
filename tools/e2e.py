@@ -134,6 +134,10 @@ def _page_truth(doc, idx: int, with_tables: bool = True) -> dict:
     )
     expected_figs = len(ir_layout.real_pictures(
         elements, page.rect.width, page.rect.height))
+    try:
+        boxes = ir_layout._full_width_boxes(page, page.rect.width)
+    except Exception:
+        boxes = []
     table_text = ""
     if with_tables:
         # ground truth = **parole di pagina** nella regione delle tabelle
@@ -165,6 +169,7 @@ def _page_truth(doc, idx: int, with_tables: bool = True) -> dict:
         "ntexty": ntexty,
         "expected_figs": expected_figs,
         "table_text": table_text,
+        "boxes": boxes,
         "is_index": main._looks_like_index(pdf_text),
     }
 
@@ -220,7 +225,8 @@ def _checks(truth: dict, md: str, plain: str) -> dict:
     # ── flusso di lettura (Golden Rule #1) ──
     try:
         flow_info = vp._flow_score(md, truth.get("elements", []),
-                                   truth.get("page_width", 0.0))
+                                   truth.get("page_width", 0.0),
+                                   boxes=truth.get("boxes", []))
     except Exception:
         flow_info = {"flow": 1.0, "n": 0, "found": 0, "lis": 0,
                      "transitions": 0}
@@ -234,7 +240,8 @@ def _checks(truth: dict, md: str, plain: str) -> dict:
     # (taratura a 0 FP/0 FN prima della promozione a bloccante).
     try:
         order_info = vp._order_report(md, truth.get("elements", []),
-                                      truth.get("page_width", 0.0))
+                                      truth.get("page_width", 0.0),
+                                      boxes=truth.get("boxes", []))
     except Exception:
         order_info = {"inversions": 0, "unassigned": 0, "units": 0,
                       "unique": 0, "found": 0, "content_recall": 1.0,
@@ -243,6 +250,19 @@ def _checks(truth: dict, md: str, plain: str) -> dict:
     onotes = ([] if order_ok
               else [f"inversioni {order_info['inversions']}, "
                     f"fuori-ordine {order_info['unassigned']}"])
+
+    # ── invarianti strutturali (indipendenti dal motore): box a tutta
+    # larghezza contigui (I1), monotonia di banda (I3) ──
+    try:
+        import invariants
+        struct = invariants.check_structure(
+            md, truth.get("elements", []), truth.get("boxes", []),
+            truth.get("page_width", 0.0))
+    except Exception:
+        struct = {"ok": True, "violations": []}
+    struct_ok = struct["ok"]
+    snote = "; ".join(f"{v['invariant']}:{v['kind']}"
+                      for v in struct["violations"])
 
     checks = {
         "text": {
@@ -272,13 +292,17 @@ def _checks(truth: dict, md: str, plain: str) -> dict:
             "missing": order_info["missing"], "extra": order_info["extra"],
             "note": "; ".join(onotes),
         },
+        "structure": {
+            "ok": struct_ok, "violations": struct["violations"],
+            "note": snote,
+        },
     }
     return checks
 
 
 def _flags(checks: dict, gate: dict | None) -> list[str]:
     out: list[str] = []
-    for kind in ("text", "order", "flow", "figures", "tables"):
+    for kind in ("text", "order", "flow", "figures", "tables", "structure"):
         c = checks.get(kind) or {}
         if not c.get("ok", True):
             out.append(f"{kind}: {c.get('note', '')}".strip().rstrip(":"))
@@ -516,6 +540,7 @@ def _print_rec(rec: dict) -> None:
 # I flag automatici sono grossolani: mappati sulla stessa tassonomia.
 _AUTO_KIND = {"tables": "table_content", "text": "text_missing",
               "order": "text_order", "flow": "text_order",
+              "structure": "text_order",
               "figures": "figure_missing", "gate": "other"}
 
 

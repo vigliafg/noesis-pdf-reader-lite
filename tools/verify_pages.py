@@ -224,17 +224,29 @@ def _column_splits_robust(blocks: list[dict], page_width: float,
     return sorted(out)
 
 
-def _reference_units(elements: list[dict], page_width: float) -> list[dict]:
+def _flat_boxes(elements: list[dict]) -> list[dict]:
+    return [{"x0": e["bbox"][0], "x1": e["bbox"][2],
+             "y0": e["bbox"][1], "y1": e["bbox"][3]} for e in elements]
+
+
+def _reference_units(elements: list[dict], page_width: float,
+                     boxes: list[tuple] | None = None) -> list[dict]:
     """Unità di prosa in **ordine naturale di lettura** (riferimento geometrico).
 
     Indipendente dall'ordine emesso dal motore: bande delimitate dai blocchi a
     piena larghezza, poi ordine **colonna-major** (sinistra→destra,
-    alto→basso) dentro ogni banda. È l'ordine che un lettore segue davvero.
+    alto→basso) dentro ogni banda. I **box a tutta larghezza** (``boxes``, es.
+    "Key Points") sono una banda a sé: la loro prosa è letta contigua e al posto
+    giusto per y (altrimenti la prosa del box viene attribuita a una colonna di
+    pagina → falso positivo d'ordine).
     """
     prose = [e for e in elements
              if e["class"] in ("text", "section-header", "title")]
     if not prose:
         return []
+    import ir_layout
+
+    boxes = sorted(boxes or [], key=lambda r: r[1])
     # separatori di banda: QUALSIASI blocco a piena larghezza (testo a tutta
     # pagina, tabelle o figure ampie) → un footnote/blocco sotto le colonne
     # finisce nella banda giusta invece di essere letto prima della colonna
@@ -242,17 +254,25 @@ def _reference_units(elements: list[dict], page_width: float) -> list[dict]:
     all_full = [e for e in elements
                 if e.get("w", 0) >= 0.6 * page_width]
     body = [e for e in prose if e["w"] < 0.6 * page_width]
+
+    # estrai la prosa dentro i box (banda a sé)
+    box_prose: dict[int, list[dict]] = {}
+    if boxes:
+        free: list[dict] = []
+        for e in body:
+            bi = ir_layout._box_index(e, boxes)
+            if bi is None:
+                free.append(e)
+            else:
+                box_prose.setdefault(bi, []).append(e)
+        body = free
+
     global_splits = _column_splits_robust(
-        [{"x0": e["bbox"][0], "x1": e["bbox"][2],
-          "y0": e["bbox"][1], "y1": e["bbox"][3]} for e in body],
-        page_width,
-    ) if body else []
+        _flat_boxes(body), page_width) if body else []
 
     def _col(e: dict, splits: list[float]) -> int:
         mid = (e["bbox"][0] + e["bbox"][2]) / 2
         return sum(1 for s in splits if mid > s)
-
-    import ir_layout
 
     seps = sorted(all_full, key=lambda e: e["bbox"][1])
     sep_y = [e["bbox"][1] for e in seps]
@@ -281,6 +301,28 @@ def _reference_units(elements: list[dict], page_width: float) -> list[dict]:
             ordered.extend(sorted(
                 region, key=lambda e: (_col(e, splits),
                                        e["bbox"][1], e["bbox"][0])))
+
+    # inserisci la prosa dei box al loro posto per y (banda contigua)
+    if box_prose:
+        box_orders: dict[int, list[dict]] = {}
+        for bi, els in box_prose.items():
+            splits = _column_splits_robust(_flat_boxes(els), page_width)
+            box_orders[bi] = sorted(
+                els, key=lambda e: (_col(e, splits),
+                                    e["bbox"][1], e["bbox"][0]))
+        segs: list[list[dict]] = [[] for _ in range(len(boxes) + 1)]
+        for e in ordered:
+            k = 0
+            while k < len(boxes) and e["bbox"][1] >= boxes[k][1]:
+                k += 1
+            segs[k].append(e)
+        merged: list[dict] = []
+        for k in range(len(boxes)):
+            merged.extend(segs[k])
+            merged.extend(box_orders.get(k, []))
+        merged.extend(segs[len(boxes)])
+        ordered = merged
+
     return [{"text": e["text"], "bbox": e["bbox"], "cls": e["class"],
              "col": -1 if e["w"] >= 0.6 * page_width
              else _col(e, global_splits)}
@@ -288,7 +330,8 @@ def _reference_units(elements: list[dict], page_width: float) -> list[dict]:
 
 
 def _flow_score(md: str, elements: list[dict], page_width: float,
-                min_units: int = 3, anchor_words: int = 6) -> dict:
+                min_units: int = 3, anchor_words: int = 6,
+                boxes: list[tuple] | None = None) -> dict:
     """Fedeltà del **flusso di lettura** dell'md rispetto all'ordine naturale.
 
     Golden Rule #1 (vedi ``REGOLE-TEST.md``): unità = blocchi di prosa in
@@ -301,7 +344,7 @@ def _flow_score(md: str, elements: list[dict], page_width: float,
 
     Restituisce ``{flow, n, found, lis, transitions, seq}``.
     """
-    units = _reference_units(elements, page_width)
+    units = _reference_units(elements, page_width, boxes)
     n_units = len(units)
     if n_units < min_units:
         return {"flow": 1.0, "n": n_units, "found": 0, "lis": n_units,
@@ -392,7 +435,8 @@ def _page_lines_no_figures(page, elements: list[dict]) -> list[tuple]:
 
 
 def _order_report(md: str, elements: list[dict], page_width: float,
-                  anchor_words: int = 6) -> dict:
+                  anchor_words: int = 6,
+                  boxes: list[tuple] | None = None) -> dict:
     """**Ordine stringente** (Golden Rule #1 rafforzata) a livello di **blocco**.
 
     Unità = blocchi di prosa in ordine geometrico colonna-major. Per ogni unità
@@ -405,7 +449,7 @@ def _order_report(md: str, elements: list[dict], page_width: float,
     Obiettivo: **inversioni = 0 e unassigned = 0**. Include
     ``content_recall``/``content_precision`` a parole (≥ 4).
     """
-    units = _reference_units(elements, page_width)
+    units = _reference_units(elements, page_width, boxes)
     M = " " + _norm(_strip_images(md)) + " "
     occ_list: list[list[int]] = []
     for u in units:

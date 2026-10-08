@@ -805,6 +805,61 @@ def _split_band_hgaps(band: list[dict], page_width: float,
     return regions
 
 
+def _full_width_boxes(page, page_width: float,
+                      min_height: float = 20.0) -> list[tuple]:
+    """Rettangoli **pieni a tutta larghezza** (box di contenuto, es. "Key Points").
+
+    Rilevati dai disegni vettoriali di pagina (``get_drawings``) con riempimento
+    non nullo, larghezza ≥ 60% della pagina e altezza ≥ ``min_height``. Esclude
+    il bordo/fondo pagina. Servono a trattare il box come **una banda** (il suo
+    contenuto va letto contiguo) sia nel motore sia negli invarianti.
+
+    Restituisce ``[(x0, y0, x1, y1), ...]`` in ordine di y.
+    """
+    if page is None:
+        return []
+    try:
+        drawings = page.get_drawings()
+    except Exception:
+        return []
+    ph = page.rect.height
+    out: list[tuple] = []
+    for d in drawings:
+        if not d.get("fill"):
+            continue
+        r = d.get("rect")
+        if r is None:
+            continue
+        w, h = r.width, r.height
+        if w < 0.6 * page_width or h < min_height:
+            continue
+        # bordo/sfondo pagina (copre quasi tutta la pagina): non è un box
+        if w > 0.92 * page_width and h > 0.92 * ph:
+            continue
+        out.append((r.x0, r.y0, r.x1, r.y1))
+    out.sort(key=lambda b: b[1])
+    # dedup di box quasi identici (disegni ripetuti)
+    uniq: list[tuple] = []
+    for b in out:
+        if any(abs(b[0] - u[0]) < 2 and abs(b[1] - u[1]) < 2
+               and abs(b[2] - u[2]) < 2 and abs(b[3] - u[3]) < 2 for u in uniq):
+            continue
+        uniq.append(b)
+    return uniq
+
+
+def _box_index(e: dict, boxes: list[tuple], pad: float = 3.0) -> int | None:
+    """Indice del box che contiene (per centro) l'elemento ``e``, o ``None``."""
+    b = e.get("bbox")
+    if not b:
+        return None
+    cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+    for i, r in enumerate(boxes):
+        if r[0] - pad <= cx <= r[2] + pad and r[1] - pad <= cy <= r[3] + pad:
+            return i
+    return None
+
+
 def _band_regions(band: list[dict], page_width: float) -> list[list[dict]]:
     """Sotto-regioni del band con struttura-colonna **omogenea**.
 
@@ -862,6 +917,20 @@ def _order(elements: list[dict], page_width: float) -> list[list[dict]]:
     full = [e for e in elements if e["w"] >= 0.6 * page_width]
     body = [e for e in elements if e["w"] < 0.6 * page_width]
 
+    # Banda **finale**: elementi sotto il fondo delle colonne di prosa (es. una
+    # figura in basso **non** a tutta larghezza + la sua didascalia). Senza
+    # questo, la figura finisce nella colonna sinistra e viene emessa **prima**
+    # della colonna destra (es. `su19 p383`).
+    texty = [e for e in body
+             if e["class"] in ("text", "section-header", "title", "list-item")]
+    bottom: list[dict] = []
+    if texty:
+        col_bottom = max(e["bbox"][3] for e in texty)
+        bottom_ids = {id(e) for e in body if e["bbox"][1] >= col_bottom - 1.0}
+        if bottom_ids:
+            bottom = [e for e in body if id(e) in bottom_ids]
+            body = [e for e in body if id(e) not in bottom_ids]
+
     global_splits = _column_splits(body, page_width)
     ncol = len(global_splits) + 1
 
@@ -897,24 +966,84 @@ def _order(elements: list[dict], page_width: float) -> list[list[dict]]:
                 region, key=lambda e: (col_with(e, splits),
                                        e["y0"], e["bbox"][0])))
         out.append(ordered_b)
+    if bottom:
+        out.append(sorted(bottom, key=lambda e: (e["bbox"][1], e["bbox"][0])))
     return out, seps, ncol
 
 
-def reorder_boxes(elements: list[dict], page_width: float) -> list[dict]:
+def reorder_boxes(elements: list[dict], page_width: float,
+                  boxes: list[tuple] | None = None) -> list[dict]:
     """Sequenza **piatta** degli elementi in ordine di lettura (Fase 1).
 
     Wrapper testabile di ``_order``: bande e separatori a tutta larghezza
-    interleavati esattamente come nell'emissione di ``build_markdown``. È il
-    punto in cui intervenire per l'ordine (float, colonne, refs) senza toccare
-    il GNN.
+    interleavati esattamente come nell'emissione di ``build_markdown``.
+
+    ``boxes`` sono i **box a tutta larghezza** (``_full_width_boxes``): il loro
+    contenuto viene emesso come **una banda contigua** (ordine interno
+    colonna-major), al posto giusto per y. Senza questo, un box come "Key Points"
+    (sotto-colonne interne) si intreccia col corpo (`su19 p383`).
     """
-    bands, seps, _ncol = _order(elements, page_width)
-    ordered: list[dict] = []
+    boxes = sorted(boxes or [], key=lambda r: r[1])
+    if not boxes:
+        bands, seps, _ncol = _order(elements, page_width)
+        ordered: list[dict] = []
+        for i, band in enumerate(bands):
+            ordered.extend(band)
+            if i < len(seps):
+                ordered.append(seps[i])
+        return ordered
+
+    # elementi dentro un box vs resto
+    members: dict[int, list[dict]] = {}
+    rest: list[dict] = []
+    for e in elements:
+        bi = _box_index(e, boxes)
+        if bi is None:
+            rest.append(e)
+        else:
+            members.setdefault(bi, []).append(e)
+
+    bands, seps, _ncol = _order(rest, page_width)
+    ordered_rest: list[dict] = []
     for i, band in enumerate(bands):
-        ordered.extend(band)
+        ordered_rest.extend(band)
         if i < len(seps):
-            ordered.append(seps[i])
-    return ordered
+            ordered_rest.append(seps[i])
+
+    # ordine interno di ogni box (colonna-major)
+    def _col(e: dict, splits: list[float]) -> int:
+        mid = (e["bbox"][0] + e["bbox"][2]) / 2
+        return sum(1 for s in splits if mid > s)
+
+    box_blocks: dict[int, list[dict]] = {}
+    for bi, els in members.items():
+        # Colonne del box dai **suoi** elementi (inclusi i `list-item`): la
+        # prosa da sola non basta (i punti numerati sono list-item).
+        flat = [{"x0": e["bbox"][0], "x1": e["bbox"][2],
+                 "y0": e["bbox"][1], "y1": e["bbox"][3]} for e in els]
+        splits = _column_splits_robust(flat, page_width)
+        if not splits:
+            try:
+                import main as _main
+                splits = _main._detect_column_splits(flat, page_width)
+            except Exception:
+                splits = []
+        box_blocks[bi] = sorted(
+            els, key=lambda e: (_col(e, splits), e["y0"], e["bbox"][0]))
+
+    # inserisci i box al loro posto per y (sono a tutta larghezza → separano)
+    segs: list[list[dict]] = [[] for _ in range(len(boxes) + 1)]
+    for e in ordered_rest:
+        k = 0
+        while k < len(boxes) and e["bbox"][1] >= boxes[k][1]:
+            k += 1
+        segs[k].append(e)
+    out: list[dict] = []
+    for k in range(len(boxes)):
+        out.extend(segs[k])
+        out.extend(box_blocks.get(k, []))
+    out.extend(segs[len(boxes)])
+    return out
 
 
 def _attach_captions(elements: list[dict]) -> dict[int, list[dict]]:
@@ -1256,7 +1385,8 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
                 })
         keep2 = [e for e in keep2 if id(e) not in remove_ids] + tbl_synth
 
-    ordered = reorder_boxes(keep2, pw)
+    # box a tutta larghezza (es. "Key Points"): contenuto contiguo, non intrecciato
+    ordered = reorder_boxes(keep2, pw, boxes=_full_width_boxes(page, pw))
 
     # figure (per il bleed): rect + righe del testo interno
     pics_keep = [e for e in keep if e["class"] == "picture"]
