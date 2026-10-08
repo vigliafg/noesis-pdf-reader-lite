@@ -2096,6 +2096,8 @@ def _extract_pymupdf4llm(
     attempts = [ocr_language] if ocr_language else ["eng"]
     if attempts[-1] != "eng":
         attempts.append("eng")
+    import ir_layout  # lazy: il lock OCR condiviso con la pipeline IR
+
     last_error: Exception | None = None
     for lang in attempts:
         try:
@@ -2105,17 +2107,20 @@ def _extract_pymupdf4llm(
             # Pagine con testo a 90° (landscape senza /Rotate): raddrizza prima
             # di estrarre, altrimenti pymupdf4llm legge lungo l'asse sbagliato.
             md = None
-            try:
-                with pymupdf.open(path) as doc:
-                    rot = layout_engine.detect_sideways_rotation(doc[page_num])
-                    if rot:
-                        doc[page_num].set_rotation(rot)
-                        md = pymupdf4llm.to_markdown(
-                            doc, pages=[page_num], **kwargs)
-            except Exception:
-                md = None
-            if md is None:
-                md = pymupdf4llm.to_markdown(path, pages=[page_num], **kwargs)
+            # Serializza l'OCR (Leptonica non è thread-safe): vedi
+            # ir_layout._PDF_OCR_LOCK.
+            with ir_layout._PDF_OCR_LOCK:
+                try:
+                    with pymupdf.open(path) as doc:
+                        rot = layout_engine.detect_sideways_rotation(doc[page_num])
+                        if rot:
+                            doc[page_num].set_rotation(rot)
+                            md = pymupdf4llm.to_markdown(
+                                doc, pages=[page_num], **kwargs)
+                except Exception:
+                    md = None
+                if md is None:
+                    md = pymupdf4llm.to_markdown(path, pages=[page_num], **kwargs)
             return md.strip() or T("extract.empty_page")
         except Exception as e:  # noqa: BLE001 — degrada al fallback, non crasha
             last_error = e

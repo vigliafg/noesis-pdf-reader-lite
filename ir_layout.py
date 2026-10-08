@@ -20,6 +20,14 @@ Obiettivo: dare tutto (testo/figure/tabelle) una volta, nell'ordine di lettura.
 from __future__ import annotations
 
 import re
+import threading
+
+#: PyMuPDF4LLM usa Tesseract/Leptonica, **non thread-safe** ("Attempt to use
+#: Leptonica from 2 threads at once!"): se due estrazioni (es. una pagina ancora
+#: in corso + quella nuova) chiamano l'OCR insieme, la seconda solleva
+#: `FzErrorArgument` e l'app ricade silenziosamente su `current` → md non
+#: deterministico (R12). Un lock globale serializza le passate OCR.
+_PDF_OCR_LOCK = threading.Lock()
 
 #: classi di "chrome" da non emettere come contenuto
 _DROP_CLASSES = {"page-header", "page-footer", "page-number"}
@@ -131,10 +139,16 @@ def _rebuild_from_words(page, bbox: tuple, excl: list[tuple], pad: float = 6.0) 
 
 
 def page_chunk(doc, page_index: int) -> dict:
-    """Unico ``to_markdown(page_chunks=True)`` per pagina (una sola passata)."""
+    """Unico ``to_markdown(page_chunks=True)`` per pagina (una sola passata).
+
+    Serializzato da ``_PDF_OCR_LOCK``: l'OCR di PyMuPDF4LLM (Leptonica) non è
+    thread-safe e due passate concorrenti sollevano ``FzErrorArgument``.
+    """
     import pymupdf4llm
 
-    return pymupdf4llm.to_markdown(doc, pages=[page_index], page_chunks=True)[0]
+    with _PDF_OCR_LOCK:
+        return pymupdf4llm.to_markdown(
+            doc, pages=[page_index], page_chunks=True)[0]
 
 
 def _elements_from_chunk(chunk: dict) -> tuple[str, list[dict]]:
