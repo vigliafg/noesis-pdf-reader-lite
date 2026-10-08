@@ -102,6 +102,22 @@ class TableTests(unittest.TestCase):
         self.assertTrue(all(len(r) == data["num_cols"] for r in data["grid"]))
         self.assertTrue(all(any(cell for cell in r) for r in data["grid"]))
 
+    def test_section_hierarchy(self):
+        pdf = _ROOT / "corpus2" / "fe22.pdf"
+        if not pdf.exists():
+            self.skipTest("corpus2/fe22.pdf assente")
+        js = pm.build_page_document(str(pdf), 1037).to_dict()
+        secs = [g for g in js["groups"]
+                if (g.get("meta") or {}).get("region") == "section"]
+        self.assertGreaterEqual(len(secs), 1)
+        # ogni sezione inizia con il proprio header
+        for g in secs:
+            kind, i = g["children"][0]["cref"].split("/")[1:3]
+            self.assertEqual(js[kind][int(i)]["label"], "section_header")
+        # le colonne restano gruppi a sé
+        self.assertTrue(any((g.get("meta") or {}).get("region") == "column"
+                            for g in js["groups"]))
+
     def test_skeleton_independent_of_gnn_globals(self):
         # pymupdf4llm (strato GNN) all'import attiva pymupdf.layout e disabilita
         # le quad corrections *globalmente*: lo scheletro geometrico deve restare

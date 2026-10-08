@@ -40,7 +40,9 @@ deterministico:
    `content_layer="furniture"`.
 3. **Scheletro geometrico**: **gutters** (proiezione x dei blocchi non
    full-width) → numero di colonne.
-4. **Ordine di lettura**: bande a tutta larghezza + colonne sx→dx → `body.children`.
+4. **Ordine di lettura**: bande a tutta larghezza → colonne sx→dx; poi
+   **gerarchia di sezione** (`GroupLabel.SECTION` dagli header, annidata per
+   `level`) → il traversal dei figli del `body` è l'ordine di lettura.
 5. **Etichette** dal GNN (content map) per IoU, altrimenti euristiche
    (font/bold) → `section_header`/`paragraph`/`list_item`/`caption`.
 6. **Tabelle**: `find_tables(strategy="lines")` con **filtro anti falsi
@@ -72,6 +74,10 @@ CLI: `.venv/bin/python page_model.py <pdf> --page N --out page.json`.
   perdere tabelle vere (nessun candidato 2×2 legittimo nel campione).
 - **Determinismo**: `ce24 p480` resta 25×7 anche dopo che il GNN
   (`pymupdf4llm`) ha alterato lo stato globale di PyMuPDF (test dedicato).
+- **Gerarchia sezioni**: su `fe22 p1038` gli header aprono `GroupItem`
+  `region=section`, annidati per `level` (es. `BASIC INFORMATION` → `PHYSICAL
+  FINDINGS…`); l'ordine di lettura (traversal) è preservato. Validato su 36
+  pagine campione: nessun gruppo vuoto, tutti i riferimenti risolvibili.
 - `ha22 p3355` / `su19 p1050`: `PictureItem` (`flags=["raster"]`) con `captions`.
 - Pagina normale (`plos`): 1 colonna, nessun gruppo spurio.
 
@@ -102,8 +108,10 @@ etichettato; gli **invarianti** controlleranno lo **scheletro**. Non si mescolan
   `fe22 p1038`.
 - [x] **Nesting** in `GroupItem` (colonne/bande) e ordine = traversal.
 - [x] **Tabelle**: filtro falsi positivi + celle unite (`row_span`/`col_span`).
-- [ ] **Gerarchia sezioni/capitoli** (`GroupLabel.SECTION` dagli header) e
-  gestione degli elementi **spanning**.
+- [x] **Gerarchia sezioni/capitoli** (`GroupLabel.SECTION` dagli header,
+  annidata per `level`).
 - [ ] **Invarianti sullo scheletro** (nuovo livello) e **misura** sui difetti
   aperti.
+- [~] **Elementi spanning**: marcati (`flags=["spanning"]`) e usati come
+  separatori di banda; la gestione dedicata nell'albero resta da affinare.
 - [ ] Solo dopo: valutare l'uso in **runtime** (emissione).

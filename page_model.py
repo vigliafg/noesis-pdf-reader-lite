@@ -467,6 +467,7 @@ class _Builder:
         self.H = page.rect.height
         self.counters = {"texts": 0, "tables": 0, "pictures": 0, "groups": 0}
         self._leaf_nodes: dict[int, Any] = {}
+        self._by_ref: dict[str, Any] = {}
         self.doc = DoclingDocument(num_pages=1)
         self.doc.origin = DocumentOrigin(filename=getattr(page.parent, "name", ""))
         self.doc.pages = {str(page_no): PageItem(
@@ -489,6 +490,7 @@ class _Builder:
 
     def _add(self, kind: str, item):
         getattr(self.doc, kind).append(item)
+        self._by_ref[item.self_ref] = item
         return item
 
     # ── lettura primitive ──
@@ -618,6 +620,51 @@ class _Builder:
         group.children.append(RefItem(node.self_ref))
         node.parent = RefItem(group.self_ref)
 
+    def _nest_sections(self, container):
+        """Annida i figli di ``container`` in ``GroupItem`` di sezione.
+
+        Un ``section_header`` apre una sezione (con ``level``); gli elementi
+        successivi vi appartengono finché non arriva un header di livello ≤.
+        L'ordine di lettura è preservato (è il traversal dei figli).
+        """
+        children = list(container.children)
+        if not children:
+            return
+        container.children = []
+        # stack di (livello, gruppo_sezione)
+        stack: list[tuple[int, GroupItem]] = []
+        for ref in children:
+            node = self._by_ref.get(ref.cref)
+            if isinstance(node, SectionHeaderItem):
+                lvl = int(getattr(node, "level", 1) or 1)
+                while stack and stack[-1][0] >= lvl:
+                    stack.pop()
+                grp = GroupItem(
+                    self_ref=self._ref("groups"), group_label=GroupLabel.SECTION,
+                    name=(node.text[:48] or "section"),
+                    meta={"region": "section", "level": lvl},
+                    source=NodeSource.HEURISTIC, content_layer=ContentLayer.BODY)
+                self._add("groups", grp)
+                parent = stack[-1][1] if stack else container
+                parent.children.append(RefItem(grp.self_ref))
+                grp.parent = RefItem(parent.self_ref)
+                grp.children.append(ref)
+                node.parent = RefItem(grp.self_ref)
+                stack.append((lvl, grp))
+            else:
+                parent = stack[-1][1] if stack else container
+                parent.children.append(ref)
+                if node is not None:
+                    node.parent = RefItem(parent.self_ref)
+
+    def _nest_sections_all(self):
+        body = self.doc.body
+        for ch in list(body.children):
+            node = self._by_ref.get(ch.cref)
+            if isinstance(node, GroupItem) and (node.meta or {}).get("region") == "column":
+                self._nest_sections(node)
+        self._nest_sections(body)
+
     def build(self):
         blocks = self.text_blocks()
         images = []
@@ -669,6 +716,8 @@ class _Builder:
 
         # 5) albero: bande → colonne → foglie (ordine = traversal)
         self._assemble(items, bounds)
+        # 5b) gerarchia logica: sezioni/capitoli dagli header
+        self._nest_sections_all()
 
         # 6) furniture
         for b in header:
