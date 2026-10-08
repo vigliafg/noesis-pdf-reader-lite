@@ -49,6 +49,9 @@ def _parse_pages(spec: str) -> list[int]:
 
 def _norm(t: str) -> str:
     t = t.replace("\u00ad", "")            # soft hyphen (discrezionale) → rimosso
+    # Apice/etichetta incollata al termine da PyMuPDF4LLM (`GenioglossusXII`,
+    # `MasseterVIII`): separa il confine minuscola→MAIUSCOLA prima di minuscolizzare.
+    t = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", t)
     t = t.lower()
     t = re.sub(r"-\s*\n\s*", "", t)        # trattino a fine riga → unisce
     # Trattino **composto** tra due lettere, con o senza spazi **orizzontali**:

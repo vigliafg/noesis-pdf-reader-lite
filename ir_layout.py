@@ -598,20 +598,35 @@ def _group_figure_blocks(elements: list[dict], splits: list[float],
     """
     pics = sorted((e for e in elements if e["class"] == "picture"),
                   key=lambda e: e["bbox"][1])
+
+    def _ov(a0: float, a1: float, b0: float, b1: float, tol: float = 2.0) -> bool:
+        return min(a1, b1) - max(a0, b0) >= -tol
+
     clusters: list[dict] = []
     for p in pics:
-        y0, y1 = p["bbox"][1], p["bbox"][3]
+        x0, y0, x1, y1 = p["bbox"]
         for c in clusters:
-            if y0 <= c["y1"] + gap and y1 >= c["y0"] - gap:
+            # Due `picture` sono lo **stesso blocco-figura** se impilate nella
+            # stessa colonna (vicinanza verticale + sovrapposizione orizzontale)
+            # o affiancate sulla stessa riga (vicinanza orizzontale +
+            # sovrapposizione verticale). La sola vicinanza verticale NON basta:
+            # fonderebbe figure di colonne diverse a quote vicine (es. su18
+            # p279), creando un falso blocco "a tutta larghezza" che spezza la
+            # banda e intreccia le colonne.
+            y_close = y0 <= c["y1"] + gap and y1 >= c["y0"] - gap
+            x_close = x0 <= c["x1"] + gap and x1 >= c["x0"] - gap
+            same_col = _ov(x0, x1, c["x0"], c["x1"])
+            same_row = _ov(y0, y1, c["y0"], c["y1"])
+            if (y_close and same_col) or (x_close and same_row):
                 c["pics"].append(p)
+                c["x0"] = min(c["x0"], x0)
+                c["x1"] = max(c["x1"], x1)
                 c["y0"] = min(c["y0"], y0)
                 c["y1"] = max(c["y1"], y1)
                 break
         else:
-            clusters.append({"pics": [p], "y0": y0, "y1": y1})
+            clusters.append({"pics": [p], "x0": x0, "x1": x1, "y0": y0, "y1": y1})
     for c in clusters:
-        c["x0"] = min(p["bbox"][0] for p in c["pics"])
-        c["x1"] = max(p["bbox"][2] for p in c["pics"])
         # A tutta larghezza SOLO se è davvero larga, oppure se è una figura
         # **multi-pannello** che attraversa le colonne (i pannelli restano
         # insieme). Una figura **singolo-pannello** che attraversa lo split

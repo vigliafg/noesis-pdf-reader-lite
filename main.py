@@ -1051,17 +1051,25 @@ def _figure_covered_table_rects(page, elements: list[dict]) -> list[tuple]:
         return []
     if not regions:
         return []
+
+    def _cover_ratio(b: tuple, r: tuple) -> float:
+        ix = min(b[2], r[2]) - max(b[0], r[0])
+        iy = min(b[3], r[3]) - max(b[1], r[1])
+        if ix <= 0 or iy <= 0:
+            return 0.0
+        area = max(1e-6, (b[2] - b[0]) * (b[3] - b[1]))
+        return (ix * iy) / area
+
     out: list[tuple] = []
     for e in elements:
         if e.get("class") != "table":
             continue
         b = tuple(e["bbox"])
-        for f in regions:
-            r = f["rect"]
-            if (b[0] >= r[0] - 3 and b[2] <= r[2] + 3
-                    and b[1] >= r[1] - 3 and b[3] <= r[3] + 3):
-                out.append(b)
-                break
+        # contenuta per intero, oppure **quasi tutta** dentro la regione (il
+        # riquadro grafico può sottostimare di poco i bordi del pannello, es.
+        # ce24 p68: tabella-modulo E-FIGURE coperta al 92%).
+        if any(_cover_ratio(b, f["rect"]) >= 0.85 for f in regions):
+            out.append(b)
     return out
 
 
@@ -1091,14 +1099,32 @@ def _page_text_no_figures(page, elements: list[dict],
                 return True
         return False
 
+    def _mostly_inside(b, rects, ratio: float = 0.8) -> bool:
+        """True se il blocco è **per lo più** dentro una regione (≥ ``ratio``).
+
+        Il bbox dell'elemento può sottostimare di qualche punto il riquadro
+        grafico (es. banner-pubblicitario `pa23 p935`: il testo del banner esce
+        di ~3 pt dal bbox `picture`). Così si riconosce comunque come figura.
+        """
+        x0, y0, x1, y1 = b["bbox"]
+        area = (x1 - x0) * (y1 - y0)
+        if area <= 0:
+            return False
+        for px0, py0, px1, py1 in rects:
+            ix = min(x1, px1) - max(x0, px0)
+            iy = min(y1, py1) - max(y0, py0)
+            if ix > 0 and iy > 0 and (ix * iy) / area >= ratio:
+                return True
+        return False
+
     parts: list[str] = []
     try:
         for blk in page.get_text("dict").get("blocks", []):
             if blk.get("type") != 0:
                 continue
-            # figure/tabelle ruotate: la tolleranza resta stretta (2 pt), così
-            # non si esclude prosa adiacente alla figura.
-            if _inside(blk, pics, 2):
+            # figure/tabelle ruotate: tolleranza stretta (2 pt) o contenimento
+            # per lo più pieno, così non si esclude prosa adiacente alla figura.
+            if _inside(blk, pics, 2) or _mostly_inside(blk, pics):
                 continue
             # chrome (testatine/piè/numero pagina): tolleranza più ampia. Il
             # blocco di pagina eccede spesso di qualche punto il bbox
