@@ -70,8 +70,9 @@ _ADVISOR_URL = "https://openrouter.ai/api/v1/chat/completions"
 _DEFECT_KINDS = (
     "figure_missing", "figure_duplicate", "figure_order", "figure_text_bleed",
     "figure_caption", "figure_blank", "table_structure", "table_content",
-    "equation", "text_missing", "text_order", "text_duplicate", "ref_order",
-    "header_content", "index_truncate", "marginalia", "other",
+    "equation", "text_missing", "text_order", "text_duplicate",
+    "text_integrity", "ref_order", "header_content", "index_truncate",
+    "marginalia", "other",
 )
 _ADVISOR_SYSTEM = (
     "Sei un revisore di estrazione PDF. Ricevi l'immagine di UNA pagina e il "
@@ -316,16 +317,28 @@ def _checks(truth: dict, md: str, plain: str) -> dict:
     }
     # ── vettore diagnostico (nuove tipologie) ──
     # figura bianca (artefatto di rendering, non "tiny"), struttura tabella
-    # (righe con conteggio celle diverso dall'header), duplicazione di righe.
+    # (righe con conteggio celle diverso dall'header), duplicazione di righe,
+    # token presenti nell'md ma assenti dalla pagina (glue/split di testo —
+    # es. "byimagingor", "Ab|sorption", "cinacalcet1").
+    glued: list[str] = []
     try:
         import detectors
+        ref_words = (vp._long_words(truth["pdf_text"])
+                     if truth.get("pdf_text") else set())
+        if ref_words:  # pagina senza testo: niente confronto (evita FP)
+            glued = detectors.extra_tokens(ref_words, vp._long_words(body),
+                                           minlen=6)
         diag = {
             "figure_blank": blank,
             "table_misalign": detectors.table_misalign(md),
             "duplicate_lines": detectors.duplicate_lines(md),
+            "glued_words": len(glued),
+            "glued_tokens": glued[:20],
         }
     except Exception:
-        diag = {"figure_blank": blank, "table_misalign": 0, "duplicate_lines": 0}
+        diag = {"figure_blank": blank, "table_misalign": 0,
+                "duplicate_lines": 0, "glued_words": len(glued),
+                "glued_tokens": glued[:20]}
     checks["diag"] = diag
     return checks
 
@@ -344,6 +357,8 @@ def _flags(checks: dict, gate: dict | None) -> list[str]:
         out.append(f"table_misalign: {diag['table_misalign']} righe fuori struttura")
     if diag.get("duplicate_lines"):
         out.append(f"duplicate: {diag['duplicate_lines']} righe ripetute")
+    if diag.get("glued_words"):
+        out.append(f"glued: {diag['glued_words']} token assenti dalla pagina")
     return out
 
 
@@ -577,7 +592,7 @@ def _print_rec(rec: dict) -> None:
 _AUTO_KIND = {"tables": "table_content", "text": "text_missing",
               "order": "text_order", "flow": "text_order",
               "structure": "text_order", "table_misalign": "table_structure",
-              "duplicate": "text_duplicate",
+              "duplicate": "text_duplicate", "glued": "text_integrity",
               "figures": "figure_missing", "gate": "other"}
 
 #: ruoli dei difetti. Un difetto di **gate** può decidere il fallback IR→current:

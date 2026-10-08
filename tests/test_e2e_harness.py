@@ -225,6 +225,13 @@ class ChecksTests(unittest.TestCase):
         flags = " ".join(e2e._flags(checks, None))
         self.assertIn("table_misalign", flags)
 
+    def test_diag_flags_glued_words(self):
+        truth = self._truth(pdf_text="absorption lipid digestion mechanism")
+        checks = e2e._checks(truth, "absorption byimagingor lipid", "x")
+        self.assertEqual(checks["diag"]["glued_words"], 1)
+        self.assertIn("byimagingor", checks["diag"]["glued_tokens"])
+        self.assertIn("glued", " ".join(e2e._flags(checks, None)))
+
     def test_collect_defects_role(self):
         rec = {
             "pdf": "x.pdf", "page_idx": 0, "page_ui": 1, "pipeline": "ir",

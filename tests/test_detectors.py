@@ -86,6 +86,21 @@ class DuplicateTests(unittest.TestCase):
         self.assertEqual(detectors.duplicate_lines("a b\n a b\n a b"), 0)
 
 
+class ExtraTokensTests(unittest.TestCase):
+    def test_flags_glued_and_split(self):
+        ref = {"absorption", "visualized", "imaging"}
+        md = {"absorption", "byimagingor", "sorption", "imaging"}
+        self.assertEqual(detectors.extra_tokens(ref, md, minlen=6),
+                         ["byimagingor", "sorption"])
+
+    def test_minlen_filters_short(self):
+        self.assertEqual(detectors.extra_tokens({"aa"}, {"bb"}, minlen=6), [])
+
+    def test_no_extra_when_subset(self):
+        self.assertEqual(detectors.extra_tokens({"alpha", "beta"},
+                                                {"alpha"}, minlen=6), [])
+
+
 class TableMisalignTests(unittest.TestCase):
     def test_ok_table(self):
         md = "|a|b|\n|---|---|\n|c|d|\n"

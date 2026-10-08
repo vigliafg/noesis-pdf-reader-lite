@@ -128,6 +128,17 @@ def figure_render(images: list[bytes]) -> dict:
             "stats": [s for s in stats if s]}
 
 
+def extra_tokens(ref_words, md_words, minlen: int = 6) -> list[str]:
+    """Token presenti nell'md ma **non** nella pagina (glue/split di testo).
+
+    ``ref_words``/``md_words`` sono insiemi di token già normalizzati (len ≥
+    ``minlen``). Una parola dell'md che non esiste sulla pagina è quasi sempre
+    un artefatto di span-joining (``byimagingor``, ``Ab|sorption``,
+    ``cinacalcet1``): il segnale è **grounded** sulla pagina → preciso.
+    """
+    return sorted(w for w in (set(md_words) - set(ref_words)) if len(w) >= minlen)
+
+
 def duplicate_lines(md: str, min_words: int = 8) -> int:
     """Numero di righe lunghe **ripetute** (≥ ``min_words`` parole), case/space
     normalizzati. Proxy della duplicazione (prosa+testo-figura, caption doppia).
