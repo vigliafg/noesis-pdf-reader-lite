@@ -71,7 +71,11 @@ class BuildPageTests(unittest.TestCase):
         self.assertIsNotNone(js["furniture"])
         # lo scheletro geometrico è presente e serializzabile
         self.assertIn("gutters", js["geometry"])
-        self.assertGreaterEqual(js["geometry"]["n_columns"], 1)
+        self.assertGreaterEqual(js["geometry"]["n_columns"], 2)
+        # nesting: colonne rappresentate come gruppi
+        self.assertGreaterEqual(len(js["groups"]), 1)
+        # ogni gruppo ha figli referenziati
+        self.assertTrue(all(g["children"] for g in js["groups"]))
         # il markdown/JSON non contiene set/oggetti non serializzabili
         json.dumps(js)
 

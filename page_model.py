@@ -23,9 +23,13 @@ Uso come libreria::
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
+
+#: caratteri di controllo emessi talvolta da PyMuPDF nei testi (es. \x07)
+_CTRL_RE = re.compile(r"[\x00-\x08\x0b-\x1f]")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Enum (nomi allineati a Docling)
@@ -478,7 +482,7 @@ class _Builder:
             rot = any(abs(dy) > abs(dx) for dx, dy in dirs)
             out.append({
                 "bbox": tuple(blk["bbox"]),
-                "text": " ".join(txt.split()),
+                "text": _CTRL_RE.sub("", " ".join(txt.split())),
                 "n_lines": len(lines),
                 "font_size": round(max(sizes), 1) if sizes else 0.0,
                 "bold": bold,
@@ -486,22 +490,101 @@ class _Builder:
             })
         return out
 
-    def gutters(self, blocks: list[dict], min_gap: float = 8.0) -> list[tuple]:
-        """Strisce verticali **vuote** (gutters) proiettando i bbox dei blocchi."""
+    def gutters_profile(self, blocks: list[dict], min_gap: float = 6.0,
+                        frac: float = 0.06) -> list[tuple]:
+        """Gutters da **profilo di copertura** in x (robusto ai blocchi "ponte").
+
+        Per ogni colonna di 1pt si somma l'altezza dei blocchi che la coprono; una
+        striscia con copertura ≤ ``frac`` dell'estensione verticale è un gutter.
+        A differenza del merge di intervalli, un singolo blocco che attraversa non
+        cancella il gutter (contribuisce poca altezza).
+        """
         if not blocks:
             return []
-        intervals = sorted((b["bbox"][0], b["bbox"][2]) for b in blocks)
-        merged: list[list[float]] = []
-        for x0, x1 in intervals:
-            if merged and x0 <= merged[-1][1] + 1:
-                merged[-1][1] = max(merged[-1][1], x1)
+        x0 = min(b["bbox"][0] for b in blocks)
+        x1 = max(b["bbox"][2] for b in blocks)
+        y0 = min(b["bbox"][1] for b in blocks)
+        y1 = max(b["bbox"][3] for b in blocks)
+        span = max(1.0, y1 - y0)
+        W = int(x1 - x0) + 2
+        cov = [0.0] * W
+        for b in blocks:
+            bx0 = max(0, int(b["bbox"][0] - x0))
+            bx1 = min(W, int(b["bbox"][2] - x0))
+            h = b["bbox"][3] - b["bbox"][1]
+            for i in range(bx0, bx1):
+                cov[i] += h
+        thr = frac * span
+        gaps: list[tuple] = []
+        start = None
+        for i, v in enumerate(cov):
+            if v <= thr:
+                if start is None:
+                    start = i
+            elif start is not None:
+                if i - start >= min_gap:
+                    gaps.append((round(x0 + start, 1), round(x0 + i, 1)))
+                start = None
+        if start is not None and W - start >= min_gap:
+            gaps.append((round(x0 + start, 1), round(x0 + W, 1)))
+        # scarta i gutter che toccano i bordi (margini di pagina)
+        return [g for g in gaps if g[0] > x0 + 2 and g[1] < x1 - 2]
+
+    def _col_bounds(self, gaps: list[tuple]) -> list[float]:
+        return [(g[0] + g[1]) / 2 for g in gaps]
+
+    def _col_of(self, bbox: tuple, bounds: list[float]) -> int:
+        mid = (bbox[0] + bbox[2]) / 2
+        return sum(1 for b in bounds if mid > b)
+
+    def _assemble(self, items: list[tuple], bounds: list[float]):
+        """Costruisce l'albero del ``body``: bande (full-width) → colonne → foglie.
+
+        L'ordine di lettura è il **traversal** dei figli del body.
+        """
+        def is_sep(bbox: tuple) -> bool:
+            return (bbox[2] - bbox[0]) >= 0.6 * self.W
+
+        seps = sorted([it for it in items if is_sep(it[0])],
+                      key=lambda t: t[0][1])
+        rest = [it for it in items if not is_sep(it[0])]
+        sep_y = [t[0][1] for t in seps]
+        bands: list[list[tuple]] = [[] for _ in range(len(seps) + 1)]
+        for it in rest:
+            bi = sum(1 for y in sep_y if it[0][1] >= y)
+            bands[bi].append(it)
+
+        body = self.doc.body
+
+        def order_key(it):
+            return (self._col_of(it[0], bounds), it[0][1], it[0][0])
+
+        for i, band in enumerate(bands):
+            cols: dict[int, list[tuple]] = {}
+            for it in band:
+                cols.setdefault(self._col_of(it[0], bounds), []).append(it)
+            nonempty = [c for c in sorted(cols) if cols[c]]
+            if len(nonempty) <= 1:
+                for it in sorted(band, key=lambda t: (t[0][1], t[0][0])):
+                    self._append_child(body, it[1])
             else:
-                merged.append([x0, x1])
-        gaps = []
-        for a, b in zip(merged, merged[1:]):
-            if b[0] - a[1] >= min_gap:
-                gaps.append((round(a[1], 1), round(b[0], 1)))
-        return gaps
+                for ci in nonempty:
+                    grp = GroupItem(
+                        self_ref=self._ref("groups"), group_label=GroupLabel.SECTION,
+                        name=f"column_{ci}",
+                        meta={"region": "column", "col": ci},
+                        source=NodeSource.GEOMETRY, content_layer=ContentLayer.BODY)
+                    self._add("groups", grp)
+                    grp.parent = RefItem(body.self_ref)
+                    for it in sorted(cols[ci], key=lambda t: (t[0][1], t[0][0])):
+                        self._append_child(grp, it[1])
+                    body.children.append(RefItem(grp.self_ref))
+            if i < len(seps):
+                self._append_child(body, seps[i][1])
+
+    def _append_child(self, group, node):
+        group.children.append(RefItem(node.self_ref))
+        node.parent = RefItem(group.self_ref)
 
     def build(self):
         blocks = self.text_blocks()
@@ -511,53 +594,55 @@ class _Builder:
         except Exception:
             images = []
 
+        # tabelle: griglia dalle **linee** (indipendente dal GNN)
+        tables = self._find_tables()
+        table_boxes = [tuple(t.bbox) for t in tables]
+
+        def in_table(bb) -> bool:
+            return any(_cover(bb, tb) >= 0.5 for tb in table_boxes)
+
         # 1) furniture: fascia alta/bassa (chrome)
         top = self.H * 0.07
         bot = self.H * 0.93
         header = [b for b in blocks if b["bbox"][3] <= top]
         footer = [b for b in blocks if b["bbox"][1] >= bot]
-        body = [b for b in blocks if b not in header and b not in footer]
+        body = [b for b in blocks
+                if b not in header and b not in footer
+                and not in_table(b["bbox"])]
 
-        # 2) gutters + colonne sul corpo (scheletro geometrico)
-        #    solo blocchi NON full-width: un blocco a tutta larghezza "chiude"
-        #    le colonne e nasconderebbe il gutter.
-        narrow = [b for b in body
-                  if b["bbox"][2] - b["bbox"][0] < 0.6 * self.W]
-        gaps = self.gutters(narrow)
-        cols = []
-        edges = [0.0] + [g[0] for g in gaps] + [self.W]
-        # semplice: una colonna per regione tra i gutter "grandi"
+        # 2) scheletro geometrico: gutters (testo del corpo + tabelle)
+        skel = list(body) + [{"bbox": tb, "text": ""} for tb in table_boxes]
+        gaps = self.gutters_profile(skel)
+        bounds = self._col_bounds(gaps)
         self.doc.geometry = {
             "page_size": [self.W, self.H],
             "gutters": gaps,
+            "columns_edges": [0.0] + [g[0] for g in gaps] + [self.W],
             "n_columns": len(gaps) + 1,
         }
 
-        # 3) etichette dal GNN (se disponibile) — solo la semantica
+        # 3) etichette dal GNN (solo la semantica)
         gnn = self._gnn_elements()
 
-        # 4) costruzione nodi
-        body_group = self.doc.body
-        ordered = self._order(body, gaps)
+        # 4) nodi foglia (testo), poi tabelle/figure; nessun append diretto
+        for b in body:
+            self._leaf(b, images, gnn)
+        items: list[tuple] = []
+        for b in body:
+            node = self._leaf_nodes.get(id(b))
+            if node is not None:
+                items.append((b["bbox"], node))
+        items += self._make_tables(tables, body)
+        items += self._make_pictures(images, body)
 
-        # azione: mappa ogni blocco → nodo
-        for b in ordered:
-            node = self._leaf(b, images, gnn)
-            if node is None:
-                continue
-            body_group.children.append(RefItem(node.self_ref))
+        # 5) albero: bande → colonne → foglie (ordine = traversal)
+        self._assemble(items, bounds)
 
-        # furniture
+        # 6) furniture
         for b in header:
-            self._attach_furniture(b, DocItemLabel.PAGE_HEADER,
-                                   "page_header" if b["text"].strip().isdigit() else "page_header")
+            self._attach_furniture(b, DocItemLabel.PAGE_HEADER, "page_header")
         for b in footer:
             self._attach_furniture(b, DocItemLabel.PAGE_FOOTER, "page_footer")
-
-        # immagini come PictureItem (raster) non già consumate
-        self._pictures(images, body, gnn)
-        # tabelle
-        self._tables(body, gnn)
         return self.doc
 
     def _gnn_elements(self) -> list[dict]:
@@ -644,21 +729,24 @@ class _Builder:
         self._add("texts", node)
         self.doc.furniture.children.append(RefItem(node.self_ref))
 
-    def _pictures(self, images: list, body: list[dict], gnn: list[dict]):
-        # immagini raster non coperte da nodi testo (scheletro: PictureItem)
+    def _make_pictures(self, images: list, body: list[dict]):
+        out: list[tuple] = []
         for im in images:
             bb = tuple(im["bbox"])
+            if (bb[2] - bb[0]) < 24 or (bb[3] - bb[1]) < 24:
+                continue  # scarta decorazioni minime
             prov = [ProvenanceItem(self.page_no, BoundingBox.from_tuple(bb))]
-            cap = self._nearest_caption(bb, body)
             pic = PictureItem(self_ref=self._ref("pictures"), prov=prov,
                               source=NodeSource.GEOMETRY, flags=["raster"],
                               image=ImageRef(size=Size(bb[2] - bb[0], bb[3] - bb[1]),
                                              mode=ImageRefMode.PLACEHOLDER))
+            cap = self._nearest_caption(bb, body)
             if cap is not None:
                 pic.captions.append(RefItem(cap.self_ref))
                 pic.caption_text = cap.text
             self._add("pictures", pic)
-            self.doc.body.children.append(RefItem(pic.self_ref))
+            out.append((bb, pic))
+        return out
 
     def _nearest_caption(self, bb: tuple, blocks: list[dict]):
         best, dy0 = None, 1e9
@@ -677,12 +765,15 @@ class _Builder:
                     best, dy0 = b, d
         return self._leaf_nodes.get(id(best)) if best is not None else None
 
-    def _tables(self, body: list[dict], gnn: list[dict]):
+    def _find_tables(self) -> list:
         try:
             finder = self.page.find_tables(strategy="lines")
-            tables = list(finder.tables)
+            return list(finder.tables)
         except Exception:
-            tables = []
+            return []
+
+    def _make_tables(self, tables: list, body: list[dict]) -> list[tuple]:
+        out: list[tuple] = []
         for t in tables:
             bb = tuple(t.bbox)
             try:
@@ -735,48 +826,12 @@ class _Builder:
                 tbl.captions.append(RefItem(cap.self_ref))
                 tbl.caption_text = cap.text
             self._add("tables", tbl)
-            self.doc.body.children.append(RefItem(tbl.self_ref))
-
-    def _clip(self, bbox: tuple) -> str:
-        try:
-            return " ".join(self.page.get_text("text", clip=PymupdfRect(*bbox)).split())
-        except Exception:
-            return ""
+            out.append((bb, tbl))
+        return out
 
     def _order(self, blocks: list[dict], gaps: list[tuple]) -> list[dict]:
-        """Ordine di lettura geometrico: bande full-width, poi colonne sx→dx."""
-        if not blocks:
-            return []
-        col_bounds = [0.0]
-        for g in gaps:
-            col_bounds.append(g[0])
-        col_bounds.append(self.W)
-        ncol = len(col_bounds) - 1
-
-        full = [b for b in blocks if b["bbox"][2] - b["bbox"][0] >= 0.6 * self.W]
-        rest = [b for b in blocks if b not in full]
-        seps = sorted(full, key=lambda b: b["bbox"][1])
-        sep_y = [b["bbox"][1] for b in seps]
-
-        def col_of(b) -> int:
-            mid = (b["bbox"][0] + b["bbox"][2]) / 2
-            c = 0
-            for i in range(1, ncol):
-                if mid > col_bounds[i]:
-                    c = i
-            return c
-
-        bands: list[list[dict]] = [[] for _ in range(len(seps) + 1)]
-        for b in rest:
-            bi = sum(1 for y in sep_y if b["bbox"][1] >= y)
-            bands[bi].append(b)
-        out: list[dict] = []
-        for i, band in enumerate(bands):
-            band.sort(key=lambda b: (col_of(b), b["bbox"][1], b["bbox"][0]))
-            out.extend(band)
-            if i < len(seps):
-                out.append(seps[i])
-        return out
+        """Deprecato: l'ordine è ora il traversal di ``_assemble``."""
+        raise NotImplementedError
 
 
 def _iou(a: tuple, b: tuple) -> float:
@@ -785,6 +840,14 @@ def _iou(a: tuple, b: tuple) -> float:
     inter = ix * iy
     ua = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
     return inter / ua if ua > 0 else 0.0
+
+
+def _cover(inner: tuple, outer: tuple) -> float:
+    """Frazione dell'area di ``inner`` contenuta in ``outer``."""
+    ix = max(0.0, min(inner[2], outer[2]) - max(inner[0], outer[0]))
+    iy = max(0.0, min(inner[3], outer[3]) - max(inner[1], outer[1]))
+    a = max(1e-6, (inner[2] - inner[0]) * (inner[3] - inner[1]))
+    return (ix * iy) / a
 
 
 def build_page_document(pdf_path: str, page_index: int) -> DoclingDocument:

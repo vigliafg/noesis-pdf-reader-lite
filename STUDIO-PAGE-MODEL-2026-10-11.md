@@ -50,28 +50,29 @@ deterministico:
 
 CLI: `.venv/bin/python page_model.py <pdf> --page N --out page.json`.
 
-## 3. Evidenza iniziale (prototipo)
+## 3. Evidenza (dopo il refactor: gutter a profilo + nesting)
 
-- `fe22 p1038` (difetto d'ordine): gutters rilevati → **`n_columns=2`**;
-  l'ordine geometrico mette la colonna sinistra **prima** della destra (il
-  motore le interlacciava).
-- `ce24 p480` (tabella complessa): **`TableItem` 7×5** con celle e
-  `column_header`/`row_header` (una sotto-tabella della pagina).
-- `su19 p1050` / `ha22 p3355`: `PictureItem` con `captions` per prossimità.
+- `fe22 p1038` (difetto d'ordine): profilo di copertura → gutter `[206–222]` e
+  `[383–399]` → **3 colonne** (sidebar + 2 content), costruite come **3
+  `GroupItem` "column"**; l'ordine di lettura (traversal) tiene ogni colonna
+  **contigua** invece di interlacciare (come faceva il motore).
+- `ce24 p480` (tabella complessa): `find_tables(strategy="lines")` cattura
+  l'**intera `TABLE 46-2`** come un unico `TableItem` **25×7** (175 celle) con
+  `row_section` (le sezioni "WHY?/HOW TO USE?/…"), `column_header`, `row_header`.
+- `ha22 p3355` / `su19 p1050`: `PictureItem` (`flags=["raster"]`) con `captions`.
+- Pagina normale (`plos`): 1 colonna, nessun gruppo spurio.
 
 ## 4. Limiti attuali (onesti)
 
-- **Gutter detection incompleta**: `fe22 p1038` è in realtà a **3 colonne**
-  (sidebar + 2 content) e il gutter 222↔399 non è separato; `ce24 p480` non
-  produce alcun gutter (un blocco "ponte" lo copre). Serve un **profilo di
-  copertura** con soglia (non merge di intervalli).
-- **Tabella complessa**: `find_tables(lines)` cattura sotto-tabelle, non
-  ricostruisce la `TABLE 46-2` a sezioni/celle unite.
-- **Nesting non ancora a gruppi**: niente `GroupItem` per colonna/banda; le
-  colonne sono solo nello scheletro, non nell'albero.
-- **Etichette dal GNN** → lo *scheletro* è indipendente, ma la *semantica* no:
-  va mantenuta la separazione (invarianti sul solo scheletro).
-- Dettagli cosmetici: `\x07` nei testi (caratteri di controllo PyMuPDF).
+- `find_tables(lines)` può produrre **falsi positivi** (es. `fe22 p1038`: un
+  blocco "ICD-10CM CODE" letto come tabella 2×2 nella sidebar).
+- Le **sezioni** interne alla tabella sono `row_section` in modo euristico (righe
+  a cella unica); le **celle unite** non sono ancora ricostruite con
+  `row_span`/`col_span`.
+- Il **nesting** copre bande+colonne; mancano la gerarchia **sezioni/capitoli**
+  (`GroupLabel.SECTION` per gli header) e la gestione degli **spanning**.
+- La **semantica** (label) viene dal GNN: lo *scheletro* è indipendente, la
+  *semantica* no → mantenere la separazione (invarianti sul solo scheletro).
 
 ## 5. Principio (anti-cecità correlata)
 
