@@ -78,6 +78,18 @@ CLI: `.venv/bin/python page_model.py <pdf> --page N --out page.json`.
   `region=section`, annidati per `level` (es. `BASIC INFORMATION` → `PHYSICAL
   FINDINGS…`); l'ordine di lettura (traversal) è preservato. Validato su 36
   pagine campione: nessun gruppo vuoto, tutti i riferimenti risolvibili.
+- **Invarianti dello scheletro** (`tools/measure_page_model.py`, S1–S5: albero /
+  provenienza / griglia / ordine / colonne): **39/40** pagine campione senza
+  violazioni (l'unica era un blocco vuoto a bbox sentinella di PyMuPDF, ora
+  saltato); 4/4 pagine-difetto pulite.
+- **Misura sui difetti aperti** (riferimento geometrico indipendente):
+  - `ce24 p480` → **una** tabella 25×7 (nessun interlacciamento da ordine);
+  - `fe22 p1038` → **3 colonne contigue** + sezioni;
+  - `arxiv_2609.37412 p30` → **101 blocchi di testo**: la prosa c'è, la perdita
+    (`recall 0.67`) è in **emissione**, non nella geometria;
+  - `su19 p1050` → **una** immagine raster CMYK (parzialmente fuori pagina,
+    `y0<0`), **non 3**: la geometria non conferma "3 figure"; il difetto
+    "figura vuota" è di **rendering** (CMYK/off-page), non di rilevazione.
 - `ha22 p3355` / `su19 p1050`: `PictureItem` (`flags=["raster"]`) con `captions`.
 - Pagina normale (`plos`): 1 colonna, nessun gruppo spurio.
 
@@ -110,8 +122,8 @@ etichettato; gli **invarianti** controlleranno lo **scheletro**. Non si mescolan
 - [x] **Tabelle**: filtro falsi positivi + celle unite (`row_span`/`col_span`).
 - [x] **Gerarchia sezioni/capitoli** (`GroupLabel.SECTION` dagli header,
   annidata per `level`).
-- [ ] **Invarianti sullo scheletro** (nuovo livello) e **misura** sui difetti
-  aperti.
+- [x] **Invarianti sullo scheletro** (`tools/measure_page_model.py`, S1–S5) e
+  **misura** sui difetti aperti.
 - [~] **Elementi spanning**: marcati (`flags=["spanning"]`) e usati come
   separatori di banda; la gestione dedicata nell'albero resta da affinare.
 - [ ] Solo dopo: valutare l'uso in **runtime** (emissione).

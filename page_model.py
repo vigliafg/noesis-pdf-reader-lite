@@ -507,15 +507,21 @@ class _Builder:
         for blk in d.get("blocks", []):
             if blk.get("type") != 0:
                 continue
+            bbox = tuple(blk["bbox"])
+            if not (bbox[0] <= bbox[2] and bbox[1] <= bbox[3]):
+                continue  # blocco vuoto/degenere (PyMuPDF usa bbox sentinella)
             lines = blk.get("lines", [])
-            txt = " ".join(s.get("text", "") for ln in lines for s in ln.get("spans", []))
+            txt = " ".join(s.get("text", "") for ln in lines
+                           for s in ln.get("spans", []))
+            if not txt.strip():
+                continue  # blocco senza testo
             spans = [s for ln in lines for s in ln.get("spans", [])]
             sizes = [s.get("size", 0) for s in spans if s.get("text", "").strip()]
             bold = any(_is_bold(s.get("flags", 0)) for s in spans)
             dirs = [ln.get("dir", (1, 0)) for ln in lines]
             rot = any(abs(dy) > abs(dx) for dx, dy in dirs)
             out.append({
-                "bbox": tuple(blk["bbox"]),
+                "bbox": bbox,
                 "text": _CTRL_RE.sub("", " ".join(txt.split())),
                 "n_lines": len(lines),
                 "font_size": round(max(sizes), 1) if sizes else 0.0,

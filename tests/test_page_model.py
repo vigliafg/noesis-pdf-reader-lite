@@ -143,5 +143,21 @@ class TableTests(unittest.TestCase):
         self.assertEqual(js["tables"], [])
 
 
+@unittest.skipUnless(_OK, "page_model non importabile")
+class SkeletonInvariantTests(unittest.TestCase):
+    def test_defect_pages_violate_nothing(self):
+        # Invarianti dello scheletro (tools/measure_page_model.py) sulle pagine
+        # dei difetti aperti: albero, provenienza, griglia, ordine, colonne.
+        import measure_page_model as mpm  # tools/ è nel sys.path
+        cases = [(_ROOT / "corpus1" / "ce24.pdf", 480),
+                 (_ROOT / "corpus2" / "fe22.pdf", 1038)]
+        for pdf, page in cases:
+            if not pdf.exists():
+                continue
+            doc = pm.build_page_document(str(pdf), page - 1).to_dict()
+            self.assertEqual(mpm.check_skeleton(doc), [],
+                             msg=f"{pdf.name} p{page}")
+
+
 if __name__ == "__main__":
     unittest.main()
