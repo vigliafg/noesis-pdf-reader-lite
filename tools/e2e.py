@@ -141,9 +141,14 @@ def _page_truth(doc, idx: int, with_tables: bool = True) -> dict:
         # escluse (rese come immagine).
         try:
             rot = {tuple(r) for r in main._rotated_table_rects(page, elements)}
+            # pannelli-figura classificati come tabella (resi come immagine):
+            # non sono tabelle da valutare (evita falsi `table_content`).
+            cov = {tuple(r) for r in
+                   main._figure_covered_table_rects(page, elements)}
             tbl_rects = [e["bbox"] for e in elements
                          if e.get("class") == "table"
-                         and tuple(e["bbox"]) not in rot]
+                         and tuple(e["bbox"]) not in rot
+                         and tuple(e["bbox"]) not in cov]
             if tbl_rects:
                 def _in_tbl(b):
                     cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2

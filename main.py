@@ -1035,6 +1035,36 @@ def _rotated_table_rects(page, elements: list[dict]) -> list[tuple]:
 _CHROME_BBOX_SLACK = 6.0
 
 
+def _figure_covered_table_rects(page, elements: list[dict]) -> list[tuple]:
+    """Rect delle tabelle **interamente contenute** in una regione-figura.
+
+    Un pannello figura (EEG, tabella-segnapassi) può essere classificato come
+    ``table`` dalla content map, ma è reso come **immagine** da ``_link_figures``
+    (via didascalia): il suo testo non è una tabella da valutare. Evita il doppio
+    (testo + immagine) e i falsi ``table_content`` (es. `fe22 p207`, `ha22 p3355`).
+    """
+    if not any(e.get("class") == "table" for e in elements):
+        return []
+    try:
+        regions = _figure_regions(page)
+    except Exception:
+        return []
+    if not regions:
+        return []
+    out: list[tuple] = []
+    for e in elements:
+        if e.get("class") != "table":
+            continue
+        b = tuple(e["bbox"])
+        for f in regions:
+            r = f["rect"]
+            if (b[0] >= r[0] - 3 and b[2] <= r[2] + 3
+                    and b[1] >= r[1] - 3 and b[3] <= r[3] + 3):
+                out.append(b)
+                break
+    return out
+
+
 def _page_text_no_figures(page, elements: list[dict],
                           exclude_chrome: bool = False) -> str:
     """Testo della pagina escludendo le regioni ``picture`` (rese nell'immagine).
@@ -1045,6 +1075,8 @@ def _page_text_no_figures(page, elements: list[dict],
     """
     pics = [e["bbox"] for e in elements if e.get("class") == "picture"]
     pics += _rotated_table_rects(page, elements)
+    # tabelle-figura (pannelli resi come immagine): il loro testo è nell'immagine
+    pics += _figure_covered_table_rects(page, elements)
     chrome: list[tuple] = []
     if exclude_chrome:
         chrome = [e["bbox"] for e in elements
@@ -1135,8 +1167,12 @@ def _ir_gate(page, md: str, elements: list[dict]) -> tuple[bool, str]:
     # tabella, il recall cala e il gate fallisce. Le tabelle ruotate sono
     # escluse (rese come immagine).
     rotated = {tuple(r) for r in _rotated_table_rects(page, elements)}
+    # tabelle-figura (pannelli resi come immagine): non sono tabelle da valutare
+    covered = {tuple(r) for r in _figure_covered_table_rects(page, elements)}
     tbl_rects = [e["bbox"] for e in elements
-                 if e.get("class") == "table" and tuple(e["bbox"]) not in rotated]
+                 if e.get("class") == "table"
+                 and tuple(e["bbox"]) not in rotated
+                 and tuple(e["bbox"]) not in covered]
     if tbl_rects:
         def _in_tbl(b: tuple) -> bool:
             cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
@@ -1350,10 +1386,33 @@ def _link_figures(
             itokens = set(internal.split())
             kept: list[str] = []
             removed_before = 0
-            for k, ln in enumerate(lines):
+            nlines = len(lines)
+            k = 0
+            while k < nlines:
+                ln = lines[k]
                 if k == idx or ln.lstrip().startswith(">"):
                     kept.append(ln)
+                    k += 1
                     continue
+                # Blocco-tabella **interamente** dentro la figura (es. un
+                # pannello EEG o una tabella-didascalia). Viene rimosso in
+                # blocco, non riga per riga: altrimenti restano righe lunghe
+                # (>8 parole) e separatori spuri (es. `fe22 p207`).
+                if ln.lstrip().startswith("|"):
+                    j = k
+                    block: list[str] = []
+                    while j < nlines and lines[j].lstrip().startswith("|"):
+                        block.append(lines[j])
+                        j += 1
+                    if not (k <= idx < j):
+                        btokens: set[str] = set()
+                        for b in block:
+                            btokens |= set(_norm_text(b).split())
+                        if btokens and btokens <= itokens:
+                            if k < idx:
+                                removed_before += len(block)
+                            k = j
+                            continue
                 n = _norm_text(ln)
                 if (
                     2 <= len(n) <= 120
@@ -1362,8 +1421,10 @@ def _link_figures(
                 ):
                     if k < idx:
                         removed_before += 1
+                    k += 1
                     continue
                 kept.append(ln)
+                k += 1
             if removed_before or len(kept) != len(lines):
                 lines = kept
                 idx -= removed_before
