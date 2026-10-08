@@ -69,9 +69,9 @@ _ADVISOR_URL = "https://openrouter.ai/api/v1/chat/completions"
 # correnti, numero pagina, fasce "PART n", elenchi collaboratori).
 _DEFECT_KINDS = (
     "figure_missing", "figure_duplicate", "figure_order", "figure_text_bleed",
-    "figure_caption", "table_structure", "table_content", "equation",
-    "text_missing", "text_order", "ref_order", "header_content",
-    "index_truncate", "marginalia", "other",
+    "figure_caption", "figure_blank", "table_structure", "table_content",
+    "equation", "text_missing", "text_order", "text_duplicate", "ref_order",
+    "header_content", "index_truncate", "marginalia", "other",
 )
 _ADVISOR_SYSTEM = (
     "Sei un revisore di estrazione PDF. Ricevi l'immagine di UNA pagina e il "
@@ -200,7 +200,7 @@ def _checks(truth: dict, md: str, plain: str) -> dict:
         tnotes.append(f"indice recall {r_pdf:.2f}")
 
     # ── figure (embedded base64) ──
-    emb = re.findall(r"data:image/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+", md)
+    emb = re.findall(r"data:image/[a-zA-Z0-9.+-]+;base64,([A-Za-z0-9+/=]+)", md)
     fig_sizes = [len(e) for e in emb]
     fnotes: list[str] = []
     fig_ok = True
@@ -211,6 +211,23 @@ def _checks(truth: dict, md: str, plain: str) -> dict:
     if tiny:
         fig_ok = False
         fnotes.append(f"{len(tiny)} figure vuote")
+    # reale blankness: decodifica e misura la deviazione (una regione vuota
+    # grande NON è "tiny" ma è comunque un artefatto di rendering).
+    blank = 0
+    try:
+        import detectors
+        blobs = []
+        for e in emb:
+            try:
+                blobs.append(base64.b64decode(e))
+            except Exception:
+                pass
+        blank = detectors.figure_render(blobs).get("blank", 0)
+    except Exception:
+        blank = 0
+    if blank:
+        fig_ok = False
+        fnotes.append(f"{blank} figure bianche")
 
     # ── tabelle ──
     tnotes2: list[str] = []
@@ -271,7 +288,7 @@ def _checks(truth: dict, md: str, plain: str) -> dict:
         },
         "figures": {
             "ok": fig_ok, "expected": truth["expected_figs"],
-            "embedded": len(emb), "note": "; ".join(fnotes),
+            "embedded": len(emb), "blank": blank, "note": "; ".join(fnotes),
         },
         "tables": {
             "ok": tbl_ok, "recall": None if tbl_recall is None else round(tbl_recall, 4),
@@ -297,6 +314,19 @@ def _checks(truth: dict, md: str, plain: str) -> dict:
             "note": snote,
         },
     }
+    # ── vettore diagnostico (nuove tipologie) ──
+    # figura bianca (artefatto di rendering, non "tiny"), struttura tabella
+    # (righe con conteggio celle diverso dall'header), duplicazione di righe.
+    try:
+        import detectors
+        diag = {
+            "figure_blank": blank,
+            "table_misalign": detectors.table_misalign(md),
+            "duplicate_lines": detectors.duplicate_lines(md),
+        }
+    except Exception:
+        diag = {"figure_blank": blank, "table_misalign": 0, "duplicate_lines": 0}
+    checks["diag"] = diag
     return checks
 
 
@@ -308,6 +338,12 @@ def _flags(checks: dict, gate: dict | None) -> list[str]:
             out.append(f"{kind}: {c.get('note', '')}".strip().rstrip(":"))
     if gate is not None and not gate.get("ok", True):
         out.append(f"gate: {gate.get('reason', '')}".strip().rstrip(":"))
+    # nuove tipologie (vettore `diag`)
+    diag = checks.get("diag") or {}
+    if diag.get("table_misalign"):
+        out.append(f"table_misalign: {diag['table_misalign']} righe fuori struttura")
+    if diag.get("duplicate_lines"):
+        out.append(f"duplicate: {diag['duplicate_lines']} righe ripetute")
     return out
 
 
@@ -540,8 +576,17 @@ def _print_rec(rec: dict) -> None:
 # I flag automatici sono grossolani: mappati sulla stessa tassonomia.
 _AUTO_KIND = {"tables": "table_content", "text": "text_missing",
               "order": "text_order", "flow": "text_order",
-              "structure": "text_order",
+              "structure": "text_order", "table_misalign": "table_structure",
+              "duplicate": "text_duplicate",
               "figures": "figure_missing", "gate": "other"}
+
+#: ruoli dei difetti. Un difetto di **gate** può decidere il fallback IR→current:
+#: entra nel gate solo con **precisione** alta. Gli altri sono candidati di
+#: **fix** (interessa la recall). Vedi HANDOFF §7.
+_GATE_KINDS = frozenset({
+    "text_missing", "text_order", "figure_missing", "figure_blank",
+    "figure_duplicate", "table_content", "table_structure", "index_truncate",
+})
 
 
 def _collect_defects(records: list[dict]) -> list[dict]:
@@ -559,7 +604,9 @@ def _collect_defects(records: list[dict]) -> list[dict]:
             "page_ui": rec["page_ui"], "pipeline": rec["pipeline"],
             "engine": rec.get("engine"),  # pipeline che ha prodotto il testo
             "source": source, "kind": kind, "severity": severity,
+            "role": "gate" if kind in _GATE_KINDS else "fix",
             "real": kind != "marginalia", "note": note, "verdict": verdict,
+            "arbitration": None,  # real/FP/non-IR, riempito all'arbitraggio
         })
 
     for r in records:

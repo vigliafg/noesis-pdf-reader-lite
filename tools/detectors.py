@@ -70,6 +70,78 @@ def heading_glued(md: str) -> int:
     return _count(re.compile(r"(?m)^#{1,6}\s+\S.*[a-z]$"), md)
 
 
+# --- image-level (import **lazy**: pymupdf + numpy) -------------------------
+#: sotto questa deviazione standard dei pixel (0..255) l'immagine è "piatta"
+#: (bianca/uniforme): una figura così è un **artefatto di rendering**, non
+#: contenuto. Cattura la picture CMYK fuori pagina (es. `su19 p1050`).
+IMG_BLANK_STD = 3.0
+#: alternativa: quasi tutti i pixel al massimo (bianco) → vuota.
+IMG_WHITE_MIN = 0.995
+
+
+def _img_type(data: bytes) -> str | None:
+    if data[:3] == b"\xff\xd8\xff":
+        return "jpeg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if data[:2] == b"BM":
+        return "bmp"
+    return None
+
+
+def image_stats(data: bytes) -> dict | None:
+    """Statistiche di un'immagine ``bytes`` (lazy pymupdf+numpy); ``None`` se
+    indecifrabile. ``blank`` = piatta/bianca (artefatto di rendering)."""
+    ft = _img_type(data)
+    if not ft:
+        return None
+    try:
+        import numpy as np
+        import pymupdf
+
+        d = pymupdf.open(stream=data, filetype=ft)
+        try:
+            pix = d[0].get_pixmap()
+        finally:
+            d.close()
+        arr = np.frombuffer(pix.samples, dtype=np.uint8).astype(np.float32)
+        if arr.size == 0:
+            return {"w": pix.width, "h": pix.height, "mean": 0.0, "std": 0.0,
+                    "white": 1.0, "blank": True}
+        std = float(arr.std())
+        white = float((arr >= 250).mean())
+        return {"w": pix.width, "h": pix.height, "mean": float(arr.mean()),
+                "std": std, "white": white,
+                "blank": std < IMG_BLANK_STD or white >= IMG_WHITE_MIN}
+    except Exception:
+        return None
+
+
+def figure_render(images: list[bytes]) -> dict:
+    """Riepilogo della resa delle figure embedded: quante sono **vuote**.
+
+    ``{"n": n, "blank": n_blank, "blank_idx": [...], "stats": [...]}``.
+    """
+    stats = [image_stats(b) for b in images]
+    blank_idx = [i for i, s in enumerate(stats) if s and s.get("blank")]
+    return {"n": len(images), "blank": len(blank_idx), "blank_idx": blank_idx,
+            "stats": [s for s in stats if s]}
+
+
+def duplicate_lines(md: str, min_words: int = 8) -> int:
+    """Numero di righe lunghe **ripetute** (≥ ``min_words`` parole), case/space
+    normalizzati. Proxy della duplicazione (prosa+testo-figura, caption doppia).
+    """
+    from collections import Counter
+
+    seen: Counter = Counter()
+    for ln in (md or "").splitlines():
+        s = re.sub(r"\s+", " ", ln).strip(" \t|*_>`#-").lower()
+        if len(s.split()) >= min_words:
+            seen[s] += 1
+    return sum(c - 1 for c in seen.values() if c > 1)
+
+
 def analyze(raw: str, md: str, key: str = "") -> dict:
     md = md or ""
     raw = raw or ""

@@ -718,6 +718,19 @@ def _is_figure_caption(text: str) -> bool:
     return bool(re.match(r"(?i)^\W*fig", (text or "").strip()))
 
 
+def _visible_in_page(bbox: tuple, page_width: float, page_height: float,
+                     min_side: float = 1.0) -> bool:
+    """True se ``bbox`` interseca la pagina con lato visibile ≥ ``min_side``.
+
+    Una picture **interamente fuori pagina** (artefatto CMYK/bleed, es.
+    ``su19 p1050``: ``x1 = 0``) renderebbe un JPEG **vuoto**: va scartata.
+    """
+    x0, y0, x1, y1 = bbox
+    vw = min(x1, page_width) - max(x0, 0.0)
+    vh = min(y1, page_height) - max(y0, 0.0)
+    return vw >= min_side and vh >= min_side
+
+
 def real_pictures(elements: list[dict], page_width: float,
                   page_height: float) -> list[dict]:
     """``picture`` che l'IR considera **figure reali** (stesso filtro di
@@ -730,6 +743,8 @@ def real_pictures(elements: list[dict], page_width: float,
             continue
         x0, y0, x1, y1 = e["bbox"]
         w, h = x1 - x0, y1 - y0
+        if not _visible_in_page((x0, y0, x1, y1), page_width, page_height):
+            continue  # interamente fuori pagina: renderebbe vuota
         if w < 40 and (x0 < 30 or x1 > page_width - 30):
             continue
         if w * h < 2500:
@@ -1311,6 +1326,8 @@ def build_markdown(page, doc, page_index: int, figures_dir=None,
                 keep.append(e)
             continue
         if c == "picture":
+            if not _visible_in_page((x0, y0, x1, y1), pw, ph):
+                continue  # interamente fuori pagina: renderebbe un JPEG vuoto
             w, h = x1 - x0, y1 - y0
             if w < 40 and (x0 < 30 or x1 > pw - 30):
                 continue  # etichetta verticale di margine

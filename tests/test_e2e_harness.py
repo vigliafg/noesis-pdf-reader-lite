@@ -204,6 +204,7 @@ class ChecksTests(unittest.TestCase):
             {"class": "picture", "bbox": (100, 100, 110, 110)},  # minuscolo
             {"class": "picture", "bbox": (100, 20, 500, 60)},    # banner testa
             {"class": "picture", "bbox": (100, 200, 400, 500)},  # reale
+            {"class": "picture", "bbox": (-112, 643, 0, 694)},   # fuori pagina
         ]
         self.assertEqual(len(ir_layout.real_pictures(els, 600, 800)), 1)
 
@@ -216,6 +217,24 @@ class ChecksTests(unittest.TestCase):
         self.assertIn("dopo", out)
         self.assertIn("[FIGURA: FIG 1]", out)
         self.assertIn("fine", out)
+
+    def test_diag_flags_table_and_duplicate(self):
+        md = "|a|b|\n|---|---|\n|c|\n"
+        checks = e2e._checks(self._truth(), md, "")
+        self.assertEqual(checks["diag"]["table_misalign"], 1)
+        flags = " ".join(e2e._flags(checks, None))
+        self.assertIn("table_misalign", flags)
+
+    def test_collect_defects_role(self):
+        rec = {
+            "pdf": "x.pdf", "page_idx": 0, "page_ui": 1, "pipeline": "ir",
+            "engine": "ir", "flags": ["table_misalign: 1 righe"],
+            "arbitration": None,
+        }
+        d = e2e._collect_defects([rec])[0]
+        self.assertEqual(d["kind"], "table_structure")
+        self.assertEqual(d["role"], "gate")
+        self.assertIn("arbitration", d)
 
     def test_collect_defects_structured(self):
         rec = {
