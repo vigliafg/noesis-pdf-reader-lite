@@ -1073,6 +1073,87 @@ def _figure_covered_table_rects(page, elements: list[dict]) -> list[tuple]:
     return out
 
 
+def _raster_figure_table_rects(page, elements: list[dict]) -> list[tuple]:
+    """Rect delle tabelle-figura il cui contenuto è **OCR di un'immagine raster**.
+
+    Una tabella della content map **dentro una regione-figura** può essere:
+    - una tabella **vettoriale** reale (es. `fe22 p207` FIG. E2: va tenuta);
+    - un pannello-immagine (EEG, lastra) che PyMuPDF4LLM ha tentato di
+      trasformare in tabella producendo **spazzatura** (es. `ha22 p3355`).
+
+    Discriminante deterministico: la tabella è OCR-spazzatura se il suo bbox è
+    coperto al ≥50% da un'**immagine raster incorporata** (``page.get_image_info``).
+    In tal caso il contenuto è già reso come immagine dalla regione-figura e la
+    tabella va tolta dal markdown (niente doppio testo+immagine).
+    """
+    covered = _figure_covered_table_rects(page, elements)
+    if not covered:
+        return []
+    try:
+        imgs = [tuple(i["bbox"]) for i in page.get_image_info()]
+    except Exception:  # noqa: BLE001
+        return []
+    if not imgs:
+        return []
+
+    def _cover_ratio(b: tuple, r: tuple) -> float:
+        ix = min(b[2], r[2]) - max(b[0], r[0])
+        iy = min(b[3], r[3]) - max(b[1], r[1])
+        if ix <= 0 or iy <= 0:
+            return 0.0
+        area = max(1e-6, (b[2] - b[0]) * (b[3] - b[1]))
+        return (ix * iy) / area
+
+    return [b for b in covered
+            if any(_cover_ratio(b, r) >= 0.5 for r in imgs)]
+
+
+def _strip_table_blocks(md: str, elements: list[dict],
+                        rects: list[tuple]) -> str:
+    """Toglie dal markdown i blocchi-tabella corrispondenti a ``rects``.
+
+    Associa ogni blocco ``|...|`` all'elemento ``table`` per **sovrapposizione
+    di token** (il md deriva dal testo dell'elemento): robusto ai token OCR che
+    il test riga-per-riga di ``_link_figures`` non riconosce (`ha22 p3355`).
+    """
+    cov = {tuple(r) for r in rects}
+    keys: list[set[str]] = []
+    for e in elements:
+        if e.get("class") == "table" and tuple(e["bbox"]) in cov:
+            toks = set(_norm_text(e.get("text") or "").split())
+            if toks:
+                keys.append(toks)
+    if not keys or "|" not in md:
+        return md
+    lines = md.split("\n")
+    out: list[str] = []
+    k = 0
+    while k < len(lines):
+        if lines[k].lstrip().startswith("|"):
+            j = k
+            block: list[str] = []
+            while j < len(lines) and lines[j].lstrip().startswith("|"):
+                block.append(lines[j])
+                j += 1
+            btoks: set[str] = set()
+            for b in block:
+                btoks |= set(_norm_text(b).split())
+            # Soglia bassa (0.3): il markdown riformatta la tabella (righe/colonne
+            # diverse dal testo dell'elemento), quindi la copertura non è piena.
+            # Il candidato è già ristretto (tabella coperta da figura **e** su
+            # immagine raster), perciò il rischio di falsi positivi è trascurabile.
+            if btoks and any(len(btoks & key) / len(btoks) >= 0.3
+                             for key in keys):
+                k = j
+                continue
+            out.extend(block)
+            k = j
+            continue
+        out.append(lines[k])
+        k += 1
+    return "\n".join(out)
+
+
 def _page_text_no_figures(page, elements: list[dict],
                           exclude_chrome: bool = False) -> str:
     """Testo della pagina escludendo le regioni ``picture`` (rese nell'immagine).
@@ -2259,15 +2340,21 @@ def _apply_ir_on_page_full(path: str, page_num: int, figures_dir=None, exclude=(
         md, meta = ir_layout.build_markdown(
             page, doc, page_num, figures_dir=figures_dir,
             embed_figures=True, return_meta=True, chunk=chunk)
+        try:
+            _t, elements = ir_layout._elements_from_chunk(chunk)
+        except Exception:
+            elements = []
+        # Pannello-immagine (raster) classificato `table` dalla content map:
+        # il suo testo è OCR-spazzatura, già reso dall'immagine della figura.
+        # Va tolto dal md (niente doppio testo+immagine, es. `ha22 p3355`).
+        raster_tables = _raster_figure_table_rects(page, elements)
+        if raster_tables:
+            md = _strip_table_blocks(md, elements, raster_tables)
         md = _link_figures(md, page, figures_dir, page_num, mode="embed",
                            exclude=exclude, skip_captions=meta["captions"],
                            skip_rects=meta["rects"])
         md = _cosmetic_ir(md)
         raw = chunk.get("text", "") or ""
-        try:
-            _t, elements = ir_layout._elements_from_chunk(chunk)
-        except Exception:
-            elements = []
         gate_ok, reason = _ir_gate(page, md, elements)
         # tabella ruotata: l'IR la rende come immagine (fedele), quindi è
         # "gestita" — non si ricade su `current` (che qui è peggiore).
