@@ -33,6 +33,8 @@ Implementazione (nessuna modifica al motore):
   `contains` / `iou`; CLI con `--overlay`.
 - `tools/measure_independent.py` — misura accordo/divergenza su un campione
   (run E2E e/o le 54 pagine `su19` "Key Points").
+- `tools/measure_classification.py` — misura sistematica delle
+  **divergenze di classificazione** motore↔oracolo (§3.6), con cache.
 - `tests/test_independent_zones.py` — test dei soli helper (CI-safe, nessun
   modello).
 
@@ -139,6 +141,48 @@ Lettura dei casi:
 classe box (accordo regionale su tabelle/figure, divergenze geometriche attese).
 Il valore resta la **divergenza di classificazione** (§3.4).
 
+### 3.6 Divergenza di classificazione — misura sistematica (124 pagine)
+
+Per trasformare l'aneddoto di §3.4 in un **tasso**, `tools/measure_classification.py`
+confronta gli elementi speciali del motore (`table`/`picture`/`formula`) con le
+zone DocLayout sulla **stessa regione** (IoU ≥ 0.3) su 124 pagine held-out
+(60 di L6 + 60 di M4 + 4 residue note).
+
+| classe motore | tot | ok | conflitto | non-match |
+|---|---|---|---|---|
+| `table` | 43 | 32 | 7 | 4 |
+| `picture` | 52 | 48 | 2 | 2 |
+| `formula` | 10 | 9 | 1 | 0 |
+
+Zone speciali dell'oracolo **senza corrispettivo** nel motore: `table` 5,
+`figure` 0, `formula` 2. Pagine con gap di prosa ≥ 3: 5.
+
+**Accordo grezzo: 89/105 = 85%.** Le divergenze (10 conflitti) sono state
+**arbitrate** con overlay (zone oracolo + elementi motore):
+
+| page | motore | oracolo | IoU | giudizio |
+|---|---|---|---|---|
+| `ha22 p3355` | table | figure | 0.92 | **VERO** figura multi-pannello |
+| `co23 p743` | table | figure | 0.37 | **VERO** flowchart = figura |
+| `co23 p1428` | table | plain text | 0.98 | **VERO** Box = lista, motore sovra-rileva tabella |
+| `arxiv_2609.38133 p16` | formula | plain text | 0.39 | **VERO** prosa persa su pagina formula |
+| `ce24 p68` | table | figure | 0.93 | ambiguo (modulo ESAS: figura nel libro, tabella accettabile) |
+| `ce24 p368` | table | plain text | 0.49 | **FALSO** (Tabella 37-5 reale) |
+| `ce24 p747` | table | plain text | 0.44 | **FALSO** (Tabella 64-3 reale) |
+| `ce24 p4303` | table | plain text | 0.67 | **FALSO** (Tabella 407-1 reale) |
+| `ce24 p2` ×2 | picture | abandon | 0.97 | rumore (logo/decorazione di copertina) |
+
+Zone oracolo non corrisposte (arbitrate): `cu25 p28` tabelle reali che il motore
+non emette (**VERO**), `arxiv p16` 2 formule separate dal motore fuso in una
+(**VERO**), `co23 p1479` lista scambiata per tabella dall'oracolo (**FALSO**).
+
+**Esito:** su 124 pagine l'oracolo segnala ~10 conflitti; dopo arbitraggio
+**≈6 sono reali** e **≈6 sono falsi/rumore** → **precisione ~50%,
+richiamo utile ma non esaustivo**. I veri riguardano classi residue note
+(figura↔tabella, Box-lista, prosa su pagina formula). **Non è un gate**: è un
+**generatore di candidati a bassa precisione** che richiede arbitraggio
+(Advisor/umano).
+
 ## 4. Decisione (2.3)
 
 **NON adottare** DocLayout-YOLO come dipendenza di **runtime** né come sorgente
@@ -160,10 +204,12 @@ e offline (stessa categoria dell'Advisor/VLM del piano):
   - conferma figura↔didascalia (I2);
 - ogni divergenza **confermata** → Fase 3 (golden test + regola deterministica
   nel motore). L'oracolo **non** entra mai nel prodotto.
+- **Natura del segnale** (§3.6): generatore di **candidati a bassa precisione
+  (~50%)**, orientato al richiamo; va sempre arbitrato, **non** è un gate.
 
 ## 5. Cosa resta / passaggio alla Fase 3
 
-- **Fase 3**: usare l'oracolo per generare **candidati** (divergenze §3.4),
+- **Fase 3**: usare l'oracolo per generare **candidati** (divergenze §3.4/§3.6),
   farli arbitrare (Advisor/umano), e per ogni conferma creare un **golden test**
   (`tests/data/golden/`) + **regola deterministica**.
 - **I2** e **I4** restano invarianti da formalizzare; DocLayout fornisce la
@@ -187,4 +233,11 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python tools/measure_independent.py \
 QT_QPA_PLATFORM=offscreen .venv/bin/python tools/measure_independent.py \
     --model /path/doclayout_yolo_docstructbench_imgsz1024.onnx \
     --run ~/.local/share/opencode/e2e250l6 --limit 60 --out /tmp/measure_l6.json
+
+# divergenze di classificazione motore<->oracolo (candidati Fase 3)
+QT_QPA_PLATFORM=offscreen .venv/bin/python tools/measure_classification.py \
+    --model /path/doclayout_yolo_docstructbench_imgsz1024.onnx \
+    --run ~/.local/share/opencode/e2e250l6 \
+    --run ~/.local/share/opencode/e2e250m4 --limit 60 --known \
+    --out /tmp/measure_class.json
 ```
