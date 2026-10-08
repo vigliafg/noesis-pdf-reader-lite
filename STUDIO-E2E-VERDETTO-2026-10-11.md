@@ -23,6 +23,11 @@ Riferimenti: `STUDIO-FASE3-REGOLA-TABELLA-RASTER-2026-10-10.md`,
 
 **Totale: 7 pagine distinte segnalate su 500.**
 
+**Invarianti I1/I3** (`tools/measure_invariants.py` su N e P): **0 violazioni su
+500 pagine** → i nuovi difetti **non** sono catturati dagli invarianti attuali
+(non sono box a tutta larghezza né bande semplici). Serve un nuovo invariante per
+la classe "tabella complessa".
+
 ## 3. Arbitraggio (difetti reali vs falsi positivi)
 
 | pagina | tipo | dettaglio | giudizio |
