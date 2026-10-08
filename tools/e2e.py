@@ -326,8 +326,12 @@ def _checks(truth: dict, md: str, plain: str) -> dict:
         ref_words = (vp._long_words(truth["pdf_text"])
                      if truth.get("pdf_text") else set())
         if ref_words:  # pagina senza testo: niente confronto (evita FP)
-            glued = detectors.extra_tokens(ref_words, vp._long_words(body),
-                                           minlen=6)
+            # i marker di enfasi (`**`, `_`) NON introducono spazi: `**E**sophageal`
+            # è la parola intera «Esophageal». Vanno tolti prima del confronto,
+            # altrimenti si confonde la forma corretta con `**E** sophageal`.
+            glued = detectors.extra_tokens(
+                ref_words, vp._long_words(re.sub(r"[*_]+", "", body)),
+                minlen=6)
         diag = {
             "figure_blank": blank,
             "table_misalign": detectors.table_misalign(md),

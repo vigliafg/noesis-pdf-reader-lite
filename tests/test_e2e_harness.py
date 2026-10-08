@@ -232,6 +232,18 @@ class ChecksTests(unittest.TestCase):
         self.assertIn("byimagingor", checks["diag"]["glued_tokens"])
         self.assertIn("glued", " ".join(e2e._flags(checks, None)))
 
+    def test_glued_ignores_markdown_markers(self):
+        truth = self._truth(pdf_text="esophageal rupture treatment")
+        # `**E**sophageal` è la parola intera → NON è glue
+        checks = e2e._checks(truth, "**E**sophageal rupture treatment", "x")
+        self.assertEqual(checks["diag"]["glued_words"], 0)
+
+    def test_glued_flags_real_bold_space(self):
+        truth = self._truth(pdf_text="esophageal rupture treatment")
+        # `**E** sophageal` introduce uno spazio spurio → glue reale
+        checks = e2e._checks(truth, "**E** sophageal rupture treatment", "x")
+        self.assertEqual(checks["diag"]["glued_words"], 1)
+
     def test_collect_defects_role(self):
         rec = {
             "pdf": "x.pdf", "page_idx": 0, "page_ui": 1, "pipeline": "ir",
