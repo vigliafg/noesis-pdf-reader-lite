@@ -80,5 +80,52 @@ class BuildPageTests(unittest.TestCase):
         json.dumps(js)
 
 
+@unittest.skipUnless(_OK, "page_model non importabile")
+class TableTests(unittest.TestCase):
+    _CE = _ROOT / "corpus1" / "ce24.pdf"
+
+    def test_complex_table_spans_and_sections(self):
+        if not self._CE.exists():
+            self.skipTest("corpus1/ce24.pdf assente")
+        js = pm.build_page_document(str(self._CE), 479).to_dict()
+        self.assertEqual(len(js["tables"]), 1)
+        data = js["tables"][0]["data"]
+        self.assertEqual(data["num_cols"], 7)
+        cells = data["table_cells"]
+        # celle unite ricostruite da rows[i].cells (None = slot coperto)
+        self.assertTrue(any(c["col_span"] > 1 for c in cells))
+        self.assertTrue(any(c["row_span"] > 1 for c in cells))
+        # una riga a tutta larghezza è una sezione
+        self.assertTrue(any(c["row_section"] for c in cells))
+        # la griglia è num_rows × num_cols ed è popolata (nessun buco interno)
+        self.assertEqual(len(data["grid"]), data["num_rows"])
+        self.assertTrue(all(len(r) == data["num_cols"] for r in data["grid"]))
+        self.assertTrue(all(any(cell for cell in r) for r in data["grid"]))
+
+    def test_skeleton_independent_of_gnn_globals(self):
+        # pymupdf4llm (strato GNN) all'import attiva pymupdf.layout e disabilita
+        # le quad corrections *globalmente*: lo scheletro geometrico deve restare
+        # identico sia prima sia dopo (determinismo, anti cecità correlata).
+        fe = _ROOT / "corpus2" / "fe22.pdf"
+        if not (self._CE.exists() and fe.exists()):
+            self.skipTest("corpus assente")
+        pm.build_page_document(str(fe), 1037)  # importa/costruisce GNN
+        a = pm.build_page_document(str(self._CE), 479).to_dict()
+        b = pm.build_page_document(str(self._CE), 479).to_dict()
+        dims = lambda d: [(t["data"]["num_rows"], t["data"]["num_cols"])
+                          for t in d["tables"]]
+        self.assertEqual(dims(a), dims(b))
+        self.assertEqual(dims(a), [(25, 7)])
+
+    def test_boxed_text_is_not_a_table(self):
+        # fe22 p1038: il riquadro "ICD-10CM CODE" non è una tabella (falso
+        # positivo di find_tables(lines) senza linee interne reali).
+        pdf = _ROOT / "corpus2" / "fe22.pdf"
+        if not pdf.exists():
+            self.skipTest("corpus2/fe22.pdf assente")
+        js = pm.build_page_document(str(pdf), 1037).to_dict()
+        self.assertEqual(js["tables"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -430,6 +430,35 @@ def _is_bold(flags: int) -> bool:
     return bool(flags & 16)
 
 
+def _classic_pin() -> tuple:
+    """Torna alla modalità **classica** di PyMuPDF per lo scheletro geometrico.
+
+    L'import di ``pymupdf4llm`` (usato dallo strato GNN) ha due effetti
+    **globali** che cambiano ``get_text``/``find_tables``: attiva
+    ``pymupdf.layout`` e disabilita le *quad corrections*. Lo scheletro
+    geometrico deve esserne indipendente → si salva lo stato, si torna alla
+    modalità classica e lo si ripristina subito dopo.
+    """
+    import pymupdf
+    state = (getattr(pymupdf, "_get_layout", None),
+             pymupdf.TOOLS.unset_quad_corrections())
+    try:
+        pymupdf._get_layout = None
+    except Exception:
+        pass
+    pymupdf.TOOLS.unset_quad_corrections(False)
+    return state
+
+
+def _classic_restore(state: tuple) -> None:
+    import pymupdf
+    try:
+        pymupdf._get_layout = state[0]
+    except Exception:
+        pass
+    pymupdf.TOOLS.unset_quad_corrections(state[1])
+
+
 class _Builder:
     def __init__(self, page, page_no: int):
         self.page = page
@@ -466,10 +495,13 @@ class _Builder:
     def text_blocks(self) -> list[dict]:
         """Blocchi di testo **PyMuPDF puro** (indipendenti dal GNN)."""
         out = []
+        old = _classic_pin()
         try:
             d = self.page.get_text("dict")
         except Exception:
-            return out
+            d = {}
+        finally:
+            _classic_restore(old)
         for blk in d.get("blocks", []):
             if blk.get("type") != 0:
                 continue
@@ -766,55 +798,162 @@ class _Builder:
         return self._leaf_nodes.get(id(best)) if best is not None else None
 
     def _find_tables(self) -> list:
+        """Tabelle dalla griglia di linee, con filtro anti falsi positivi.
+
+        ``strategy="lines"`` è permissivo: sfondi/testo possono generare
+        "tabelle" che sono in realtà riquadri (es. un box con bordo o un titolo
+        sottolineato). Si accettano solo griglie con **≥2 righe e ≥2 colonne**
+        che siano, in più, **complesse** (≥3 righe o ≥3 colonne) **oppure**
+        confermate da ``lines_strict`` (linee realmente disegnate).
+        """
+        old = _classic_pin()
         try:
-            finder = self.page.find_tables(strategy="lines")
-            return list(finder.tables)
-        except Exception:
+            try:
+                cand = list(self.page.find_tables(strategy="lines").tables)
+            except Exception:
+                cand = []
+            try:
+                strict = [tuple(t.bbox) for t in
+                          self.page.find_tables(strategy="lines_strict").tables]
+            except Exception:
+                strict = []
+        finally:
+            _classic_restore(old)
+        if not cand:
             return []
+        out: list = []
+        for t in cand:
+            try:
+                rc, cc = int(t.row_count), int(t.col_count)
+            except Exception:
+                continue
+            if rc < 2 or cc < 2:
+                continue
+            if rc >= 3 or cc >= 3:
+                out.append(t)
+                continue
+            bb = tuple(t.bbox)
+            if any(_iou(bb, s) >= 0.5 for s in strict):
+                out.append(t)
+        return out
+
+    def _table_from_text(self, rows_txt: list, tidx: int) -> tuple:
+        """Fallback (nessuna geometria di cella): griglia dal solo testo."""
+        cells: list[TableCell] = []
+        grid: list = []
+        n_cols = max((len(r) for r in rows_txt), default=0)
+        for ri, row in enumerate(rows_txt):
+            g = []
+            for ci, txt in enumerate(row):
+                txt = _CTRL_RE.sub("", (txt or "").strip())
+                lbl = (TableCellLabel.COLUMN_HEADER if ri == 0
+                       else TableCellLabel.BODY)
+                idx = len(cells)
+                cells.append(TableCell(
+                    start_row_offset_idx=ri, end_row_offset_idx=ri + 1,
+                    start_col_offset_idx=ci, end_col_offset_idx=ci + 1,
+                    text=txt, column_header=(ri == 0), label=lbl))
+                g.append({"$ref": f"#/tables/{tidx}/data/table_cells/{idx}"})
+            grid.append(g)
+        return cells, grid, len(rows_txt), n_cols
 
     def _make_tables(self, tables: list, body: list[dict]) -> list[tuple]:
         out: list[tuple] = []
         for t in tables:
             bb = tuple(t.bbox)
+            old = _classic_pin()
             try:
                 rows_txt = t.extract()
             except Exception:
                 rows_txt = []
+            finally:
+                _classic_restore(old)
             rows_obj = list(getattr(t, "rows", []) or [])
-            n_rows = len(rows_txt) if rows_txt else getattr(t, "row_count", 0)
-            n_cols = max((len(r) for r in rows_txt),
-                         default=getattr(t, "col_count", 0))
+
+            def cells_of(i: int) -> list:
+                if 0 <= i < len(rows_obj):
+                    return list(getattr(rows_obj[i], "cells", []) or [])
+                return []
+
+            def cell_at(i: int, j: int):
+                cs = cells_of(i)
+                return cs[j] if 0 <= j < len(cs) else None
+
+            # ``rows[i].cells[j]`` è la griglia di PyMuPDF: indice riga/colonna
+            # = coordinate di griglia, ``None`` = slot coperto da una cella
+            # unita (span orizzontale o verticale).
+            n_rows = len(rows_obj) if rows_obj else int(getattr(t, "row_count", 0) or 0)
+            n_cols = max((len(cells_of(i)) for i in range(len(rows_obj))),
+                         default=0) or int(getattr(t, "col_count", 0) or 0)
+
+            # confini approssimati di riga (y0 minimo) e colonna (x0 minimo):
+            # servono solo come guardia geometrica per gli span.
+            row_start: list[float] = []
+            carry = 0.0
+            for i in range(n_rows):
+                ys = [c[1] for c in cells_of(i) if c]
+                if ys:
+                    carry = min(ys)
+                row_start.append(carry)
+            col_start: list[float] = []
+            carry = 0.0
+            for j in range(n_cols):
+                xs = [cell_at(i, j)[0] for i in range(n_rows) if cell_at(i, j)]
+                if xs:
+                    carry = min(xs)
+                col_start.append(carry)
+
+            tidx = len(self.doc.tables)
             cells: list[TableCell] = []
-            grid: list = []
-            for ri, row in enumerate(rows_txt):
-                row_cells = rows_obj[ri].cells if ri < len(rows_obj) else []
-                populated = sum(1 for x in row
-                                if x is not None and str(x).strip())
-                g = []
-                for ci, txt in enumerate(row):
-                    cb = None
-                    if ci < len(row_cells) and row_cells[ci]:
-                        cb = tuple(row_cells[ci])
-                    txt = (txt or "").strip()
-                    if ri == 0:
-                        lbl = TableCellLabel.COLUMN_HEADER
-                    elif populated == 1:
+            grid: list = [[None] * n_cols for _ in range(n_rows)]
+            for i in range(n_rows):
+                cs = cells_of(i)
+                for j in range(min(n_cols, len(cs))):
+                    cb = cs[j]
+                    if not cb:
+                        continue  # slot coperto da una cella unita
+                    cb = tuple(cb)
+                    # span verticale: righe sotto coperte (None) e dentro il rect
+                    r1 = i + 1
+                    while (r1 < n_rows and not cell_at(r1, j)
+                           and row_start[r1] < cb[3] - 0.5):
+                        r1 += 1
+                    # span orizzontale: colonne a destra coperte e dentro il rect
+                    c1 = j + 1
+                    while (c1 < n_cols and not cell_at(i, c1)
+                           and col_start[c1] < cb[2] - 0.5):
+                        c1 += 1
+                    row_span, col_span = r1 - i, c1 - j
+                    txt = ""
+                    if i < len(rows_txt) and j < len(rows_txt[i]):
+                        txt = _CTRL_RE.sub("", (rows_txt[i][j] or "").strip())
+                    if j == 0 and col_span == n_cols and txt:
                         lbl = TableCellLabel.ROW_SECTION
-                    elif ci == 0 and txt:
+                    elif i == 0:
+                        lbl = TableCellLabel.COLUMN_HEADER
+                    elif j == 0 and row_span == 1 and txt:
                         lbl = TableCellLabel.ROW_HEADER
                     else:
                         lbl = TableCellLabel.BODY
+                    idx = len(cells)
                     cells.append(TableCell(
-                        bbox=BoundingBox.from_tuple(cb) if cb else None,
-                        start_row_offset_idx=ri, end_row_offset_idx=ri + 1,
-                        start_col_offset_idx=ci, end_col_offset_idx=ci + 1,
+                        bbox=BoundingBox.from_tuple(cb),
+                        row_span=row_span, col_span=col_span,
+                        start_row_offset_idx=i, end_row_offset_idx=r1,
+                        start_col_offset_idx=j, end_col_offset_idx=c1,
                         text=txt,
                         column_header=(lbl == TableCellLabel.COLUMN_HEADER),
                         row_header=(lbl == TableCellLabel.ROW_HEADER),
                         row_section=(lbl == TableCellLabel.ROW_SECTION),
                         label=lbl))
-                    g.append({"col": ci, "text": txt})
-                grid.append(g)
+                    ref = {"$ref": f"#/tables/{tidx}/data/table_cells/{idx}"}
+                    for rr in range(i, r1):
+                        for ccol in range(j, c1):
+                            grid[rr][ccol] = ref
+
+            if not cells:  # fallback: nessuna geometria di cella
+                cells, grid, n_rows, n_cols = self._table_from_text(rows_txt, tidx)
+
             data = TableData(num_rows=n_rows, num_cols=n_cols, grid=grid,
                              table_cells=cells)
             prov = [ProvenanceItem(self.page_no, BoundingBox.from_tuple(bb))]
