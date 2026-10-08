@@ -103,8 +103,9 @@ CLI: `.venv/bin/python page_model.py <pdf> --page N --out page.json`.
   `body` finché non si usa il **font** per cella.
 - Su tabelle **frammentate** la griglia può avere **buchi** (`None`), fedeli
   alla griglia di PyMuPDF (es. `biorxiv p34`, 16/35 coperti).
-- Il **nesting** copre bande+colonne; mancano la gerarchia **sezioni/capitoli**
-  (`GroupLabel.SECTION` per gli header) e la gestione degli **spanning**.
+- Il **nesting** copre bande+colonne+sezioni; la gestione dedicata degli
+  **spanning** (oltre a separatore di banda / `flags=["spanning"]`) resta da
+  affinare.
 - La **semantica** (label) viene dal GNN: lo *scheletro* è indipendente, la
   *semantica* no → mantenere la separazione (invarianti sul solo scheletro).
 
@@ -126,4 +127,33 @@ etichettato; gli **invarianti** controlleranno lo **scheletro**. Non si mescolan
   **misura** sui difetti aperti.
 - [~] **Elementi spanning**: marcati (`flags=["spanning"]`) e usati come
   separatori di banda; la gestione dedicata nell'albero resta da affinare.
-- [ ] Solo dopo: valutare l'uso in **runtime** (emissione).
+- [~] **Integrazione diagnostica opt-in** in `ir_layout.build_markdown`
+  (`order_log`, default off → output identico) + `tools/measure_order.py`.
+- [ ] Solo dopo (se i numeri lo giustificano): valutare l'uso **produttore** in
+  runtime, sostituendo `reorder_boxes` — mai etichette/emissione.
+
+## 7. Integrazione diagnostica (opt-in, non distruttiva)
+
+Per misurare se l'ordine del page model è migliore di quello **emesso** dal
+motore, l'integrazione resta **accanto** alla pipeline (mai produttore, per ora):
+
+- `ir_layout.build_markdown(..., order_log=[])`: hook **opt-in** (default
+  `None` → output **identico**) che registra l'ordine emesso (`class`, `bbox`).
+- `page_model.build_page_model_from_page(page, page_no)`: builder da una `page`
+  già aperta (non riapre il PDF nella pipeline).
+- `tools/measure_order.py`: abbina i blocchi emessi alle foglie del page model
+  per **copertura** (frazione del blocco dentro la foglia) e conta le
+  **inversioni** (Kendall) tra i due ordini; non tocca l'md.
+
+Run: 4 difetti + **50 held-out** (seed `20261024`), 54 pagine totali.
+Risultato: **44/54 senza inversioni**, **38/4328** inversioni (0,009). Peggiori:
+`fe22 p1038` **13** (difetto noto — il page model lo conferma), poi
+`arxiv_2609.38133 p14` 8, `fe23 p362` 4, `to22 p380` 4, `arxiv p30` 3,
+`arxiv_2609.38151 p19` 2.
+
+Lettura **onesta**: l'ordine emesso dal motore coincide con quello geometrico
+indipendente sulla grande maggioranza delle pagine; i disaccordi sono pochi e
+concentrati e costituiscono una **mappa di dove guardare**, non una prova che il
+page model sia migliore. Limiti della misura: copre solo i blocchi
+**abbinnati** (su alcune pagine `engine_unmatched` è alto) e non vede i difetti
+**dentro** una tabella (`ce24 p480` → 1 foglia).
