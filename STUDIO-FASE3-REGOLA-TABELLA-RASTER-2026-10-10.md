@@ -88,3 +88,34 @@ senza tabelle-raster.
   bloccanti.
 - `ha22 p3355` mostra anche che il metro escludeva la tabella-figura: la
   regola chiude il **gap tra metro e output** (il difetto non era nel verdetto).
+
+## 6. Invarianti residui I2/I4 — indagine (report)
+
+Prima di promuovere nuovi invarianti a **bloccanti**, li si misura in report mode.
+
+**I2 — adiacenza figura↔didascalia.** Sui 500 md salvati (L6+M4): **306**
+immagini, **139** didascalie-figura; solo **15** risultano a >3 righe da ogni
+immagine. La distanza minima è **4–6 righe** per la quasi totalità (adiacenza
+sana); solo 3 hanno distanza ≥8, di cui una è un **riferimento** nel testo
+(`Fig 8 shows…`), non una didascalia. → **Nessuna classe reale di didascalie
+staccate** emerge dal motore attuale; l'invariante non è promosso (sarebbe rumore
+di falsi positivi).
+
+**I4 — no duplicazione.** La duplicazione reale (testo **+** immagine) è quella
+chiusa in §2–3 (tabella-**raster** dentro una figura). Una tabella **vettoriale**
+dentro una regione-figura (`fe22 p207`) è invece contenuto legittimo da tenere:
+senza geometria non esiste un invariante **md-only** che non generi falsi
+positivi. Resta coperta dalla regola deterministica §3 (caso reale), non da un
+nuovo bloccante.
+
+**Esito:** il linkage figura/didascalia del motore è **solido** su 500 pagine;
+nessun invariante bloccante aggiuntivo. I residui della Fase 3 restano le
+**pagine formula**.
+
+## 7. Gate di conferma (Fase 5) — NON superato
+
+Due run nuovi **held-out** da **250 pagine** (seed `20261022`, `20261023`),
+`--mode auto --via-app`. Esito: **~4 difetti reali su 500** — ordine su tabella
+complessa (`ce24 p480`), colonne interlacciate (`fe22 p1038`), figura vuota
+(`su19 p1050`), pagina formula (`arxiv p30`). **Merge non pronto.** Dettaglio in
+`STUDIO-E2E-VERDETTO-2026-10-11.md`.
