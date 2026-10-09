@@ -61,7 +61,7 @@ from PyQt6.QtCore import (
     QLocale,
 )
 from PyQt6.QtGui import (
-    QImage, QPixmap, QFont, QKeySequence, QShortcut,
+    QImage, QPixmap, QFont, QKeySequence, QShortcut, QIcon,
     QPen, QBrush, QColor, QPainter, QDesktopServices, QTextDocument,
     QTextCursor, QTextImageFormat,
 )
@@ -6306,6 +6306,21 @@ class MainWindow(QMainWindow):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+def _asset_file(name: str) -> str:
+    """Percorso di ``assets/<name>``, consapevole del bundle PyInstaller."""
+    if getattr(sys, "frozen", False):
+        base = getattr(sys, "_MEIPASS", None) or os.path.dirname(sys.executable)
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, "assets", name)
+
+
+def _app_icon() -> QIcon:
+    """Icona dell'app (PNG 256×256, incluso nei build)."""
+    path = _asset_file("noesispdf-256.png")
+    return QIcon(path) if os.path.exists(path) else QIcon()
+
+
 def main():
     # Nei build congelati (PyInstaller) punta l'OCR di PyMuPDF al Tesseract
     # incluso nel bundle (binario + librerie + tessdata) invece di richiederlo
@@ -6314,6 +6329,7 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("noesis-pdf-reader-lite")
+    app.setWindowIcon(_app_icon())
 
     # Config v2: al primo avvio vengono scritti i default (lingua UI = lingua
     # dell'OS o italiano); le scelte persistono tra gli aggiornamenti (la

@@ -87,6 +87,7 @@ jobs:
                 --add-binary "ocr/libtesseract*.dll;."
                 --add-binary "ocr/liblept*.dll;."
                 --add-data "ocr/tessdata;tessdata"
+                --add-data "assets/noesispdf-256.png;assets"
               )
               ;;
             macOS)
@@ -94,6 +95,7 @@ jobs:
                 --add-binary "ocr/tesseract:."
                 --add-binary "ocr/lib:lib"
                 --add-data "ocr/tessdata:tessdata"
+                --add-data "assets/noesispdf-256.png:assets"
               )
               ;;
           esac
@@ -220,6 +222,7 @@ jobs:
             --add-binary "ocr/tesseract${SEP}." \
             --add-binary "ocr/lib${SEP}lib" \
             --add-data "ocr/tessdata${SEP}tessdata" \
+            --add-data "assets/noesispdf-256.png${SEP}assets" \
             main.py
 
       - name: Package AppImage
