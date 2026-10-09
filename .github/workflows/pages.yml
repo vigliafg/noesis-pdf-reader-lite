@@ -24,8 +24,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Only docs/help is published (under /help/). The internal technical
-      # document docs/PDF-reflow-tecnica.md stays in the repo but off-site.
+      # Only docs/help is published (under /help/).
       - name: Build site
         run: |
           mkdir -p _site

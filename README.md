@@ -105,8 +105,7 @@ https://vigliafg.github.io/noesis-pdf-reader-lite/help/
 
 Per modificare la guida si edita `docs/help/<lingua>/index.html` (CSS e JS
 condivisi in `docs/help/css/` e `docs/help/js/`); la pubblicazione è
-automatica al push. Il documento tecnico interno `docs/PDF-reflow-tecnica.md`
-resta nel repo ma non viene pubblicato sul sito.
+automatica al push.
 
 ## Test
 
