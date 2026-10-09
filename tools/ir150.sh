@@ -3,7 +3,8 @@
 # Uso: tools/ir150.sh <blocco 1..N> <dimensione> [out]
 set -u
 B="${1:?blocco}"; SIZE="${2:-15}"; OUT="${3:-/tmp/opencode/ir150}"
-cd /home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite-ir || exit 1
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT" || exit 1
 mkdir -p "$OUT/block$B"
 TSV="/tmp/opencode/block${B}.tsv"
 .venv/bin/python - "$B" "$SIZE" > "$TSV" <<'PY'

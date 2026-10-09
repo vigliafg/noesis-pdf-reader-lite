@@ -3,7 +3,7 @@
 > Documento di studio del motore di estrazione. Fonti: **sorgente installato** in
 > `.venv/lib/python3.14/site-packages/pymupdf4llm` (+ `pymupdf/layout`) e
 > **documentazione ufficiale** (pymupdf.readthedocs.io, PyPI).
-> Data: 2026-10-03. Riferimento progetto: `noesis-pdf-reader-lite-ir`.
+> Data: 2026-10-03. Riferimento progetto: `noesis-pdf-reader-lite`.
 
 ---
 
