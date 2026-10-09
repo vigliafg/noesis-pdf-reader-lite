@@ -112,9 +112,9 @@ automatica al push.
 - **Migliorie del motore** (indice + cronologia per area, esiti, rimandi):
   [`docs/MIGLIORIE-MOTORE.md`](docs/MIGLIORIE-MOTORE.md).
 - **Regole dei test** (Golden Rule #1 — ordine + contenuto):
-  [`REGOLE-TEST.md`](REGOLE-TEST.md).
+  [`docs/REGOLE-TEST.md`](docs/REGOLE-TEST.md).
 - **Base di conoscenza PyMuPDF4LLM**:
-  [`PYMUPDF4LLM-KNOWLEDGE-BASE.md`](PYMUPDF4LLM-KNOWLEDGE-BASE.md).
+  [`docs/PYMUPDF4LLM-KNOWLEDGE-BASE.md`](docs/PYMUPDF4LLM-KNOWLEDGE-BASE.md).
 - **Guida utente** (it/en/fr/de/es): `docs/help/`.
 - **Studi e handoff**: `STUDIO-*.md`, `HANDOFF-*.md` (indice completo in
   `docs/MIGLIORIE-MOTORE.md` §6).

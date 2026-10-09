@@ -18,7 +18,7 @@ Natura del modulo
 - **Offline**: il modello ONNX è un file locale passato via ``--model``.
 - **Licenza**: il modello DocLayout-YOLO (e il codice) è **AGPL-3.0** (vedi
   metadata ONNX / repo). Da valutare con attenzione: vedi
-  ``STUDIO-FASE2-*.md``. Non va distribuito col prodotto senza valutazione legale.
+  ``docs/STUDIO-FASE2-*.md``. Non va distribuito col prodotto senza valutazione legale.
 
 API
 ---

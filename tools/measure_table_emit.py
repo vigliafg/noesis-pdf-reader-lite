@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Valuta l'emissione "tabella" del page model vs il motore (dev-only).
 
-Esperimento (poi **parcheggiato**, vedi STUDIO-PAGE-MODEL §8): per ogni pagina
+Esperimento (poi **parcheggiato**, vedi docs/STUDIO-PAGE-MODEL §8): per ogni pagina
 confronta l'md **emesso** dal motore con l'md ottenuto rendendo la/le
 ``TableItem`` del page model (griglia ``num_rows × num_cols``, colonne vuote
 scartate, righe a tutta larghezza come intestazioni) + i testi. Usa la metrica

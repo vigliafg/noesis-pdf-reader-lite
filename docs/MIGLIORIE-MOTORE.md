@@ -11,6 +11,11 @@
 >
 > La fonte **autoritativa** delle singole modifiche resta `git log` (i messaggi
 > di commit sono dettagliati e collegati per area).
+>
+> **Percorsi.** Tutti i documenti `STUDIO-*`, `HANDOFF-*`, `DIARIO-*`, `PIANO-*`
+> e i riferimenti `REGOLE-TEST.md` e `PYMUPDF4LLM-KNOWLEDGE-BASE.md` risiedono in
+> **`docs/`** (la guida utente in `docs/help/`). I nomi di file citati qui sotto
+> sono da intendersi relativi a `docs/`.
 
 ---
 

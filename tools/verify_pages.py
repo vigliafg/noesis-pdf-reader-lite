@@ -334,7 +334,7 @@ def _flow_score(md: str, elements: list[dict], page_width: float,
                 boxes: list[tuple] | None = None) -> dict:
     """Fedeltà del **flusso di lettura** dell'md rispetto all'ordine naturale.
 
-    Golden Rule #1 (vedi ``REGOLE-TEST.md``): unità = blocchi di prosa in
+    Golden Rule #1 (vedi ``docs/REGOLE-TEST.md``): unità = blocchi di prosa in
     ordine geometrico colonna-major. Per ogni unità si cercano **tutte** le
     occorrenze a parola intera delle sue prime parole nell'md, poi si assegna
     in modo **greedy crescente** (ogni unità prende la prima occorrenza dopo la

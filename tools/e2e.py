@@ -59,7 +59,7 @@ RECALL_TEXT_MIN = 0.90      # recall della prosa (se la pagina ha prosa)
 RECALL_RENDER_MIN = 0.99    # recall markdown → resa (plain)
 RECALL_TABLE_MIN = 0.85     # recall delle celle di tabella
 MIN_FIGURE_BYTES = 1000     # una figura embedded più piccola è sospetta
-# Golden Rule #1 (REGOLE-TEST.md): fedeltà = contenuto E flusso di lettura.
+# Golden Rule #1 (docs/REGOLE-TEST.md): fedeltà = contenuto E flusso di lettura.
 # Un flusso < FLOW_MIN è un difetto GRAVE, anche con recall 1.0.
 FLOW_MIN = 0.95             # fedeltà minima dell'ordine di lettura (LIS/n)
 

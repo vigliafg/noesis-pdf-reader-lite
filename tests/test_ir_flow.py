@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Golden Rule #1 — fedeltà del **flusso di lettura** (vedi ``REGOLE-TEST.md``).
+"""Golden Rule #1 — fedeltà del **flusso di lettura** (vedi ``docs/REGOLE-TEST.md``).
 
 Contenuto E ordine: un md con le colonne intrecciate è un difetto GRAVE a
 prescindere dal recall. Qui si testa il rilevatore ``vp._flow_score`` (metrica
