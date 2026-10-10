@@ -192,7 +192,10 @@ tabelle, figure, leggibilità, layout difficili.
 **Riferimenti esterni**: `STUDIO-PAPERO-PDF-EXTRACTOR-2026-10-10.md` (analisi
 completa del progetto `papero`, CPU-only no-ML); `STUDIO-MOTORI-GEOMETRICI-ESTERNI-2026-10-10.md`
 (consolidato dei motori geometrici esterni — papero, OpenDataLoader XY-Cut++,
-PdfPig, pdfplumber/pdfminer — con le idee mappate sulle nostre classi di difetto).
+PdfPig, pdfplumber/pdfminer — con le idee mappate sulle nostre classi di difetto);
+`STUDIO-IDEE-MOTORI-ESTERNI-2026-10-10.md` (**master**: tutte le idee
+classificate per area — ordine, tabelle, testo/glifo, figure, heading/liste,
+furniture, validazione, metodologia — con soglie, `file:riga` e priorità).
 I **cloni locali** di questi motori stanno in `other-engines/` (indice:
 `other-engines/README.md`; popolare/aggiornare con `tools/fetch-other-engines.sh`;
 i cloni **non** sono versionati, solo l'indice).
