@@ -13,3 +13,15 @@ dist/
 # Output/log di lavoro dei test (grandi, rigenerabili con tools/)
 work/
 logs/
+
+# KB dei motori esterni: cloni locali (grandi), NON versionati.
+# Solo l'indice other-engines/README.md è committato.
+# Popolare/aggiornare con: tools/fetch-other-engines.sh
+other-engines/papero/
+other-engines/opendataloader/
+other-engines/pdfpig/
+other-engines/pdfplumber/
+other-engines/pdfminer/
+
+# Snapshot offline della KB (rigenerabile con tools/fetch-other-engines.sh --archive)
+other-engines-kb.tar.gz

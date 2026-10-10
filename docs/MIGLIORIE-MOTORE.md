@@ -189,6 +189,14 @@ tabelle, figure, leggibilità, layout difficili.
 `STUDIO-FASE2-ORACOLO-INDIPENDENTE-2026-10-10.md`,
 `STUDIO-PAGE-MODEL-2026-10-11.md`.
 
+**Riferimenti esterni**: `STUDIO-PAPERO-PDF-EXTRACTOR-2026-10-10.md` (analisi
+completa del progetto `papero`, CPU-only no-ML); `STUDIO-MOTORI-GEOMETRICI-ESTERNI-2026-10-10.md`
+(consolidato dei motori geometrici esterni — papero, OpenDataLoader XY-Cut++,
+PdfPig, pdfplumber/pdfminer — con le idee mappate sulle nostre classi di difetto).
+I **cloni locali** di questi motori stanno in `other-engines/` (indice:
+`other-engines/README.md`; popolare/aggiornare con `tools/fetch-other-engines.sh`;
+i cloni **non** sono versionati, solo l'indice).
+
 **Pipeline IR**: `STUDIO-IR-2026-10-02.md`, `STUDIO-IR-150-2026-10-02.md`,
 `STUDIO-IR-150-T5-2026-10-02.md`, `STUDIO-IR-150-notes-per-blocco.md`.
 
