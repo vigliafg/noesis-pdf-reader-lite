@@ -8,7 +8,9 @@
 >
 > **Riferimenti.** `STUDIO-IDEE-MOTORI-ESTERNI-2026-10-10.md` (**master** delle
 > idee, con soglie e `file:riga`), `STUDIO-MOTORI-GEOMETRICI-ESTERNI-2026-10-10.md`,
-> `STUDIO-PAPERO-PDF-EXTRACTOR-2026-10-10.md`.
+> `STUDIO-PAPERO-PDF-EXTRACTOR-2026-10-10.md`,
+> `STUDIO-PDFPIG-STATISTICA-2026-10-10.md` (approfondimento PdfPig sulle soglie
+> auto-calibrate).
 > KB locale dei motori: `other-engines/` (`other-engines/README.md`,
 > `tools/fetch-other-engines.sh`).
 > Contesto: `STUDIO-E2E-VERDETTO-2026-10-11.md`, `HANDOFF-2026-10-11.md` §7,
@@ -248,16 +250,48 @@ Test · Accettazione · Sforzo · Ruolo · Rischi*.
 - **Accettazione**: confronto struttura su PDF taggati (reference).
 - **Sforzo**: alto · **Ruolo**: metro.
 
+### Fase 6 — Soglie auto-calibrate (statistica di pagina)
+
+#### M4E-6.1 — Soglie derivate dalla distribuzione della pagina
+- **Obiettivo**: sostituire le soglie "magiche" in pt con **soglie auto-calibrate**
+  dalla geometria della pagina (self-calibration, non supervisionata): stima della
+  **spaziatura within-line** (istogramma delle distanze → picco → media del picco),
+  della **dimensione di carattere dominante** (moda di larghezze/altezze) e della
+  **tolleranza "uguale"**. È il substrato condiviso dei fix che oggi usano costanti
+  assolute (glue, heading, furniture, contiguità).
+- **Sorgente**: PdfPig `DocstrumBoundingBoxes.GetSpacingEstimation`/`GetPeakAverageDistance`
+  (`:148,:238`), `Mode()` (`MathExtensions:16`), XY-cut `DominantFontWidth/HeightFunc`
+  (`RecursiveXYCut:372,389`), `WhitespaceCover` `mode×1.25` (`:28`); dettagli in
+  `STUDIO-PDFPIG-STATISTICA-2026-10-10.md`.
+- **Dove**: nuovo helper **deterministico** `ir_layout._page_metrics(page)`
+  (scheletro geometrico); consumato da M4E-2.1 (de-glue), M4E-4.1 (heading),
+  M4E-1.3 (gap furniture) e come metro (`T`) per M4E-5.1.
+- **Approccio**: (a) distanze NN dai glifi/baseline con ordinamento (no kd-tree,
+  no dipendenze); (b) filtro **angolare** (within/between) come PdfPig; (c) istogramma
+  → bin modale → **media del picco**; (d) **moda** con **tie-break esplicito**
+  (niente `NaN`); (e) **guardie**: pochi glifi / distribuzione piatta / stima `0`/`NaN`
+  → **default conservativo** (nessuna modifica), mai "soglia 0"; (f) single-thread,
+  input ordinato → **determinismo (R12)**.
+- **Test**: unit su pagine sintetiche a spaziatura/font noti; `tests/test_ir_text_fix.py`,
+  `tests/test_ir_order_regression.py`; regressione (flag OFF ⇒ output invariato).
+- **Accettazione**: north-star ↓ sulle classi con soglie fisse problematiche;
+  **0** regressioni su held-out; nessun percorso con soglia degenere.
+- **Sforzo**: medio · **Ruolo**: fix (fornisce soglie) + metro (spaziature, `T`) ·
+  **Rischi**: distribuzione **sparsa/bimodale** → guardie + fallback conservativo;
+  determinismo da garantire (i bug di PdfPig nascono dal parallelismo: `review.md`).
+
 ---
 
 ## 4. Roadmap e dipendenze
 
 ```
-Fase 1 (additiva, quick)  ─►  Fase 2 (vocabolario glifo-level)  ─►  Fase 3 (tabelle)
-        ▲                                   │
+Fase 6 (soglie auto-calibrate) ─► Fase 1 (additiva, quick) ─► Fase 2 (vocabolario glifo-level) ─► Fase 3 (tabelle)
+        │                                   │
         └────────── Fase 4 (struttura) ◄────┘        Fase 5 (riferimenti) in parallelo
 ```
 
+- **Fase 6** fornisce le **soglie** (spaziature, font dominante, `T`) usate da
+  Fase 2/4; additiva e gated (flag), può iniziare in parallelo alla Fase 1.
 - **Fase 1** non tocca il produttore: può iniziare subito; ogni voce è
   indipendente e piccola.
 - **Fase 2** è ad **alto valore ma alto rischio**: richiede il vocabolario pulito
@@ -274,7 +308,8 @@ negativo) come per gli esperimenti parcheggiati in `MIGLIORIE-MOTORE.md` §3.
 ## 5. Ruoli gate/fix e registro
 
 - **Gate (precisione)**: M4E-5.1, M4E-5.2, e i controlli di M4E-1.1.
-- **Fix (recall)**: M4E-1.2…1.5, M4E-2.1, M4E-3.1/3.2, M4E-4.1…4.3.
+- **Fix (recall)**: M4E-1.2…1.5, M4E-2.1, M4E-3.1/3.2, M4E-4.1…4.3; M4E-6.1
+  (fornisce le **soglie** auto-calibrate a Fase 2/4, oltre a un metro).
 - **Registro**: `defects.jsonl` con `role` (gate/fix) e `arbitration`; ogni voce
   del piano cita la classe e il commit.
 
@@ -299,6 +334,7 @@ negativo) come per gli esperimenti parcheggiati in `MIGLIORIE-MOTORE.md` §3.
 | M4E-3.1 tabella-immagine | metriche/galleria | ridefinire la metrica; bucket separato |
 | M4E-4.3 grafici | assorbire prosa | soglie `_label_of`; `full_page` guard |
 | M4E-5.1 ordine | falsi positivi | calibrazione a 0 FP prima di promuovere |
+| M4E-6.1 soglie | stima degenere (pagina sparsa/bimodale) | guardie (n < min, distribuzione piatta) + fallback conservativo; moda con tie-break deterministico |
 | tutte | nuove dipendenze | re-implementare su `pymupdf`; motori in `other-engines/` solo come riferimento |
 
 ---
@@ -404,6 +440,7 @@ if layout_engine.enabled("dedupe_overlap_chars"):
 | M4E-5.1 | `ref_order_allen` | tool | off | `tools/measure_order.py` | `T=5` | confronto ordine |
 | M4E-5.2 | `ref_validation` | tool | off | `tools/invariants.py` | — | FP invarianti |
 | M4E-5.3 | `ref_struct_tree` | tool | off | `tools/` | — | confronto struttura |
+| M4E-6.1 | `adaptive_thresholds` | runtime | off | `ir_layout._page_metrics` | `bin_size=10`,`wl_mult=3.0`,`bl_mult=1.3`,`height_f=1.5` | north-star soglie + determinismo |
 
 ### 9.8 Harness A/B ("con/senza")
 
@@ -459,12 +496,14 @@ esperimenti parcheggiati in `MIGLIORIE-MOTORE.md` §3).
 | M4E-5.1 | PdfPig/ODL/pdfminer/papero ordine | `tools/measure_order.py`, `tools/invariants.py`, `tools/e2e.py` |
 | M4E-5.2 | papero validazione | `tools/invariants.py` |
 | M4E-5.3 | pdfplumber struct tree | dev-only |
+| M4E-6.1 | PdfPig Docstrum/Mode | nuovo helper `ir_layout._page_metrics` |
 
 **Flag `fix_rules.json`** (proposti): `dedupe_overlap_chars`,
 `caption_probability`, `table_image_fallback`, `grid_quality_guard`,
 `heading_probability`, `list_neighbor_merge`, `chart_vector_detect`,
-`glyph_vocab_grounded`. (Ogni fix resta attivabile/disattivabile, come i Pack;
-la **tecnica completa** di toggling e il test con/senza sono in **§9**.)
+`glyph_vocab_grounded`, `adaptive_thresholds`. (Ogni fix resta
+attivabile/disattivabile, come i Pack; la **tecnica completa** di toggling e il
+test con/senza sono in **§9**.)
 
 ---
 

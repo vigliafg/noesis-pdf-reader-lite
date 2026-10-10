@@ -197,7 +197,9 @@ completa del progetto `papero`, CPU-only no-ML); `STUDIO-MOTORI-GEOMETRICI-ESTER
 PdfPig, pdfplumber/pdfminer — con le idee mappate sulle nostre classi di difetto);
 `STUDIO-IDEE-MOTORI-ESTERNI-2026-10-10.md` (**master**: tutte le idee
 classificate per area — ordine, tabelle, testo/glifo, figure, heading/liste,
-furniture, validazione, metodologia — con soglie, `file:riga` e priorità).
+furniture, validazione, metodologia — con soglie, `file:riga` e priorità);
+`STUDIO-PDFPIG-STATISTICA-2026-10-10.md` (approfondimento PdfPig: **soglie
+auto-calibrate** — istogrammi Docstrum, moda dei font, guardie e limiti).
 I **cloni locali** di questi motori stanno in `other-engines/` (indice:
 `other-engines/README.md`; popolare/aggiornare con `tools/fetch-other-engines.sh`;
 i cloni **non** sono versionati, solo l'indice).

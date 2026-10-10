@@ -102,6 +102,8 @@ rilancia con `--lean` (o `--latest`).
 - `.../ReadingOrderDetector/UnsupervisedReadingOrderDetector.cs` → grafo **Allen-relations** + greedy max out-degree.
 - `.../ReadingOrderDetector/IntervalRelationHelper.cs` → le 13 relazioni di Allen.
 - `.../WordExtractor/NearestNeighbourWordExtractor.cs` → parole glifo-level (baseline, 20% font, orientamenti).
+- `.../MathExtensions.cs` → `Mode()` (statistica robusta; `NaN` su pareggio) — base delle **soglie auto-calibrate** (vedi studio).
+- `NearestNeighbourWordExtractor-review.md` → bug noti (auto-vicino, ordine DFS, nondeterminismo parallelo): **idea sì, codice no**.
 
 ### `pdfplumber` (Python, su pdfminer)
 - `pdfplumber/table.py` → `TableFinder`: strategia `text` (`words_to_edges_h` 101, `words_to_edges_v` 144),
@@ -123,6 +125,8 @@ rilancia con `--lean` (o `--latest`).
 - `docs/STUDIO-MOTORI-GEOMETRICI-ESTERNI-2026-10-10.md` — consolidato dei
   quattro progetti, con **cross-map** sulle nostre classi di difetto e priorità.
 - `docs/STUDIO-PAPERO-PDF-EXTRACTOR-2026-10-10.md` — analisi completa di papero.
+- `docs/STUDIO-PDFPIG-STATISTICA-2026-10-10.md` — approfondimento PdfPig sulle
+  **soglie auto-calibrate** (istogrammi Docstrum, moda, guardie, limiti).
 
 ## Nota sulle licenze
 
