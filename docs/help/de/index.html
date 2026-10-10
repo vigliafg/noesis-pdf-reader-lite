@@ -66,21 +66,29 @@
           Spalten, Tabellen, Überschriften, Bildunterschriften.</p></div>
         <div class="card"><h4>🔍 Ansicht nebeneinander</h4><p>Gerenderte Seite
           links, extrahierter Text rechts, mit Navigation,
-          Inhaltsverzeichnis (TOC) und Zoom.</p></div>
+          Inhaltsverzeichnis (TOC) und integriertem Reader.</p></div>
         <div class="card"><h4>🚫 Ausschlusszonen</h4><p>Ziehen Sie ein rotes
           Feld über Rauschen (Kopfzeilen, Fußzeilen, Bilder,
           Bildunterschriften), um es aus dem Text zu entfernen.</p></div>
         <div class="card"><h4>🟩 Einschlusszonen</h4><p>Nummerierte grüne
           Felder legen die manuelle Lesereihenfolge für komplexe Seiten
           fest.</p></div>
-        <div class="card"><h4>🖼️ Bildextraktion</h4><p>Wählen Sie einen
-          Seitenbereich aus und speichern Sie die ausgeschnittene Abbildung in
-          der Galerie.</p></div>
+        <div class="card"><h4>🗂️ Objekte</h4><p>Erfassen Sie einen
+          Seitenbereich (Bild, Tabelle oder Text) und finden Sie ihn in der
+          Sammlung wieder, mit Aktionen je Typ.</p></div>
         <div class="card"><h4>🌐 Übersetzung</h4><p>Übersetzen Sie die Seite in
           die gewählte Zielsprache, mit Cache auf der Festplatte.</p></div>
         <div class="card"><h4>⚙️ Einstellungen</h4><p>Oberflächensprache,
-          Übersetzungssprachen, Zoom, Schriftart, Kopfzeile und
+          Übersetzungssprachen, Theme, Schriftart, Kopfzeile und
           Leseverhalten.</p></div>
+        <div class="card"><h4>💾 Batch-Export</h4><p>Mehrere
+          extrahierte/übersetzte Seiten als ein Markdown, ZIP oder Ordner
+          exportieren.</p></div>
+        <div class="card"><h4>✓ Nächste Aktion</h4><p>Eine schwebende
+          Schaltfläche im Textbereich: Seite übersetzen, dann die nächste
+          übersetzen.</p></div>
+        <div class="card"><h4>🎨 Theme</h4><p>Dunkel, hell oder wie das System,
+          sofort angewendet.</p></div>
         <div class="card"><h4>🌍 Mehrsprachige Oberfläche</h4><p>Italiano,
           English, Français, Deutsch, Español — jederzeit umschaltbar.</p></div>
       </div>
@@ -125,11 +133,12 @@
       <table>
         <tr><th>Element</th><th>Funktion</th></tr>
         <tr><td>📂 PDF öffnen</td><td>Öffnet ein PDF-Dokument</td></tr>
+        <tr><td>💾 Exportieren</td><td>Exportiert eine Gruppe von Seiten (Batch); <kbd>Strg</kbd>+<kbd>E</kbd></td></tr>
         <tr><td>📑 Inhaltsverzeichnis</td><td>Zeigt/verbirgt das Inhaltsverzeichnis (TOC) links</td></tr>
         <tr><td>◀ Zurück / Weiter ▶ + Zahlen</td><td>Navigation zwischen den Seiten</td></tr>
-        <tr><td>🔍− / Skalierung / 🔍+</td><td>Zoom der Seite</td></tr>
+        <tr><td>👁 Reader ▾</td><td>Öffnet den integrierten Reader oder den Systembetrachter</td></tr>
         <tr><td>📝 MD ✓</td><td>Schaltet das Markdown-Rendering des Textes um</td></tr>
-        <tr><td>⚙️ Einstellungen</td><td>Sprachen, Einstellungen und Verhalten</td></tr>
+        <tr><td>⚙️ Einstellungen</td><td>Sprachen, Theme, Einstellungen und Verhalten</td></tr>
         <tr><td>❓ Hilfe</td><td>Öffnet diese Hilfe im Browser</td></tr>
       </table>
 
@@ -137,10 +146,9 @@
       <p>Über der Seite befinden sich die Zonen-Werkzeuge:</p>
       <table>
         <tr><th>Element</th><th>Funktion</th></tr>
-        <tr><td>🖱️ Bereich auswählen</td><td>Extrahiert das Bild des gezeichneten Bereichs</td></tr>
-        <tr><td>🚫 Bereich ausschließen</td><td>Schließt den Bereich aus dem Text aus (rotes Feld)</td></tr>
-        <tr><td>🟩 Bereich einschließen</td><td>Legt die Lesereihenfolge fest (nummerierte grüne Felder)</td></tr>
-        <tr><td>🧹 Zonen zurücksetzen</td><td>Entfernt alle Zonen der aktuellen Seite</td></tr>
+        <tr><td>📸 Erfassen ▾</td><td>Menü: 📸 Bild erfassen oder 🔤 Erfassen und interpretieren (Text/OCR)</td></tr>
+        <tr><td>🎯 Zonen ▾</td><td>Menü: 🚫 Bereich ausschließen (rotes Feld), 🟩 Bereich einschließen (nummerierte grüne Felder) und 🧹 Zonen zurücksetzen</td></tr>
+        <tr><td>▶ Extrahieren</td><td>Beendet die Zonenbearbeitung und startet die Seitenextraktion neu</td></tr>
       </table>
 
       <h3>Rechter Bereich (Text)</h3>
@@ -149,20 +157,21 @@
         <li><strong>📄 Original</strong> — der extrahierte Text (auto oder manuell).</li>
         <li><strong>🇫🇷 … (Flagge + Sprache)</strong> — die Übersetzung der
           Seite in die in den Einstellungen gewählte Zielsprache.</li>
-        <li><strong>🖼️ Bilder</strong> — die Galerie der extrahierten
-          Abbildungen.</li>
+        <li><strong>🗂️ Objekte</strong> — die Sammlung erfasster Bilder,
+          Tabellen und Texte.</li>
       </ul>
       <p>Die beiden Text-Tabs (📄 Original und die Übersetzung) sind
       editierbare Fenster: Sie können frei tippen, auswählen, kopieren und
       einfügen (Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+Z). Jedes Fenster hat seine
-      eigene Mini-Symbolleiste mit <strong>A−</strong>, der aktuellen Größe
-      und <strong>A+</strong>, um den Text live zu verkleinern oder zu
-      vergrößern, plus <strong>↺</strong>, um die Größe aus den Einstellungen
-      wiederherzustellen, und <strong>💾</strong>, um den Fenstertext als
-      <code>.md</code> oder <code>.txt</code> zu exportieren (mit Ihren
-      Änderungen, ohne die Kopfzeile). Bei aktiviertem Speichern weist ein
-      orangener Punkt <strong>●</strong> neben den Schaltflächen auf
-      Änderungen hin, die noch nicht auf die Festplatte geschrieben wurden. Die beiden Fenster zoomen unabhängig voneinander.
+      eigene Mini-Symbolleiste: <strong>A−</strong> / <strong>A+</strong> /
+      <strong>↺</strong> für die Textgröße, <strong>📋</strong> zum Kopieren,
+      <strong>💾</strong>, um den Fenstertext als <code>.md</code> oder
+      <code>.txt</code> zu exportieren (mit Ihren Änderungen, ohne die
+      Kopfzeile), und <strong>🔁</strong>, um die Seite neu zu extrahieren
+      (Original-Tab) oder neu zu übersetzen (Sprach-Tab). Bei aktiviertem
+      Speichern weist ein orangener Punkt <strong>●</strong> neben den
+      Schaltflächen auf Änderungen hin, die noch nicht auf die Festplatte
+      geschrieben wurden. Die beiden Fenster zoomen unabhängig voneinander.
       Nach einer Bearbeitung wird der Text als Klartext angezeigt und die
       Änderungen werden pro Seite gespeichert (Datenspeicherordner der App)
       und erscheinen beim erneuten Öffnen des Dokuments wieder.</p>
@@ -181,11 +190,8 @@
         <li><strong>Inhaltsverzeichnis (TOC)</strong>: Klicken Sie auf 📑
           Inhaltsverzeichnis und wählen Sie einen Eintrag, um zum Kapitel zu
           springen.</li>
-        <li><strong>Zoom</strong>: Schaltflächen 🔍−/🔍+,
-          <kbd>Strg</kbd>+<kbd>+</kbd> / <kbd>Strg</kbd>+<kbd>−</kbd>,
-          <kbd>Strg</kbd>+<kbd>0</kbd> zum Zurücksetzen. 1,00× passt die
-          Seite an das Fenster an; das Etikett zeigt die aktuelle Skalierung
-          (0,25×–8,00×).</li>
+        <li><strong>Linker Bereich</strong>: immer an das Fenster angepasst
+          (kein Zoom). Der Lese-Zoom befindet sich im <a href="#reader">Reader</a>.</li>
         <li><strong>Fortsetzen</strong>: wenn in den Einstellungen aktiviert,
           öffnet die App das Dokument an der zuletzt gelesenen Seite.</li>
       </ul>
@@ -233,17 +239,19 @@
       (Kopfzeilen, Fußzeilen, Seitenzahlen, Bilder mit Text,
       Bildunterschriften, Werbung), können Sie sie manuell ausschließen:</p>
       <ol>
-        <li>Klicken Sie auf <strong>🚫 Bereich ausschließen</strong>.</li>
+        <li>Öffnen Sie das Menü <strong>🎯 Zonen ▾</strong> und wählen Sie
+          <strong>🚫 Bereich ausschließen</strong>.</li>
         <li>Ziehen Sie mit der Maus ein <strong>rotes Feld</strong> über den
           zu entfernenden Inhalt.</li>
         <li>Der Text wird sofort ohne diesen Inhalt neu berechnet.</li>
-        <li>Drücken Sie die Schaltfläche erneut, um zu beenden.</li>
+        <li>Wählen Sie im Menü erneut <strong>🚫 Bereich ausschließen</strong>,
+          um zu beenden.</li>
       </ol>
 
       <h3>Ausschließen + Extrahieren in einem Schritt</h3>
       <p>Wenn die rote Zone ein eingebettetes Bild enthält, wird die
-      <strong>gesamte ausgewählte Zone</strong> automatisch in den Tab 🖼️
-      Bilder übernommen (zusammengesetzte Abbildungen — mehrere Bilder,
+      <strong>gesamte ausgewählte Zone</strong> automatisch in den Tab 🗂️
+      Objekte übernommen (zusammengesetzte Abbildungen — mehrere Bilder,
       Bild + Beschriftung — werden vollständig erfasst, nicht nur ein
       Fragment; der Fokus bleibt auf dem Textfenster
       <strong>Original</strong>). Die Statusleiste bestätigt den Vorgang.</p>
@@ -252,6 +260,10 @@
         Seite und existiert nur im Speicher: Beim Schließen der App gehen die
         Zonen verloren.</div>
 
+      <p>Wenn Sie mit dem Zeichnen der Zonen fertig sind, drücken Sie
+      <strong>▶ Extrahieren</strong>: Die App beendet die Bearbeitung, leert den
+      Cache der Seite und startet sie gemäß den ausgewählten Zonen neu.</p>
+
       <!-- ═══════════════ EINSCHLUSSZONEN ═══════════════ -->
 
       <h2 id="zones-include">Einschlusszonen (grün)</h2>
@@ -259,7 +271,8 @@
       Felder) können Sie die Lesereihenfolge selbst mit den
       <strong>nummerierten grünen Feldern</strong> festlegen:</p>
       <ol>
-        <li>Klicken Sie auf <strong>🟩 Bereich einschließen</strong>.</li>
+        <li>Öffnen Sie das Menü <strong>🎯 Zonen ▾</strong> und wählen Sie
+          <strong>🟩 Bereich einschließen</strong>.</li>
         <li>Ziehen Sie ein grünes Feld über die erste Lesespalte/-region (die
           Zahl <strong>1</strong> erscheint).</li>
         <li>Zeichnen Sie das nächste Feld in Lesereihenfolge (2, 3, …).</li>
@@ -281,22 +294,41 @@
 
       <!-- ═══════════════ BILDEXTRAKTION ═══════════════ -->
 
-      <h2 id="images">Bildextraktion</h2>
-      <p>Sie können eine Abbildung direkt von der Seite ausschneiden:</p>
-      <ol>
-        <li>Klicken Sie auf <strong>🖱️ Bereich auswählen</strong>.</li>
-        <li>Ziehen Sie ein Rechteck über die Abbildung.</li>
-        <li>Das Bild wird im Tab <strong>🖼️ Bilder</strong> gespeichert.</li>
-      </ol>
-      <p>In der Galerie hat jedes Bild die Schaltflächen:</p>
+      <h2 id="images">Objekte erfassen</h2>
+      <p>Im Menü <strong>📸 Erfassen ▾</strong> gibt es zwei Aktionen:</p>
       <ul>
-        <li><strong>💾 Speichern</strong> — speichert in eine Datei (PNG/JPEG).</li>
-        <li><strong>📋 Kopieren</strong> — kopiert in die Zwischenablage.</li>
-        <li><strong>🗑️ Entfernen</strong> — löscht aus der Galerie.</li>
-        <li>Klicken Sie auf die Vorschau zum Vergrößern.</li>
+        <li><strong>📸 Bild erfassen</strong> — speichert den Bereich als
+          Bild.</li>
+        <li><strong>🔤 Erfassen und interpretieren</strong> — speichert das
+          Bild und extrahiert den <strong>Text</strong>: bei nativem Text wird
+          er direkt gelesen, sonst per OCR; native Tabellen werden zu
+          Markdown.</li>
       </ul>
-      <p>Extrahierte Bilder werden im Datenordner der App gespeichert und
-      bleiben zwischen den Starts erhalten.</p>
+      <ol>
+        <li>Wählen Sie die Aktion im Menü <strong>📸 Erfassen ▾</strong>.</li>
+        <li>Ziehen Sie ein Rechteck über das Bild, die Tabelle oder das Objekt.</li>
+      </ol>
+      <p>Hat die Seite bereits <a href="#zones-exclude">Zonen</a>, warnt die
+      Erfassung: setzen Sie sie zuerst mit <strong>🧹 Zonen zurücksetzen</strong>
+      zurück, dann erfassen.</p>
+
+      <h3>Die Sammlung 🗂️ Objekte</h3>
+      <p>Alles Erfasste landet im Tab <strong>🗂️ Objekte</strong>, nach Typ
+      gruppiert: <strong>Bilder</strong>, <strong>Tabellen</strong> und
+      <strong>Texte</strong>. Oben im Tab: die Typfilter, die Anzahl,
+      <strong>💾 Alle exportieren</strong> (in einen Ordner: Bilder als PNG,
+      Texte als <code>.md</code>) und <strong>🗑️ Alle entfernen</strong>.</p>
+      <p>Jedes Objekt hat die Aktionen seines Typs:</p>
+      <ul>
+        <li><strong>Bild</strong> — 💾 Speichern, 📋 Kopieren, 🗑️ Entfernen;
+          Klick auf die Vorschau zum Vergrößern.</li>
+        <li><strong>Tabelle</strong> — 📋 Markdown kopieren, 💾 Als .md
+          speichern, 🗑️ Entfernen.</li>
+        <li><strong>Text</strong> — 📋 Text kopieren, 💾 Als .md speichern,
+          🗑️ Entfernen.</li>
+      </ul>
+      <p>Automatisch extrahierte Abbildungen und manuelle Erfassungen leben in
+      derselben Sammlung.</p>
 
       <!-- ═══════════════ ÜBERSETZUNG ═══════════════ -->
 
@@ -337,6 +369,60 @@
         eine Internetverbindung und sendet den Seitentext an einen externen
         Dienst. Übersetzen Sie keine vertraulichen Dokumente, wenn Sie nicht
         das Recht dazu haben.</div>
+
+      <!-- ═══════════════ AKTIONEN UND EXPORT ═══════════════ -->
+
+      <h2 id="batch">Batch-Export</h2>
+      <p>Die Schaltfläche <strong>💾 Exportieren</strong> (oder
+      <kbd>Strg</kbd>+<kbd>E</kbd>) öffnet einen fünfstufigen Assistenten, um
+      eine Gruppe extrahierter und/oder übersetzter Seiten zu exportieren.</p>
+      <ol>
+        <li><strong>Seiten</strong> — aktuelle Seite, Bereich oder freie Liste
+          (z. B. <code>1,3,7-9</code>; <code>all</code> für alle).</li>
+        <li><strong>Inhalt</strong> — Original, Übersetzung oder Beides; Option
+          <em>Abbildungen einbeziehen</em>.</li>
+        <li><strong>Sprachen und Engine</strong> — Quelle, Ziel und Engine;
+          <em>Fehlende Seiten zuerst übersetzen</em>.</li>
+        <li><strong>Ausgabe</strong> — ein einziges Markdown, einzelne Seiten in
+          einer ZIP, oder einzelne Seiten in einem Ordner; Ordner und
+          Dateiname.</li>
+        <li><strong>Zusammenfassung</strong> — prüfen und starten.</li>
+      </ol>
+      <p>Ein Fortschrittsfenster zeigt die Seite in Bearbeitung (mit animierter
+      Vorschau), die Statistik und erlaubt Abbrechen. Am Ende können Sie den
+      Ordner öffnen oder die Datei in Downloads kopieren. Bearbeitete Seiten
+      füllen auch die Caches der App, sind also sofort verfügbar. Der Export
+      respektiert gespeicherte Änderungen und überspringt Seiten mit manuellen
+      Zonen (er arbeitet im Automatikmodus).</p>
+
+      <h2 id="page-actions">Nächste Aktion (FAB)</h2>
+      <p>Nach Abschluss erscheint unten rechts im Textbereich eine schwebende
+      Schaltfläche (mit animiertem Glanz und einem Benachrichtigungspunkt). Sie
+      ist eine <strong>einzelne Aktion</strong>, der „nächste Schritt":</p>
+      <ul>
+        <li><strong>Tab Original</strong> — <strong>🌐 Seite übersetzen</strong>:
+          wechselt zur Übersetzung der Seite.</li>
+        <li><strong>Tab Übersetzung</strong> — <strong>▶ Nächste übersetzen</strong>:
+          geht zur nächsten Seite und übersetzt sie.</li>
+      </ul>
+      <p>Die übrigen lokalen Aktionen (kopieren, exportieren, neu
+      extrahieren/übersetzen) sind in der Mini-Symbolleiste über dem Text; der
+      Batch-Export ist in der Schaltfläche <strong>💾 Exportieren</strong> oben.</p>
+
+      <h2 id="reader">Integrierter Reader</h2>
+      <p>Über das Menü <strong>👁 Reader ▾</strong> öffnen Sie einen
+      nicht-modalen, <em>schreibgeschützten</em> Reader (oder den
+      Systembetrachter). Der Reader hat die Grundbefehle: Navigation, Zoom, an
+      Breite/Seite anpassen, Drehen und extern öffnen. Er öffnet auf der
+      aktuellen Seite und nutzt ein separates Dokument, stört also den
+      Hauptbereich nicht.</p>
+
+      <h2 id="theme">Theme</h2>
+      <p>Unter <strong>⚙️ Einstellungen → Erscheinungsbild</strong> wählen Sie
+      das Theme <strong>Dunkel</strong>, <strong>Hell</strong> oder <strong>Wie
+      das System</strong>. Die Änderung ist sofort wirksam und wird gemerkt. Die
+      Animationen (Overlay bei Extraktion/Übersetzung, Glanz auf der
+      Aktionsschaltfläche, Export-Vorschau) folgen dem aktiven Theme.</p>
 
       <!-- ═══════════════ EINSTELLUNGEN ═══════════════ -->
 
@@ -381,9 +467,28 @@
 
       <h3>Anzeige</h3>
       <ul>
-        <li><strong>Start-Zoom</strong> — Basis-Renderauflösung, 0,5×–4,0×
-          (beeinflusst die Schärfe; die sichtbare Skalierung startet bei
-          1,00× = anpassen).</li>
+        <li><strong>Render-Qualität</strong> — Basis-Renderauflösung,
+          0,5×–4,0× (beeinflusst die Schärfe).</li>
+      </ul>
+
+      <h3>Erscheinungsbild</h3>
+      <ul>
+        <li><strong>Theme</strong> — Dunkel, Hell oder Wie das System. Wird
+          sofort angewendet und gemerkt.</li>
+      </ul>
+
+      <h3>Erweitert</h3>
+      <ul>
+        <li><strong>Dokument-Cache leeren</strong> — entfernt den Cache des
+          aktuellen Dokuments (Extraktion + Übersetzungen), mit Bestätigung.</li>
+        <li><strong>Cache-Info</strong> — Diagnosepanel mit Cache-Pfaden und
+          Seitenzustand.</li>
+      </ul>
+
+      <h3>Benachrichtigungen</h3>
+      <ul>
+        <li><strong>Bei Exportende benachrichtigen</strong> — Meldung und Signal
+          am Ende eines Batch-Exports.</li>
       </ul>
 
       <h3>Verhalten</h3>
@@ -535,8 +640,7 @@
         <tr><th>Kürzel</th><th>Aktion</th></tr>
         <tr><td><kbd>→</kbd> / <kbd>←</kbd></td><td>Nächste / vorherige Seite</td></tr>
         <tr><td><kbd>BildAb</kbd> / <kbd>BildAuf</kbd></td><td>Nächste / vorherige Seite</td></tr>
-        <tr><td><kbd>Strg</kbd>+<kbd>+</kbd> / <kbd>Strg</kbd>+<kbd>−</kbd></td><td>Vergrößern / Verkleinern</td></tr>
-        <tr><td><kbd>Strg</kbd>+<kbd>0</kbd></td><td>Zoom zurücksetzen</td></tr>
+        <tr><td><kbd>Strg</kbd>+<kbd>E</kbd></td><td>Öffnet den Batch-Export</td></tr>
         <tr><td><kbd>Strg</kbd>+<kbd>M</kbd></td><td>Markdown umschalten</td></tr>
       </table>
 

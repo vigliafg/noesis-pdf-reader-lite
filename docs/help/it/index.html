@@ -65,19 +65,26 @@
           colonne, tabelle, titoli, didascalie.</p></div>
         <div class="card"><h4>🔍 Vista affiancata</h4><p>Pagina renderizzata a
           sinistra, testo estratto a destra, con navigazione, indice (TOC) e
-          zoom.</p></div>
+          reader integrato.</p></div>
         <div class="card"><h4>🚫 Zone di esclusione</h4><p>Trascina un box
           rosso sul rumore (header, footer, immagini, didascalie) per
           rimuoverlo dal testo.</p></div>
         <div class="card"><h4>🟩 Zone di inclusione</h4><p>I box verdi numerati
           definiscono l'ordine di lettura manuale per le pagine complesse.</p></div>
-        <div class="card"><h4>🖼️ Estrazione immagini</h4><p>Seleziona una zona
-          della pagina e salva la figura ritagliata nella galleria.</p></div>
+        <div class="card"><h4>🗂️ Oggetti</h4><p>Cattura una zona della pagina
+          (immagine, tabella o testo) e ritrovala nella raccolta, con azioni
+          dedicate per tipo.</p></div>
         <div class="card"><h4>🌐 Traduzione</h4><p>Traduci la pagina nella
           lingua di destinazione scelta, con cache su disco.</p></div>
         <div class="card"><h4>⚙️ Impostazioni</h4><p>Lingua interfaccia,
-          lingue di traduzione, zoom, font, header e comportamento di
+          lingue di traduzione, tema, font, header e comportamento di
           lettura.</p></div>
+        <div class="card"><h4>💾 Esportazione batch</h4><p>Esporta più pagine
+          estratte/tradotte come Markdown unico, ZIP o cartella.</p></div>
+        <div class="card"><h4>✓ Azione successiva</h4><p>Un pulsante flottante
+          sull'area testo: traduci la pagina, poi traduci la successiva.</p></div>
+        <div class="card"><h4>🎨 Tema</h4><p>Scuro, chiaro o come il sistema,
+          applicato a caldo.</p></div>
         <div class="card"><h4>🌍 Interfaccia multilingue</h4><p>Italiano,
           English, Français, Deutsch, Español — cambiabile al volo.</p></div>
       </div>
@@ -122,11 +129,12 @@
       <table>
         <tr><th>Elemento</th><th>Funzione</th></tr>
         <tr><td>📂 Apri PDF</td><td>Apre un documento PDF</td></tr>
+        <tr><td>💾 Esporta</td><td>Esporta un gruppo di pagine (batch); <kbd>Ctrl</kbd>+<kbd>E</kbd></td></tr>
         <tr><td>📑 Indice</td><td>Mostra/nasconde l'indice (TOC) a sinistra</td></tr>
         <tr><td>◀ Prec. / Succ. ▶ + numeri</td><td>Navigazione tra le pagine</td></tr>
-        <tr><td>🔍− / Scala / 🔍+</td><td>Zoom della pagina</td></tr>
+        <tr><td>👁 Reader ▾</td><td>Apre il reader interno o il visualizzatore di sistema</td></tr>
         <tr><td>📝 MD ✓</td><td>Attiva/disattiva il rendering Markdown del testo</td></tr>
-        <tr><td>⚙️ Impostazioni</td><td>Lingue, preferenze e comportamento</td></tr>
+        <tr><td>⚙️ Impostazioni</td><td>Lingue, tema, preferenze e comportamento</td></tr>
         <tr><td>❓ Guida</td><td>Apre questa guida nel browser</td></tr>
       </table>
 
@@ -134,10 +142,9 @@
       <p>Sopra la pagina ci sono gli strumenti di zona:</p>
       <table>
         <tr><th>Elemento</th><th>Funzione</th></tr>
-        <tr><td>🖱️ Seleziona zona</td><td>Estrae l'immagine della zona disegnata</td></tr>
-        <tr><td>🚫 Escludi zona</td><td>Esclude la zona dal testo (box rosso)</td></tr>
-        <tr><td>🟩 Includi zona</td><td>Definisce l'ordine di lettura (box verdi numerati)</td></tr>
-        <tr><td>🧹 Reset zone</td><td>Rimuove tutte le zone della pagina corrente</td></tr>
+        <tr><td>📸 Cattura ▾</td><td>Menu: 📸 Cattura immagine oppure 🔤 Cattura e interpreta (testo/OCR)</td></tr>
+        <tr><td>🎯 Zone ▾</td><td>Menu: 🚫 Escludi zona (box rosso), 🟩 Includi zona (box verdi numerati) e 🧹 Reset zone</td></tr>
+        <tr><td>▶ Estrai</td><td>Conclude l'editing delle zone e riesegue l'estrazione della pagina</td></tr>
       </table>
 
       <h3>Pannello destro (testo)</h3>
@@ -146,17 +153,18 @@
         <li><strong>📄 Originale</strong> — il testo estratto (auto o manuale).</li>
         <li><strong>🇫🇷 … (bandiera + lingua)</strong> — la traduzione della
           pagina nella lingua di destinazione scelta nelle Impostazioni.</li>
-        <li><strong>🖼️ Immagini</strong> — la galleria delle figure estratte.</li>
+        <li><strong>🗂️ Oggetti</strong> — la raccolta di immagini, tabelle e
+          testi catturati.</li>
       </ul>
       <p>Le due tab di testo (📄 Originale e la traduzione) sono finestre
       editabili: puoi digitare, selezionare, copiare e incollare liberamente
       (Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+Z). Ogni finestra ha la sua mini
-      toolbar con <strong>A−</strong>, la dimensione corrente e
-      <strong>A+</strong> per ridurre o aumentare il testo dal vivo, più
-      <strong>↺</strong> per ripristinare la dimensione delle Impostazioni e
+      toolbar: <strong>A−</strong> / <strong>A+</strong> / <strong>↺</strong>
+      per la dimensione del testo, <strong>📋</strong> per copiare,
       <strong>💾</strong> per esportare il testo della finestra come
       <code>.md</code> o <code>.txt</code> (con le tue modifiche, senza
-      l'header). Con il salvataggio attivo, un punto arancione
+      l'header) e <strong>🔁</strong> per ri-estrarre la pagina (tab Originale)
+      o ritradurla (tab lingua). Con il salvataggio attivo, un punto arancione
       <strong>●</strong> accanto ai pulsanti avvisa di modifiche non ancora
       scritte su disco.
       Le due finestre si ingrandiscono in modo indipendente. Dopo una
@@ -176,10 +184,8 @@
         <li><strong>Tastiera</strong>: frecce ← → e PagSu/PagGiù.</li>
         <li><strong>Indice (TOC)</strong>: clicca 📑 Indice e scegli una voce
           per saltare al capitolo.</li>
-        <li><strong>Zoom</strong>: pulsanti 🔍−/🔍+, <kbd>Ctrl</kbd>+<kbd>+</kbd> /
-          <kbd>Ctrl</kbd>+<kbd>−</kbd>, <kbd>Ctrl</kbd>+<kbd>0</kbd> per
-          ripristinare. 1.00× adatta la pagina alla finestra; l'etichetta
-          mostra la scala corrente (0.25×–8.00×).</li>
+        <li><strong>Pane sinistro</strong>: sempre adattato alla finestra
+          (nessuno zoom). Lo zoom di lettura è nel <a href="#reader">reader</a>.</li>
         <li><strong>Ripresa</strong>: se attivo nelle Impostazioni, l'app
           riapre il documento sull'ultima pagina letta.</li>
       </ul>
@@ -225,17 +231,19 @@
       (header, footer, numeri di pagina, immagini con testo, didascalie,
       pubblicità), puoi escluderli manualmente:</p>
       <ol>
-        <li>Clicca su <strong>🚫 Escludi zona</strong>.</li>
+        <li>Apri il menu <strong>🎯 Zone ▾</strong> e scegli
+          <strong>🚫 Escludi zona</strong>.</li>
         <li>Trascina col mouse un <strong>box rosso</strong> sul contenuto da
           rimuovere.</li>
         <li>Il testo viene ricalcolato immediatamente senza quel contenuto.</li>
-        <li>Premi di nuovo il pulsante per terminare.</li>
+        <li>Scegli di nuovo <strong>🚫 Escludi zona</strong> nel menu per
+          terminare.</li>
       </ol>
 
       <h3>Escludi + estrai in un solo gesto</h3>
       <p>Se la zona rossa contiene un'immagine incorporata, l'<strong>intera
       zona selezionata</strong> viene catturata automaticamente nella tab
-      🖼️ Immagini (le figure composite — più immagini, immagine + didascalia
+      🗂️ Oggetti (le figure composite — più immagini, immagine + didascalia
       — sono conservate per intero, non solo un frammento; il focus resta
       sulla finestra di testo <strong>Originale</strong>). La barra di stato
       conferma l'operazione.</p>
@@ -244,13 +252,18 @@
         per-pagina e vive solo in memoria: chiudendo l'app le zone vengono
         perse.</div>
 
+      <p>Quando hai finito di disegnare le zone, premi <strong>▶ Estrai</strong>:
+      l'app conclude l'editing, svuota la cache della pagina e la riesegue
+      secondo le zone selezionate.</p>
+
       <!-- ═══════════════ ZONE DI INCLUSIONE ═══════════════ -->
 
       <h2 id="zones-include">Zone di inclusione (verdi)</h2>
       <p>Per le pagine a layout complesso (es. più colonne o box sparsi) puoi
       definire tu l'ordine di lettura con i <strong>box verdi numerati</strong>:</p>
       <ol>
-        <li>Clicca su <strong>🟩 Includi zona</strong>.</li>
+        <li>Apri il menu <strong>🎯 Zone ▾</strong> e scegli
+          <strong>🟩 Includi zona</strong>.</li>
         <li>Trascina un box verde sulla prima colonna/regione di lettura
           (compare il numero <strong>1</strong>).</li>
         <li>Disegna il box successivo nell'ordine di lettura (2, 3, …).</li>
@@ -271,22 +284,41 @@
 
       <!-- ═══════════════ ESTRAZIONE IMMAGINI ═══════════════ -->
 
-      <h2 id="images">Estrazione immagini</h2>
-      <p>Puoi ritagliare una figura direttamente dalla pagina:</p>
-      <ol>
-        <li>Clicca su <strong>🖱️ Seleziona zona</strong>.</li>
-        <li>Trascina un rettangolo sulla figura.</li>
-        <li>L'immagine viene salvata nella tab <strong>🖼️ Immagini</strong>.</li>
-      </ol>
-      <p>Nella galleria ogni immagine ha i pulsanti:</p>
+      <h2 id="images">Cattura di oggetti</h2>
+      <p>Dal menu <strong>📸 Cattura ▾</strong> hai due azioni:</p>
       <ul>
-        <li><strong>💾 Salva</strong> — salva su file (PNG/JPEG).</li>
-        <li><strong>📋 Copia</strong> — copia negli appunti.</li>
-        <li><strong>🗑️ Rimuovi</strong> — elimina dalla galleria.</li>
-        <li>Clic sull'anteprima per ingrandire.</li>
+        <li><strong>📸 Cattura immagine</strong> — salva la regione come
+          immagine.</li>
+        <li><strong>🔤 Cattura e interpreta</strong> — salva l'immagine e ne
+          estrae il <strong>testo</strong>: se la regione ha testo nativo lo
+          legge direttamente, altrimenti usa l'OCR; le tabelle native diventano
+          markdown.</li>
       </ul>
-      <p>Le immagini estratte sono salvate nella cartella dati dell'app e
-      vengono mantenute tra un avvio e l'altro.</p>
+      <ol>
+        <li>Scegli l'azione dal menu <strong>📸 Cattura ▾</strong>.</li>
+        <li>Trascina un rettangolo sull'immagine, sulla tabella o
+          sull'oggetto.</li>
+      </ol>
+      <p>Se la pagina ha già <a href="#zones-exclude">zone</a> disegnate, la
+      cattura avvisa con un messaggio: fai prima il <strong>🧹 Reset
+      zone</strong> e poi cattura.</p>
+
+      <h3>La raccolta 🗂️ Oggetti</h3>
+      <p>Tutto ciò che catturi finisce nella tab <strong>🗂️ Oggetti</strong>,
+      raggruppato per tipo: <strong>Immagini</strong>, <strong>Tabelle</strong>
+      e <strong>Testi</strong>. In cima alla tab trovi i filtri per tipo, il
+      conteggio, <strong>💾 Esporta tutti</strong> (in una cartella: immagini
+      PNG, testi <code>.md</code>) e <strong>🗑️ Rimuovi tutti</strong>.</p>
+      <p>Ogni oggetto ha le azioni del suo tipo:</p>
+      <ul>
+        <li><strong>Immagine</strong> — 💾 Salva, 📋 Copia, 🗑️ Rimuovi; clic
+          sull'anteprima per ingrandire.</li>
+        <li><strong>Tabella</strong> — 📋 Copia markdown, 💾 Salva .md, 🗑️
+          Rimuovi.</li>
+        <li><strong>Testo</strong> — 📋 Copia testo, 💾 Salva .md, 🗑️ Rimuovi.</li>
+      </ul>
+      <p>Le figure estratte automaticamente e le catture manuali convivono nella
+      stessa raccolta.</p>
 
       <!-- ═══════════════ TRADUZIONE ═══════════════ -->
 
@@ -324,6 +356,58 @@
       <div class="warning"><strong>Attenzione</strong> La traduzione richiede
         una connessione Internet e invia il testo della pagina a un servizio
         esterno. Non tradurre documenti riservati senza averne il diritto.</div>
+
+      <!-- ═══════════════ AZIONI ED EXPORT ═══════════════ -->
+
+      <h2 id="batch">Esportazione batch</h2>
+      <p>Il pulsante <strong>💾 Esporta</strong> (o <kbd>Ctrl</kbd>+<kbd>E</kbd>)
+      apre una procedura guidata in cinque passi per esportare un gruppo di
+      pagine estratte e/o tradotte.</p>
+      <ol>
+        <li><strong>Pagine</strong> — pagina corrente, intervallo, oppure lista
+          libera (es. <code>1,3,7-9</code>; <code>all</code> per tutte).</li>
+        <li><strong>Contenuto</strong> — Originale, Traduzione o Entrambi;
+          opzione <em>Includi le figure</em>.</li>
+        <li><strong>Lingue e motore</strong> — origine, destinazione e motore;
+          <em>Traduci prima le pagine mancanti</em>.</li>
+        <li><strong>Output</strong> — un unico Markdown, pagine singole in un
+          ZIP, oppure pagine singole in una cartella; cartella e nome file.</li>
+        <li><strong>Riepilogo</strong> — controlla e avvia.</li>
+      </ol>
+      <p>Una finestra di progresso mostra la pagina in lavorazione (con
+      anteprima animata), le statistiche e permette di annullare. A fine
+      esportazione puoi aprire la cartella o copiare il file in Download. Le
+      pagine elaborate riempiono anche le cache dell'app, così tornano subito
+      disponibili. L'esportazione rispetta le modifiche salvate e ignora le
+      pagine con zone manuali (lavora in modalità automatica).</p>
+
+      <h2 id="page-actions">Azione successiva (FAB)</h2>
+      <p>A elaborazione conclusa compare in basso a destra, sull'area del testo,
+      un pulsante flottante (con riflesso animato e un punto di notifica). È una
+      <strong>singola azione</strong>, il "passo successivo":</p>
+      <ul>
+        <li><strong>Tab Originale</strong> — <strong>🌐 Traduci pagina</strong>:
+          passa alla traduzione della pagina.</li>
+        <li><strong>Tab Traduzione</strong> — <strong>▶ Traduci la
+          successiva</strong>: va alla pagina successiva e la traduce.</li>
+      </ul>
+      <p>Le altre azioni locali (copia, esporta, ri-estrai/ritraduci) sono nella
+      mini toolbar sopra il testo; l'esportazione batch è nel pulsante
+      <strong>💾 Esporta</strong> in alto.</p>
+
+      <h2 id="reader">Reader interno</h2>
+      <p>Dal menu <strong>👁 Reader ▾</strong> apri un reader non-modale e
+      <em>read-only</em> (o il visualizzatore di sistema). Il reader ha i comandi
+      di base: navigazione, zoom, adatta-larghezza/pagina, rotazione e apertura
+      esterna. Si apre sulla pagina corrente e usa un documento separato, quindi
+      non interferisce con il pannello principale.</p>
+
+      <h2 id="theme">Tema</h2>
+      <p>In <strong>⚙️ Impostazioni → Aspetto</strong> scegli il tema
+      <strong>Scuro</strong>, <strong>Chiaro</strong> o <strong>Come il
+      sistema</strong>. Il cambio è immediato e viene ricordato. Le animazioni
+      (overlay durante estrazione/traduzione, riflesso sul pulsante azioni,
+      anteprima dell'export) si adattano al tema attivo.</p>
 
       <!-- ═══════════════ IMPOSTAZIONI ═══════════════ -->
 
@@ -366,9 +450,28 @@
 
       <h3>Visualizzazione</h3>
       <ul>
-        <li><strong>Zoom di avvio</strong> — risoluzione di base del render,
-          0.5×–4.0× (incide sulla nitidezza; la scala visibile parte da
-          1.00× = adatta).</li>
+        <li><strong>Qualità di rendering</strong> — risoluzione di base del
+          render, 0.5×–4.0× (incide sulla nitidezza).</li>
+      </ul>
+
+      <h3>Aspetto</h3>
+      <ul>
+        <li><strong>Tema</strong> — Scuro, Chiaro o Come il sistema. Si applica
+          subito e resta salvato.</li>
+      </ul>
+
+      <h3>Avanzate</h3>
+      <ul>
+        <li><strong>Svuota cache documento</strong> — elimina la cache
+          (estrazione + traduzioni) del documento corrente (con conferma).</li>
+        <li><strong>Info cache</strong> — pannello diagnostico con i percorsi
+          della cache e lo stato della pagina.</li>
+      </ul>
+
+      <h3>Notifiche</h3>
+      <ul>
+        <li><strong>Avvisa a fine esportazione</strong> — messaggio e beep al
+          termine di un export batch.</li>
       </ul>
 
       <h3>Comportamento</h3>
@@ -505,8 +608,7 @@
         <tr><th>Scorciatoia</th><th>Azione</th></tr>
         <tr><td><kbd>→</kbd> / <kbd>←</kbd></td><td>Pagina successiva / precedente</td></tr>
         <tr><td><kbd>PagGiù</kbd> / <kbd>PagSu</kbd></td><td>Pagina successiva / precedente</td></tr>
-        <tr><td><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>−</kbd></td><td>Zoom avanti / indietro</td></tr>
-        <tr><td><kbd>Ctrl</kbd>+<kbd>0</kbd></td><td>Ripristina zoom</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Apre l'esportazione batch</td></tr>
         <tr><td><kbd>Ctrl</kbd>+<kbd>M</kbd></td><td>Attiva/disattiva Markdown</td></tr>
       </table>
 

@@ -92,6 +92,8 @@ DEFAULTS: dict = {
     "resume_last_page": True,  # riprendi dall'ultima pagina del documento
     "save_edits": True,      # salva le modifiche ai testi (per documento)
     "font_size": 12,         # dimensione font testo estratto (10–16 pt)
+    "theme": "dark",         # tema UI (dark|light|system) — vedi theme.py
+    "notify_batch": True,    # avviso a fine esportazione batch
     "last_tab": "original",  # ultima tab attiva (original|translated|images)
     "last_pages": {},        # nome.pdf → ultima pagina (max 20, LRU)
 }
@@ -338,17 +340,83 @@ _STRINGS: dict[str, dict[str, str]] = {
     "page_toolbar.title": {
         "it": "Pagina", "en": "Page", "fr": "Page", "de": "Seite", "es": "Página",
     },
-    "page_toolbar.select": {
-        "it": "🖱️ Seleziona zona", "en": "🖱️ Select region",
-        "fr": "🖱️ Sélectionner une zone", "de": "🖱️ Bereich auswählen",
-        "es": "🖱️ Seleccionar zona",
+    "page_toolbar.capture": {
+        "it": "📸 Cattura", "en": "📸 Capture",
+        "fr": "📸 Capturer", "de": "📸 Erfassen",
+        "es": "📸 Capturar",
     },
-    "page_toolbar.select.tip": {
-        "it": "Trascina col mouse una zona della pagina\nper estrarne l'immagine nella tab 🖼️ Immagini",
-        "en": "Drag a page region with the mouse\nto extract its image into the 🖼️ Images tab",
-        "fr": "Glissez une zone de la page avec la souris\npour extraire son image dans l'onglet 🖼️ Images",
-        "de": "Ziehen Sie mit der Maus einen Bereich der Seite,\num sein Bild in den Tab 🖼️ Bilder zu extrahieren",
-        "es": "Arrastra una zona de la página con el ratón\npara extraer su imagen en la pestaña 🖼️ Imágenes",
+    "page_toolbar.capture.tip": {
+        "it": "Trascina col mouse su un'immagine, una tabella o un altro\noggetto della pagina per catturarlo nella tab 🖼️ Immagini",
+        "en": "Drag the mouse over an image, a table or any other\nobject on the page to capture it into the 🖼️ Images tab",
+        "fr": "Glissez la souris sur une image, un tableau ou tout autre\nobjet de la page pour le capturer dans l'onglet 🖼️ Images",
+        "de": "Ziehen Sie mit der Maus über ein Bild, eine Tabelle oder ein\nanderes Objekt der Seite, um es in den Tab 🖼️ Bilder aufzunehmen",
+        "es": "Arrastra el ratón sobre una imagen, una tabla o cualquier otro\nobjeto de la página para capturarlo en la pestaña 🖼️ Imágenes",
+    },
+    "page_toolbar.capture.blocked": {
+        "it": "Fai il reset delle zone prima di catturare",
+        "en": "Reset the zones before capturing",
+        "fr": "Réinitialisez les zones avant de capturer",
+        "de": "Setzen Sie die Zonen zurück, bevor Sie erfassen",
+        "es": "Restablece las zonas antes de capturar",
+    },
+    "page_toolbar.capture.image": {
+        "it": "📸 Cattura immagine", "en": "📸 Capture image",
+        "fr": "📸 Capturer l'image", "de": "📸 Bild erfassen",
+        "es": "📸 Capturar imagen",
+    },
+    "page_toolbar.capture.interpret": {
+        "it": "🔤 Cattura e interpreta", "en": "🔤 Capture and interpret",
+        "fr": "🔤 Capturer et interpréter", "de": "🔤 Erfassen und interpretieren",
+        "es": "🔤 Capturar e interpretar",
+    },
+    "page_toolbar.capture.interpret.tip": {
+        "it": "Cattura la regione e ne estrae il testo (nativo o OCR)",
+        "en": "Capture the region and extract its text (native or OCR)",
+        "fr": "Capture la zone et en extrait le texte (natif ou OCR)",
+        "de": "Erfasst den Bereich und extrahiert den Text (nativ oder OCR)",
+        "es": "Captura la zona y extrae su texto (nativo u OCR)",
+    },
+    "page_toolbar.capture.active": {
+        "it": "📸 Disegna la zona…", "en": "📸 Draw the region…",
+        "fr": "📸 Dessinez la zone…", "de": "📸 Bereich zeichnen…",
+        "es": "📸 Dibuja la zona…",
+    },
+    "capture.text_ready": {
+        "it": "Testo interpretato ({chars} caratteri)",
+        "en": "Text interpreted ({chars} characters)",
+        "fr": "Texte interprété ({chars} caractères)",
+        "de": "Text interpretiert ({chars} Zeichen)",
+        "es": "Texto interpretado ({chars} caracteres)",
+    },
+    "capture.empty": {
+        "it": "Nessun testo riconosciuto nella zona",
+        "en": "No text recognised in the region",
+        "fr": "Aucun texte reconnu dans la zone",
+        "de": "Kein Text im Bereich erkannt",
+        "es": "No se reconoció texto en la zona",
+    },
+    "capture.copy_text": {
+        "it": "📋 Copia testo", "en": "📋 Copy text",
+        "fr": "📋 Copier le texte", "de": "📋 Text kopieren",
+        "es": "📋 Copiar texto",
+    },
+    "capture.save_dialog": {
+        "it": "Salva testo interpretato", "en": "Save interpreted text",
+        "fr": "Enregistrer le texte interprété",
+        "de": "Interpretierten Text speichern",
+        "es": "Guardar texto interpretado",
+    },
+    "page_toolbar.extract": {
+        "it": "▶ Estrai", "en": "▶ Extract",
+        "fr": "▶ Extraire", "de": "▶ Extrahieren",
+        "es": "▶ Extraer",
+    },
+    "page_toolbar.extract.tip": {
+        "it": "Conclude l'editing delle zone e riesegue l'estrazione della pagina",
+        "en": "Ends zone editing and re-runs the page extraction",
+        "fr": "Termine l'édition des zones et relance l'extraction de la page",
+        "de": "Beendet die Zonenbearbeitung und startet die Seitenextraktion neu",
+        "es": "Termina la edición de zonas y vuelve a extraer la página",
     },
     "page_toolbar.exclude": {
         "it": "🚫 Escludi zona", "en": "🚫 Exclude region",
@@ -391,9 +459,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "📄 Originale", "en": "📄 Original", "fr": "📄 Original",
         "de": "📄 Original", "es": "📄 Original",
     },
-    "tab.images": {
-        "it": "🖼️ Immagini", "en": "🖼️ Images", "fr": "🖼️ Images",
-        "de": "🖼️ Bilder", "es": "🖼️ Imágenes",
+    "tab.objects": {
+        "it": "🗂️ Oggetti", "en": "🗂️ Objects", "fr": "🗂️ Objets",
+        "de": "🗂️ Objekte", "es": "🗂️ Objetos",
     },
     # ── text editor mini-toolbar ────────────────────────────────────────────
     "editor.decrease": {
@@ -435,6 +503,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "Modifiche non salvate", "en": "Unsaved edits",
         "fr": "Modifications non enregistrées",
         "de": "Nicht gespeicherte Änderungen", "es": "Cambios sin guardar",
+    },
+    # Azioni locali della finestra (mini toolbar): copia.
+    "toolbar.copy.tip": {
+        "it": "Copia il testo", "en": "Copy the text",
+        "fr": "Copier le texte", "de": "Text kopieren", "es": "Copiar el texto",
     },
     # ── spinner / gallery status ────────────────────────────────────────────
     "status.translating": {
@@ -478,13 +551,72 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "✅ Esportato", "en": "✅ Exported", "fr": "✅ Exporté",
         "de": "✅ Exportiert", "es": "✅ Exportado",
     },
-    # ── images gallery ──────────────────────────────────────────────────────
-    "gallery.empty": {
-        "it": "Nessuna zona catturata.\n\nUsa 🖱️ Seleziona zona per ritagliare una figura dalla pagina.",
-        "en": "No captured region.\n\nUse 🖱️ Select region to crop a figure from the page.",
-        "fr": "Aucune zone capturée.\n\nUtilisez 🖱️ Sélectionner une zone pour découper une figure de la page.",
-        "de": "Kein Bereich erfasst.\n\nVerwenden Sie 🖱️ Bereich auswählen, um eine Abbildung aus der Seite auszuschneiden.",
-        "es": "No hay ninguna zona capturada.\n\nUsa 🖱️ Seleccionar zona para recortar una figura de la página.",
+    # ── objects tab (raccolta di oggetti: immagini / tabelle / testi) ───────
+    "objects.empty": {
+        "it": "Nessun oggetto.\n\nUsa 📸 Cattura per ritagliare un'immagine, una tabella o del testo dalla pagina.",
+        "en": "No objects.\n\nUse 📸 Capture to crop an image, a table or text from the page.",
+        "fr": "Aucun objet.\n\nUtilisez 📸 Capturer pour découper une image, un tableau ou du texte de la page.",
+        "de": "Keine Objekte.\n\nVerwenden Sie 📸 Erfassen, um ein Bild, eine Tabelle oder Text aus der Seite auszuschneiden.",
+        "es": "No hay objetos.\n\nUsa 📸 Capturar para recortar una imagen, una tabla o texto de la página.",
+    },
+    "objects.filter.all": {
+        "it": "Tutti", "en": "All", "fr": "Tous", "de": "Alle", "es": "Todos",
+    },
+    "objects.filter.image": {
+        "it": "Immagini", "en": "Images", "fr": "Images", "de": "Bilder",
+        "es": "Imágenes",
+    },
+    "objects.filter.table": {
+        "it": "Tabelle", "en": "Tables", "fr": "Tableaux", "de": "Tabellen",
+        "es": "Tablas",
+    },
+    "objects.filter.text": {
+        "it": "Testi", "en": "Texts", "fr": "Textes", "de": "Texte",
+        "es": "Textos",
+    },
+    "objects.count": {
+        "it": "{n} oggetti", "en": "{n} objects", "fr": "{n} objets",
+        "de": "{n} Objekte", "es": "{n} objetos",
+    },
+    "objects.export_all": {
+        "it": "💾 Esporta tutti", "en": "💾 Export all", "fr": "💾 Exporter tout",
+        "de": "💾 Alle exportieren", "es": "💾 Exportar todo",
+    },
+    "objects.remove_all": {
+        "it": "🗑️ Rimuovi tutti", "en": "🗑️ Remove all",
+        "fr": "🗑️ Tout supprimer", "de": "🗑️ Alle entfernen",
+        "es": "🗑️ Eliminar todo",
+    },
+    "objects.export_dialog": {
+        "it": "Esporta tutti gli oggetti", "en": "Export all objects",
+        "fr": "Exporter tous les objets", "de": "Alle Objekte exportieren",
+        "es": "Exportar todos los objetos",
+    },
+    "objects.exported": {
+        "it": "✅ Oggetti esportati", "en": "✅ Objects exported",
+        "fr": "✅ Objets exportés", "de": "✅ Objekte exportiert",
+        "es": "✅ Objetos exportados",
+    },
+    "objects.kind.image": {
+        "it": "Immagine", "en": "Image", "fr": "Image", "de": "Bild",
+        "es": "Imagen",
+    },
+    "objects.kind.table": {
+        "it": "Tabella", "en": "Table", "fr": "Tableau", "de": "Tabelle",
+        "es": "Tabla",
+    },
+    "objects.kind.text": {
+        "it": "Testo", "en": "Text", "fr": "Texte", "de": "Text",
+        "es": "Texto",
+    },
+    "objects.copy_md": {
+        "it": "📋 Copia markdown", "en": "📋 Copy markdown",
+        "fr": "📋 Copier le markdown", "de": "📋 Markdown kopieren",
+        "es": "📋 Copiar markdown",
+    },
+    "objects.save_md": {
+        "it": "💾 Salva .md", "en": "💾 Save .md", "fr": "💾 Enregistrer .md",
+        "de": "💾 Als .md speichern", "es": "💾 Guardar .md",
     },
     "gallery.zoom_tip": {
         "it": "Clicca per ingrandire", "en": "Click to enlarge",
@@ -528,39 +660,39 @@ _STRINGS: dict[str, dict[str, str]] = {
         "es": "Listo — abre un PDF con 📂 Abrir PDF  |  Backend de texto: PyMuPDF4LLM ⚡",
     },
     "status.no_image": {
-        "it": "Nessuna immagine estraibile dalla zona selezionata",
-        "en": "No extractable image in the selected region",
-        "fr": "Aucune image extractible dans la zone sélectionnée",
-        "de": "Kein extrahierbares Bild im ausgewählten Bereich",
-        "es": "No hay ninguna imagen extraíble en la zona seleccionada",
+        "it": "Niente da catturare nella zona selezionata",
+        "en": "Nothing to capture in the selected region",
+        "fr": "Rien à capturer dans la zone sélectionnée",
+        "de": "Nichts im ausgewählten Bereich zu erfassen",
+        "es": "Nada que capturar en la zona seleccionada",
     },
     "status.image_extracted": {
-        "it": "Immagine estratta dalla zona: {name}",
-        "en": "Image extracted from region: {name}",
-        "fr": "Image extraite de la zone : {name}",
-        "de": "Bild aus Bereich extrahiert: {name}",
-        "es": "Imagen extraída de la zona: {name}",
+        "it": "Catturato dalla zona: {name}",
+        "en": "Captured from region: {name}",
+        "fr": "Capturé depuis la zone : {name}",
+        "de": "Aus Bereich erfasst: {name}",
+        "es": "Capturado de la zona: {name}",
     },
     "status.zone_excluded": {
-        "it": "Zona esclusa ({count} sulla pagina) — trascina altre zone o premi 🚫 Escludi zona per terminare",
-        "en": "Region excluded ({count} on page) — drag more regions or press 🚫 Exclude region to finish",
-        "fr": "Zone exclue ({count} sur la page) — faites glisser d'autres zones ou appuyez sur 🚫 Exclure une zone pour terminer",
-        "de": "Bereich ausgeschlossen ({count} auf der Seite) — ziehen Sie weitere Bereiche oder drücken Sie 🚫 Bereich ausschließen zum Beenden",
-        "es": "Zona excluida ({count} en la página) — arrastra más zonas o pulsa 🚫 Excluir zona para terminar",
+        "it": "Zona esclusa ({count} sulla pagina) — trascina altre zone o premi ▶ Estrai per concludere",
+        "en": "Region excluded ({count} on page) — drag more regions or press ▶ Extract to finish",
+        "fr": "Zone exclue ({count} sur la page) — faites glisser d'autres zones ou appuyez sur ▶ Extraire pour terminer",
+        "de": "Bereich ausgeschlossen ({count} auf der Seite) — ziehen Sie weitere Bereiche oder drücken Sie ▶ Extrahieren zum Beenden",
+        "es": "Zona excluida ({count} en la página) — arrastra más zonas o pulsa ▶ Extraer para terminar",
     },
     "status.zone_excluded_image": {
-        "it": "Zona esclusa e immagine estratta ({name}) — trascina altre zone o premi 🚫 Escludi zona per terminare",
-        "en": "Region excluded and image extracted ({name}) — drag more regions or press 🚫 Exclude region to finish",
-        "fr": "Zone exclue et image extraite ({name}) — faites glisser d'autres zones ou appuyez sur 🚫 Exclure une zone pour terminer",
-        "de": "Bereich ausgeschlossen und Bild extrahiert ({name}) — ziehen Sie weitere Bereiche oder drücken Sie 🚫 Bereich ausschließen zum Beenden",
-        "es": "Zona excluida e imagen extraída ({name}) — arrastra más zonas o pulsa 🚫 Excluir zona para terminar",
+        "it": "Zona esclusa e oggetto catturato ({name}) — trascina altre zone o premi ▶ Estrai per concludere",
+        "en": "Region excluded and object captured ({name}) — drag more regions or press ▶ Extract to finish",
+        "fr": "Zone exclue et objet capturé ({name}) — faites glisser d'autres zones ou appuyez sur ▶ Extraire pour terminer",
+        "de": "Bereich ausgeschlossen und Objekt erfasst ({name}) — ziehen Sie weitere Bereiche oder drücken Sie ▶ Extrahieren zum Beenden",
+        "es": "Zona excluida y objeto capturado ({name}) — arrastra más zonas o pulsa ▶ Extraer para terminar",
     },
     "status.zone_included": {
-        "it": "Zona inclusa (n. {count}) — trascina il prossimo box nell'ordine di lettura o premi 🟩 Includi zona per terminare",
-        "en": "Region included (no. {count}) — drag the next box in reading order or press 🟩 Include region to finish",
-        "fr": "Zone incluse (n° {count}) — faites glisser la boîte suivante dans l'ordre de lecture ou appuyez sur 🟩 Inclure une zone pour terminer",
-        "de": "Bereich eingeschlossen (Nr. {count}) — ziehen Sie die nächste Box in Lesereihenfolge oder drücken Sie 🟩 Bereich einschließen zum Beenden",
-        "es": "Zona incluida (n.º {count}) — arrastra el siguiente recuadro en orden de lectura o pulsa 🟩 Incluir zona para terminar",
+        "it": "Zona inclusa (n. {count}) — disegna il prossimo box nell'ordine di lettura o premi ▶ Estrai per concludere",
+        "en": "Region included (no. {count}) — draw the next box in reading order or press ▶ Extract to finish",
+        "fr": "Zone incluse (n° {count}) — dessinez la boîte suivante dans l'ordre de lecture ou appuyez sur ▶ Extraire pour terminer",
+        "de": "Bereich eingeschlossen (Nr. {count}) — zeichnen Sie die nächste Box in Lesereihenfolge oder drücken Sie ▶ Extrahieren zum Beenden",
+        "es": "Zona incluida (n.º {count}) — dibuja el siguiente recuadro en orden de lectura o pulsa ▶ Extraer para terminar",
     },
     "status.zones_reset": {
         "it": "Zone rimosse per questa pagina",
@@ -823,6 +955,636 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "Annulla", "en": "Cancel", "fr": "Annuler",
         "de": "Abbrechen", "es": "Cancelar",
     },
+    # ── toolbar: esporta batch + reader ─────────────────────────────────
+    "toolbar.export": {
+        "it": "💾 Esporta", "en": "💾 Export", "fr": "💾 Exporter",
+        "de": "💾 Exportieren", "es": "💾 Exportar",
+    },
+    "toolbar.export.tip": {
+        "it": "Esporta un gruppo di pagine (originale/traduzione)…",
+        "en": "Export a group of pages (original/translation)…",
+        "fr": "Exporter un groupe de pages (original/traduction)…",
+        "de": "Eine Gruppe von Seiten exportieren (Original/Übersetzung)…",
+        "es": "Exportar un grupo de páginas (original/traducción)…",
+    },
+    "toolbar.reader": {
+        "it": "👁 Reader ▾", "en": "👁 Reader ▾", "fr": "👁 Reader ▾",
+        "de": "👁 Reader ▾", "es": "👁 Reader ▾",
+    },
+    "toolbar.reader.tip": {
+        "it": "Apri il reader interno o il visualizzatore di sistema",
+        "en": "Open the built-in reader or the system viewer",
+        "fr": "Ouvrir le lecteur intégré ou la visionneuse système",
+        "de": "Den integrierten Reader oder den Systembetrachter öffnen",
+        "es": "Abrir el lector integrado o el visor del sistema",
+    },
+    "toolbar.reader.internal": {
+        "it": "Reader interno", "en": "Built-in reader",
+        "fr": "Lecteur intégré", "de": "Integrierter Reader",
+        "es": "Lector integrado",
+    },
+    "toolbar.reader.external": {
+        "it": "Apri con il visualizzatore di sistema",
+        "en": "Open with the system viewer",
+        "fr": "Ouvrir avec la visionneuse système",
+        "de": "Mit dem Systembetrachter öffnen",
+        "es": "Abrir con el visor del sistema",
+    },
+    # ── reader interno ──────────────────────────────────────────────────
+    "reader.title": {
+        "it": "Reader — {name}", "en": "Reader — {name}",
+        "fr": "Lecteur — {name}", "de": "Reader — {name}",
+        "es": "Lector — {name}",
+    },
+    "reader.prev": {"it": "◀", "en": "◀", "fr": "◀", "de": "◀", "es": "◀"},
+    "reader.next": {"it": "▶", "en": "▶", "fr": "▶", "de": "▶", "es": "▶"},
+    "reader.of": {
+        "it": "di {total}", "en": "of {total}", "fr": "sur {total}",
+        "de": "von {total}", "es": "de {total}",
+    },
+    "reader.zoom_in": {"it": "🔍+", "en": "🔍+", "fr": "🔍+", "de": "🔍+", "es": "🔍+"},
+    "reader.zoom_out": {"it": "🔍−", "en": "🔍−", "fr": "🔍−", "de": "🔍−", "es": "🔍−"},
+    "reader.fit_width": {
+        "it": "⇔ larghezza", "en": "⇔ width", "fr": "⇔ largeur",
+        "de": "⇔ Breite", "es": "⇔ ancho",
+    },
+    "reader.fit_page": {
+        "it": "⇕ pagina", "en": "⇕ page", "fr": "⇕ page",
+        "de": "⇕ Seite", "es": "⇕ página",
+    },
+    "reader.rotate": {
+        "it": "⟳ ruota", "en": "⟳ rotate", "fr": "⟳ pivoter",
+        "de": "⟳ drehen", "es": "⟳ girar",
+    },
+    "reader.external": {
+        "it": "👁 visualizzatore di sistema", "en": "👁 system viewer",
+        "fr": "👁 visionneuse système", "de": "👁 Systembetrachter",
+        "es": "👁 visor del sistema",
+    },
+    "reader.goto": {
+        "it": "Vai a pagina", "en": "Go to page", "fr": "Aller à la page",
+        "de": "Gehe zu Seite", "es": "Ir a la página",
+    },
+    "reader.zoom_in.tip": {
+        "it": "Ingrandisci", "en": "Zoom in", "fr": "Zoom avant",
+        "de": "Vergrößern", "es": "Acercar",
+    },
+    "reader.zoom_out.tip": {
+        "it": "Riduci", "en": "Zoom out", "fr": "Zoom arrière",
+        "de": "Verkleinern", "es": "Alejar",
+    },
+    "reader.fit_width.tip": {
+        "it": "Adatta alla larghezza", "en": "Fit to width",
+        "fr": "Ajuster à la largeur", "de": "An Breite anpassen",
+        "es": "Ajustar al ancho",
+    },
+    "reader.fit_page.tip": {
+        "it": "Adatta alla pagina", "en": "Fit to page",
+        "fr": "Ajuster à la page", "de": "An Seite anpassen",
+        "es": "Ajustar a la página",
+    },
+    "reader.rotate.tip": {
+        "it": "Ruota di 90°", "en": "Rotate 90°", "fr": "Pivoter de 90°",
+        "de": "Um 90° drehen", "es": "Girar 90°",
+    },
+    "reader.external.tip": {
+        "it": "Apri con il visualizzatore di sistema",
+        "en": "Open with the system viewer",
+        "fr": "Ouvrir avec la visionneuse système",
+        "de": "Mit dem Systembetrachter öffnen",
+        "es": "Abrir con el visor del sistema",
+    },
+    # ── FAB (CTA unica) + azioni locali (mini toolbar) ──────────────────
+    "actions.origin.translate": {
+        "it": "🌐 Traduci pagina", "en": "🌐 Translate page",
+        "fr": "🌐 Traduire la page", "de": "🌐 Seite übersetzen",
+        "es": "🌐 Traducir página",
+    },
+    "actions.origin.cta.tip": {
+        "it": "Passa alla traduzione di questa pagina",
+        "en": "Go to this page's translation",
+        "fr": "Passer à la traduction de cette page",
+        "de": "Zur Übersetzung dieser Seite",
+        "es": "Ir a la traducción de esta página",
+    },
+    "actions.origin.reextract": {
+        "it": "🔁 Ri-estrai pagina", "en": "🔁 Re-extract page",
+        "fr": "🔁 Ré-extraire la page", "de": "🔁 Seite neu extrahieren",
+        "es": "🔁 Re-extraer página",
+    },
+    "actions.translated.retranslate": {
+        "it": "🔁 Ritraduci", "en": "🔁 Retranslate",
+        "fr": "🔁 Retraduire", "de": "🔁 Neu übersetzen",
+        "es": "🔁 Retraducir",
+    },
+    "actions.translated.next": {
+        "it": "▶ Traduci la successiva", "en": "▶ Translate the next",
+        "fr": "▶ Traduire la suivante", "de": "▶ Nächste übersetzen",
+        "es": "▶ Traducir la siguiente",
+    },
+    "actions.translated.cta.tip": {
+        "it": "Passa alla pagina successiva e traducila",
+        "en": "Go to the next page and translate it",
+        "fr": "Passer à la page suivante et la traduire",
+        "de": "Zur nächsten Seite wechseln und übersetzen",
+        "es": "Ir a la página siguiente y traducirla",
+    },
+    "actions.last_page": {
+        "it": "Sei già all'ultima pagina.", "en": "You are already on the last page.",
+        "fr": "Vous êtes déjà à la dernière page.",
+        "de": "Sie sind bereits auf der letzten Seite.",
+        "es": "Ya estás en la última página.",
+    },
+    "actions.retranslate_confirm": {
+        "it": "Ritradurre la pagina {page}? La traduzione attuale verrà eliminata e rigenerata.",
+        "en": "Retranslate page {page}? The current translation will be discarded and regenerated.",
+        "fr": "Retraduire la page {page} ? La traduction actuelle sera supprimée et régénérée.",
+        "de": "Seite {page} neu übersetzen? Die aktuelle Übersetzung wird verworfen und neu erzeugt.",
+        "es": "¿Retraducir la página {page}? La traducción actual se eliminará y se regenerará.",
+    },
+    "actions.copied": {
+        "it": "Copiato negli appunti.", "en": "Copied to the clipboard.",
+        "fr": "Copié dans le presse-papiers.", "de": "In die Zwischenablage kopiert.",
+        "es": "Copiado al portapapeles.",
+    },
+    "actions.copy_empty": {
+        "it": "Niente da copiare.", "en": "Nothing to copy.",
+        "fr": "Rien à copier.", "de": "Nichts zu kopieren.",
+        "es": "Nada que copiar.",
+    },
+    # ── mini-toolbar: gruppo Zone ───────────────────────────────────────
+    "page_toolbar.zone_group": {
+        "it": "🎯 Zone ▾", "en": "🎯 Zones ▾", "fr": "🎯 Zones ▾",
+        "de": "🎯 Zonen ▾", "es": "🎯 Zonas ▾",
+    },
+    "page_toolbar.zone.tip": {
+        "it": "Escludi/includi zone o azzera",
+        "en": "Exclude/include regions or reset",
+        "fr": "Exclure/inclure des zones ou réinitialiser",
+        "de": "Zonen ausschließen/einschließen oder zurücksetzen",
+        "es": "Excluir/incluir zonas o restablecer",
+    },
+    # ── esportazione batch: wizard ──────────────────────────────────────
+    "export.wizard.title": {
+        "it": "Esporta pagine estratte e tradotte",
+        "en": "Export extracted and translated pages",
+        "fr": "Exporter les pages extraites et traduites",
+        "de": "Extrahierte und übersetzte Seiten exportieren",
+        "es": "Exportar páginas extraídas y traducidas",
+    },
+    "export.wizard.back": {
+        "it": "← Indietro", "en": "← Back", "fr": "← Retour",
+        "de": "← Zurück", "es": "← Atrás",
+    },
+    "export.wizard.next": {
+        "it": "Avanti →", "en": "Next →", "fr": "Suivant →",
+        "de": "Weiter →", "es": "Siguiente →",
+    },
+    "export.wizard.start": {
+        "it": "Avvia l'esportazione", "en": "Start export",
+        "fr": "Lancer l'export", "de": "Export starten",
+        "es": "Iniciar la exportación",
+    },
+    "export.wizard.step.pages": {
+        "it": "Pagine", "en": "Pages", "fr": "Pages",
+        "de": "Seiten", "es": "Páginas",
+    },
+    "export.wizard.step.content": {
+        "it": "Contenuto", "en": "Content", "fr": "Contenu",
+        "de": "Inhalt", "es": "Contenido",
+    },
+    "export.wizard.step.langs": {
+        "it": "Lingue e motore", "en": "Languages and engine",
+        "fr": "Langues et moteur", "de": "Sprachen und Engine",
+        "es": "Idiomas y motor",
+    },
+    "export.wizard.step.output": {
+        "it": "Output", "en": "Output", "fr": "Sortie",
+        "de": "Ausgabe", "es": "Salida",
+    },
+    "export.wizard.step.summary": {
+        "it": "Riepilogo", "en": "Summary", "fr": "Récapitulatif",
+        "de": "Zusammenfassung", "es": "Resumen",
+    },
+    "export.wizard.pages.title": {
+        "it": "Quali pagine?", "en": "Which pages?", "fr": "Quelles pages ?",
+        "de": "Welche Seiten?", "es": "¿Qué páginas?",
+    },
+    "export.wizard.pages.hint": {
+        "it": "Esporta la pagina corrente, un intervallo o una lista.",
+        "en": "Export the current page, a range or a list.",
+        "fr": "Exporter la page courante, une plage ou une liste.",
+        "de": "Aktuelle Seite, einen Bereich oder eine Liste exportieren.",
+        "es": "Exportar la página actual, un rango o una lista.",
+    },
+    "export.wizard.content.title": {
+        "it": "Cosa esportare?", "en": "What to export?",
+        "fr": "Quoi exporter ?", "de": "Was exportieren?",
+        "es": "¿Qué exportar?",
+    },
+    "export.wizard.content.hint": {
+        "it": "Origine, traduzione o entrambe; figure incluse o no.",
+        "en": "Original, translation or both; include figures or not.",
+        "fr": "Original, traduction ou les deux ; figures incluses ou non.",
+        "de": "Original, Übersetzung oder beides; Abbildungen inklusive oder nicht.",
+        "es": "Original, traducción o ambos; incluir figuras o no.",
+    },
+    "export.wizard.langs.title": {
+        "it": "Lingue e motore", "en": "Languages and engine",
+        "fr": "Langues et moteur", "de": "Sprachen und Engine",
+        "es": "Idiomas y motor",
+    },
+    "export.wizard.langs.hint": {
+        "it": "Origine «Auto» riconosce la lingua da sola.",
+        "en": "Source “Auto” detects the language by itself.",
+        "fr": "Source « Auto » détecte la langue toute seule.",
+        "de": "Quelle „Auto“ erkennt die Sprache selbst.",
+        "es": "Origen «Auto» reconoce el idioma por sí solo.",
+    },
+    "export.wizard.output.title": {
+        "it": "Output", "en": "Output", "fr": "Sortie",
+        "de": "Ausgabe", "es": "Salida",
+    },
+    "export.wizard.output.hint": {
+        "it": "Ultimo controllo: nome, formato e destinazione.",
+        "en": "Final check: name, format and destination.",
+        "fr": "Dernière vérification : nom, format et destination.",
+        "de": "Letzte Kontrolle: Name, Format und Ziel.",
+        "es": "Última comprobación: nombre, formato y destino.",
+    },
+    "export.wizard.summary.title": {
+        "it": "Riepilogo", "en": "Summary", "fr": "Récapitulatif",
+        "de": "Zusammenfassung", "es": "Resumen",
+    },
+    "export.wizard.output.browse": {
+        "it": "Sfoglia…", "en": "Browse…", "fr": "Parcourir…",
+        "de": "Durchsuchen…", "es": "Examinar…",
+    },
+    "export.wizard.output.folder": {
+        "it": "Cartella destinazione", "en": "Destination folder",
+        "fr": "Dossier de destination", "de": "Zielordner",
+        "es": "Carpeta de destino",
+    },
+    "export.wizard.output.filename": {
+        "it": "Nome file", "en": "File name", "fr": "Nom du fichier",
+        "de": "Dateiname", "es": "Nombre de archivo",
+    },
+    "export.wizard.preview.count": {
+        "it": "{n} pagine selezionate · {label}",
+        "en": "{n} pages selected · {label}",
+        "fr": "{n} pages sélectionnées · {label}",
+        "de": "{n} Seiten ausgewählt · {label}",
+        "es": "{n} páginas seleccionadas · {label}",
+    },
+    "export.wizard.preview.none": {
+        "it": "Anteprima non disponibile.", "en": "Preview unavailable.",
+        "fr": "Aperçu indisponible.", "de": "Vorschau nicht verfügbar.",
+        "es": "Vista previa no disponible.",
+    },
+    "export.wizard.preview.caption": {
+        "it": "pagina {n}", "en": "page {n}", "fr": "page {n}",
+        "de": "Seite {n}", "es": "página {n}",
+    },
+    # ── esportazione batch: selezione pagine ────────────────────────────
+    "export.mode.current": {
+        "it": "Pagina corrente", "en": "Current page",
+        "fr": "Page courante", "de": "Aktuelle Seite",
+        "es": "Página actual",
+    },
+    "export.mode.range": {
+        "it": "Intervallo di pagine", "en": "Page range",
+        "fr": "Plage de pages", "de": "Seitenbereich",
+        "es": "Rango de páginas",
+    },
+    "export.mode.free": {
+        "it": "Pagine (1,3,7-9)", "en": "Pages (1,3,7-9)",
+        "fr": "Pages (1,3,7-9)", "de": "Seiten (1,3,7-9)",
+        "es": "Páginas (1,3,7-9)",
+    },
+    "export.range.from.short": {
+        "it": "Da", "en": "From", "fr": "De", "de": "Von", "es": "Desde",
+    },
+    "export.range.to.short": {
+        "it": "A", "en": "To", "fr": "À", "de": "Bis", "es": "Hasta",
+    },
+    "export.free.placeholder": {
+        "it": "es. 1,3,7-9", "en": "e.g. 1,3,7-9", "fr": "ex. 1,3,7-9",
+        "de": "z. B. 1,3,7-9", "es": "p. ej. 1,3,7-9",
+    },
+    "export.free.hint": {
+        "it": "Pagine singole o intervalli separati da virgole: 1,3,7-9. Usa «all» per tutte le pagine.",
+        "en": "Single pages or ranges separated by commas: 1,3,7-9. Use “all” for every page.",
+        "fr": "Pages seules ou plages séparées par des virgules : 1,3,7-9. Utilisez « all » pour toutes.",
+        "de": "Einzelne Seiten oder Bereiche mit Kommas: 1,3,7-9. „all“ für alle Seiten.",
+        "es": "Páginas sueltas o rangos separados por comas: 1,3,7-9. Usa «all» para todas.",
+    },
+    "export.free.err.bounds": {
+        "it": "Pagina fuori intervallo (1–{total}).",
+        "en": "Page out of range (1–{total}).",
+        "fr": "Page hors plage (1–{total}).",
+        "de": "Seite außerhalb des Bereichs (1–{total}).",
+        "es": "Página fuera de rango (1–{total}).",
+    },
+    "export.free.err.empty": {
+        "it": "Indica almeno una pagina (es. 1,3,7-9).",
+        "en": "Enter at least one page (e.g. 1,3,7-9).",
+        "fr": "Indiquez au moins une page (ex. 1,3,7-9).",
+        "de": "Mindestens eine Seite angeben (z. B. 1,3,7-9).",
+        "es": "Indica al menos una página (p. ej. 1,3,7-9).",
+    },
+    "export.free.err.no_pages": {
+        "it": "Il documento non contiene pagine.",
+        "en": "The document has no pages.",
+        "fr": "Le document ne contient aucune page.",
+        "de": "Das Dokument enthält keine Seiten.",
+        "es": "El documento no contiene páginas.",
+    },
+    "export.free.err.none": {
+        "it": "Nessuna pagina selezionata.", "en": "No page selected.",
+        "fr": "Aucune page sélectionnée.", "de": "Keine Seite ausgewählt.",
+        "es": "Ninguna página seleccionada.",
+    },
+    "export.free.err.range": {
+        "it": "Intervallo non valido: «{token}».",
+        "en": "Invalid range: “{token}”.",
+        "fr": "Plage non valide : « {token} ».",
+        "de": "Ungültiger Bereich: „{token}“.",
+        "es": "Rango no válido: «{token}».",
+    },
+    "export.free.err.token": {
+        "it": "Voce non valida: «{token}».",
+        "en": "Invalid entry: “{token}”.",
+        "fr": "Entrée non valide : « {token} ».",
+        "de": "Ungültiger Eintrag: „{token}“.",
+        "es": "Entrada no válida: «{token}».",
+    },
+    "export.free.err.too_many": {
+        "it": "Troppe pagine richieste.", "en": "Too many pages requested.",
+        "fr": "Trop de pages demandées.", "de": "Zu viele Seiten angefordert.",
+        "es": "Demasiadas páginas solicitadas.",
+    },
+    # ── esportazione batch: contenuto e formato ─────────────────────────
+    "export.mode.original": {
+        "it": "Originale (markdown estratto)",
+        "en": "Original (extracted markdown)",
+        "fr": "Original (markdown extrait)",
+        "de": "Original (extrahiertes Markdown)",
+        "es": "Original (markdown extraído)",
+    },
+    "export.mode.translated": {
+        "it": "Traduzione", "en": "Translation", "fr": "Traduction",
+        "de": "Übersetzung", "es": "Traducción",
+    },
+    "export.mode.both": {
+        "it": "Entrambi (originale + traduzione)",
+        "en": "Both (original + translation)",
+        "fr": "Les deux (original + traduction)",
+        "de": "Beides (Original + Übersetzung)",
+        "es": "Ambos (original + traducción)",
+    },
+    "export.include_images": {
+        "it": "Includi le figure (gallery)",
+        "en": "Include figures (gallery)",
+        "fr": "Inclure les figures (galerie)",
+        "de": "Abbildungen einbeziehen (Galerie)",
+        "es": "Incluir figuras (galería)",
+    },
+    "export.format.merged": {
+        "it": "Un unico Markdown", "en": "A single Markdown",
+        "fr": "Un seul Markdown", "de": "Ein einziges Markdown",
+        "es": "Un único Markdown",
+    },
+    "export.format.zip": {
+        "it": "Pagine singole (ZIP)", "en": "Single pages (ZIP)",
+        "fr": "Pages séparées (ZIP)", "de": "Einzelne Seiten (ZIP)",
+        "es": "Páginas sueltas (ZIP)",
+    },
+    "export.format.folder": {
+        "it": "Pagine singole in una cartella",
+        "en": "Single pages in a folder",
+        "fr": "Pages séparées dans un dossier",
+        "de": "Einzelne Seiten in einem Ordner",
+        "es": "Páginas sueltas en una carpeta",
+    },
+    "export.translate_missing": {
+        "it": "Traduci prima le pagine mancanti (attesa)",
+        "en": "Translate missing pages first (wait)",
+        "fr": "Traduire d'abord les pages manquantes (attente)",
+        "de": "Fehlende Seiten zuerst übersetzen (Wartezeit)",
+        "es": "Traducir primero las páginas que faltan (espera)",
+    },
+    # ── esportazione batch: riepilogo ───────────────────────────────────
+    "export.sum.file": {
+        "it": "File", "en": "File", "fr": "Fichier", "de": "Datei", "es": "Archivo",
+    },
+    "export.sum.pages": {
+        "it": "Pagine", "en": "Pages", "fr": "Pages", "de": "Seiten", "es": "Páginas",
+    },
+    "export.sum.content": {
+        "it": "Contenuto", "en": "Content", "fr": "Contenu",
+        "de": "Inhalt", "es": "Contenido",
+    },
+    "export.sum.langs": {
+        "it": "Lingue", "en": "Languages", "fr": "Langues",
+        "de": "Sprachen", "es": "Idiomas",
+    },
+    "export.sum.missing": {
+        "it": "Da elaborare", "en": "To process", "fr": "À traiter",
+        "de": "Zu verarbeiten", "es": "Por procesar",
+    },
+    "export.sum.output": {
+        "it": "Output", "en": "Output", "fr": "Sortie",
+        "de": "Ausgabe", "es": "Salida",
+    },
+    # ── esportazione batch: progresso e esiti ───────────────────────────
+    "export.progress.title": {
+        "it": "Esportazione in corso", "en": "Export in progress",
+        "fr": "Export en cours", "de": "Export läuft",
+        "es": "Exportación en curso",
+    },
+    "export.progress.engine_lang": {
+        "it": "Motore: {engine} · {src} → {dst}",
+        "en": "Engine: {engine} · {src} → {dst}",
+        "fr": "Moteur : {engine} · {src} → {dst}",
+        "de": "Engine: {engine} · {src} → {dst}",
+        "es": "Motor: {engine} · {src} → {dst}",
+    },
+    "export.progress.pages": {
+        "it": "Pagine: {label}", "en": "Pages: {label}",
+        "fr": "Pages : {label}", "de": "Seiten: {label}",
+        "es": "Páginas: {label}",
+    },
+    "export.progress.activity_extracting": {
+        "it": "📄 Estrazione pagina {page}…", "en": "📄 Extracting page {page}…",
+        "fr": "📄 Extraction de la page {page}…",
+        "de": "📄 Seite {page} wird extrahiert…",
+        "es": "📄 Extrayendo la página {page}…",
+    },
+    "export.progress.activity_translating": {
+        "it": "🌐 Traduzione pagina {page}…", "en": "🌐 Translating page {page}…",
+        "fr": "🌐 Traduction de la page {page}…",
+        "de": "🌐 Seite {page} wird übersetzt…",
+        "es": "🌐 Traduciendo la página {page}…",
+    },
+    "export.progress.page_ok": {
+        "it": "✓ pag {page}", "en": "✓ p. {page}", "fr": "✓ p. {page}",
+        "de": "✓ S. {page}", "es": "✓ pág. {page}",
+    },
+    "export.progress.page_fail": {
+        "it": "✗ pag {page} — {reason}", "en": "✗ p. {page} — {reason}",
+        "fr": "✗ p. {page} — {reason}", "de": "✗ S. {page} — {reason}",
+        "es": "✗ pág. {page} — {reason}",
+    },
+    "export.progress.stats": {
+        "it": "{done} elaborate · {cached} in cache · {failed} errori · ETA ~{eta}",
+        "en": "{done} done · {cached} cached · {failed} errors · ETA ~{eta}",
+        "fr": "{done} traitées · {cached} en cache · {failed} erreurs · ETA ~{eta}",
+        "de": "{done} erledigt · {cached} im Cache · {failed} Fehler · ETA ~{eta}",
+        "es": "{done} hechas · {cached} en caché · {failed} errores · ETA ~{eta}",
+    },
+    "export.progress.completed_title": {
+        "it": "✅ Esportazione completata", "en": "✅ Export completed",
+        "fr": "✅ Export terminé", "de": "✅ Export abgeschlossen",
+        "es": "✅ Exportación completada",
+    },
+    "export.progress.completed_summary": {
+        "it": "{count} pagine · non riuscite: {failed} · tempo: {elapsed}",
+        "en": "{count} pages · failed: {failed} · time: {elapsed}",
+        "fr": "{count} pages · échecs : {failed} · temps : {elapsed}",
+        "de": "{count} Seiten · fehlgeschlagen: {failed} · Zeit: {elapsed}",
+        "es": "{count} páginas · fallidas: {failed} · tiempo: {elapsed}",
+    },
+    "export.progress.saved_path": {
+        "it": "File: {path}", "en": "File: {path}", "fr": "Fichier : {path}",
+        "de": "Datei: {path}", "es": "Archivo: {path}",
+    },
+    "export.progress.open_folder": {
+        "it": "📂 Apri cartella", "en": "📂 Open folder",
+        "fr": "📂 Ouvrir le dossier", "de": "📂 Ordner öffnen",
+        "es": "📂 Abrir carpeta",
+    },
+    "export.progress.save_download": {
+        "it": "⬇ Copia in Download", "en": "⬇ Copy to Downloads",
+        "fr": "⬇ Copier dans Téléchargements",
+        "de": "⬇ In Downloads kopieren",
+        "es": "⬇ Copiar a Descargas",
+    },
+    "export.progress.cancelling": {
+        "it": "Interruzione…", "en": "Stopping…", "fr": "Interruption…",
+        "de": "Wird abgebrochen…", "es": "Interrumpiendo…",
+    },
+    "export.progress.close": {
+        "it": "Chiudi", "en": "Close", "fr": "Fermer",
+        "de": "Schließen", "es": "Cerrar",
+    },
+    "export.error": {
+        "it": "❌ Errore di esportazione", "en": "❌ Export error",
+        "fr": "❌ Erreur d'export", "de": "❌ Exportfehler",
+        "es": "❌ Error de exportación",
+    },
+    "export.cancelled": {
+        "it": "Esportazione annullata.", "en": "Export cancelled.",
+        "fr": "Export annulé.", "de": "Export abgebrochen.",
+        "es": "Exportación cancelada.",
+    },
+    "export.busy": {
+        "it": "Un'esportazione è già in corso: attendi che finisca.",
+        "en": "An export is already running: wait for it to finish.",
+        "fr": "Un export est déjà en cours : attendez la fin.",
+        "de": "Ein Export läuft bereits: warten Sie, bis er endet.",
+        "es": "Ya hay una exportación en curso: espera a que termine.",
+    },
+    "export.need_doc": {
+        "it": "Apri prima un PDF", "en": "Open a PDF first",
+        "fr": "Ouvrez d'abord un PDF", "de": "Zuerst ein PDF öffnen",
+        "es": "Abre primero un PDF",
+    },
+    "export.not_ready": {
+        "it": "Pagina non ancora tradotta.", "en": "Page not translated yet.",
+        "fr": "Page pas encore traduite.", "de": "Seite noch nicht übersetzt.",
+        "es": "Página aún no traducida.",
+    },
+    "export.none_ready": {
+        "it": "Nessuna pagina dell'intervallo è pronta.",
+        "en": "No page in the range is ready.",
+        "fr": "Aucune page de la plage n'est prête.",
+        "de": "Keine Seite im Bereich ist bereit.",
+        "es": "Ninguna página del rango está lista.",
+    },
+    # ── notifica a fine batch ───────────────────────────────────────────
+    "notify.batch.done": {
+        "it": "Esportazione terminata: {count} pagine.",
+        "en": "Export finished: {count} pages.",
+        "fr": "Export terminé : {count} pages.",
+        "de": "Export beendet: {count} Seiten.",
+        "es": "Exportación finalizada: {count} páginas.",
+    },
+    "notify.batch.partial": {
+        "it": "Esportazione terminata: {count} OK, {failed} non riuscite.",
+        "en": "Export finished: {count} OK, {failed} failed.",
+        "fr": "Export terminé : {count} OK, {failed} échecs.",
+        "de": "Export beendet: {count} OK, {failed} fehlgeschlagen.",
+        "es": "Exportación finalizada: {count} OK, {failed} fallidas.",
+    },
+    "notify.batch.cancelled": {
+        "it": "Esportazione annullata dall'utente.",
+        "en": "Export cancelled by the user.",
+        "fr": "Export annulé par l'utilisateur.",
+        "de": "Export vom Benutzer abgebrochen.",
+        "es": "Exportación cancelada por el usuario.",
+    },
+    # ── impostazioni: aspetto / avanzate / notifiche ────────────────────
+    "settings.group.appearance": {
+        "it": "Aspetto", "en": "Appearance", "fr": "Apparence",
+        "de": "Erscheinungsbild", "es": "Apariencia",
+    },
+    "settings.appearance.theme": {
+        "it": "Tema", "en": "Theme", "fr": "Thème",
+        "de": "Thema", "es": "Tema",
+    },
+    "settings.theme.dark": {
+        "it": "Scuro", "en": "Dark", "fr": "Sombre",
+        "de": "Dunkel", "es": "Oscuro",
+    },
+    "settings.theme.light": {
+        "it": "Chiaro", "en": "Light", "fr": "Clair",
+        "de": "Hell", "es": "Claro",
+    },
+    "settings.theme.system": {
+        "it": "Come il sistema", "en": "Follow the system",
+        "fr": "Comme le système", "de": "Wie das System",
+        "es": "Como el sistema",
+    },
+    "settings.group.advanced": {
+        "it": "Avanzate", "en": "Advanced", "fr": "Avancé",
+        "de": "Erweitert", "es": "Avanzado",
+    },
+    "settings.advanced.cache.clear": {
+        "it": "Svuota cache documento", "en": "Clear document cache",
+        "fr": "Vider le cache du document", "de": "Dokument-Cache leeren",
+        "es": "Vaciar caché del documento",
+    },
+    "settings.advanced.cache.info": {
+        "it": "Info cache", "en": "Cache info",
+        "fr": "Infos du cache", "de": "Cache-Info",
+        "es": "Información de caché",
+    },
+    "settings.group.notifications": {
+        "it": "Notifiche", "en": "Notifications", "fr": "Notifications",
+        "de": "Benachrichtigungen", "es": "Notificaciones",
+    },
+    "settings.notify.batch": {
+        "it": "Avvisa a fine esportazione",
+        "en": "Notify when an export finishes",
+        "fr": "Avertir à la fin d'un export",
+        "de": "Bei Exportende benachrichtigen",
+        "es": "Avisar al terminar una exportación",
+    },
+    "settings.view.render_quality": {
+        "it": "Qualità di rendering", "en": "Render quality",
+        "fr": "Qualité de rendu", "de": "Render-Qualität",
+        "es": "Calidad de renderizado",
+    },
 }
 
 
@@ -899,6 +1661,9 @@ def _validate_config(raw: dict, defaults: dict) -> dict:
         pass
     for key in ("render_md", "show_header", "remember_tab", "resume_last_page", "save_edits"):
         out[key] = _to_bool(raw.get(key, out[key]), out[key])
+    out["notify_batch"] = _to_bool(raw.get("notify_batch", out["notify_batch"]), out["notify_batch"])
+    if raw.get("theme") in ("dark", "light", "system"):
+        out["theme"] = raw["theme"]
     if raw.get("last_tab") in ("original", "translated", "images"):
         out["last_tab"] = raw["last_tab"]
     pages = raw.get("last_pages")

@@ -1,8 +1,9 @@
 name: tests
 
-# Test suite gate: runs on every push/PR so "CI verde" means something.
-# The suite must stay green WITHOUT external PDFs: gold tests on the real
-# corpus skip themselves when the files are absent (see tests/test_*.py).
+# Harness gate: runs on every push/PR so "CI verde" means something.
+# Runs the whole app + workflow harness (tools/harness.py): full unittest
+# suite + pipeline E2E + visual arbitration, WITHOUT external PDFs (gold
+# tests on the real corpus skip themselves when the files are absent).
 on:
   push:
     branches: [main, fixes-layout]
@@ -18,7 +19,7 @@ concurrency:
 
 jobs:
   unittest:
-    name: unittest (py${{ matrix.python-version }})
+    name: harness (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -50,5 +51,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run test suite
-        run: python -m unittest discover -s tests -v
+      - name: Run harness (app + workflow)
+        run: python tools/harness.py --out "$RUNNER_TEMP/harness"
+
+      - name: Upload harness report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-report
+          path: ${{ runner.temp }}/harness/harness_report.*
+          if-no-files-found: warn

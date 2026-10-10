@@ -43,37 +43,75 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   `cleanup_html_tags`, `cleanup_fffd`, `cleanup_soft_hyphens`, `cleanup_despace`,
   `cleanup_numbered_headings`, `cleanup_split_bold_heading`, `reorder_guard`,
   `fix_empty_cells`, `normalize_table_captions`, `link_figures`, `spacing`, …).
-- Navigazione (prec/succ, spin, zoom), indice (TOC), toggle Markdown.
-- Tab testo: Originale / Traduzione / 🖼️ Immagini. L'Originale mostra un
+- Navigazione (prec/succ, spin), indice (TOC), toggle Markdown; il pannello
+  sinistro è sempre adattato alla finestra (lo zoom di lettura è nel reader).
+- Tab testo: Originale / Traduzione / 🗂️ Oggetti. L'Originale mostra un
   unico testo: l'output del motore adattativo (auto) oppure, quando ci sono
   zone manuali, il risultato ricostruito da esse; la tab di traduzione
   (bandiera + nome della lingua di destinazione scelta, es. "🇫🇷 Français")
   traduce la versione mostrata nella lingua impostata da ⚙️ Impostazioni
   (traduzione rinviata a dopo una pausa di 600 ms durante il disegno delle
   zone). Cache su disco per (pagina, lingua di destinazione).
-- Estrazione immagini: selezione a mouse di una zona (🖱️ Seleziona zona) che
-  salva la figura ritagliata nella tab 🖼️ Immagini.
+- Mini toolbar di ogni finestra di testo: **A− / A+ / ↺** (dimensione),
+  **📋** copia, **💾** esporta (`.md`/`.txt`, con le modifiche, senza header) e
+  **🔁** ri-estrai (Originale) / ritraduci (lingua); il punto **●** segnala
+  modifiche non salvate.
+- Cattura di oggetti: dal menu **📸 Cattura ▾** due azioni —
+  **📸 Cattura immagine** e **🔤 Cattura e interpreta** (immagine + testo:
+  nativo se presente, altrimenti OCR; le tabelle native diventano markdown).
+  Tutto finisce nella tab **🗂️ Oggetti**, raggruppato per tipo (immagini /
+  tabelle / testi) con filtri, conteggio, **💾 Esporta tutti** e **🗑️ Rimuovi
+  tutti**; ogni oggetto ha le azioni del suo tipo (immagine: salva/copia;
+  tabella: copia markdown/salva .md; testo: copia testo/salva .md). Se la
+  pagina ha zone già disegnate, la cattura è bloccata con l'avviso di fare
+  prima 🧹 Reset zone.
 - Esclusione manuale di zone (🚫 Escludi zona): header, footer, immagini,
   didascalie… il motore adattativo riordina il testo rimanente. È aggiuntiva
   al sistema automatico (che resta il default). Se la zona disegnata contiene
-  un'immagine, la stessa trascinata la estrae anche nella tab 🖼️ Immagini
+  un'immagine, la stessa trascinata la estrae anche nella tab 🗂️ Oggetti
   (escludi + estrai in un solo gesto).
 - Inclusione manuale di zone (🟩 Includi zona): i box verdi numerati (1, 2,
   3…) definiscono l'ordine di lettura. Il testo viene ricostruito seguendo
   la numerazione; ciò che è fuori dai box verdi viene scartato (whitelist).
   Un box verde = una colonna/regione. Rosso e verde compongono: il rosso
   toglie il rumore, il verde ordina; dove si sovrappongono vince il rosso.
-- 🧹 Reset zone: rimuove tutte le zone (rosse e verdi) della pagina corrente.
+- 🎯 Zone ▾: menu compatto nella mini-toolbar che raccoglie 🚫 Escludi,
+  🟩 Includi e 🧹 Reset; il pulsante mostra il modo attivo.
+- ▶ Estrai: conclude l'editing delle zone, svuota la cache della pagina
+  (estrazione + traduzione, non le figure) e la riesegue secondo le zone
+  selezionate; il pulsante è attivo solo quando la pagina ha zone.
+- 💾 Esporta batch (o `Ctrl+E`): procedura guidata in 5
+  passi per esportare un gruppo di pagine estratte e/o tradotte — pagina
+  corrente, intervallo o lista libera (`1,3,7-9`, `all`); contenuto
+  originale/traduzione/entrambi con opzione figure; lingue e motore con
+  "traduci prima le pagine mancanti"; output come Markdown unico, ZIP di
+  pagine singole o cartella di pagine singole. Finestra di progresso
+  annullabile con anteprima animata; a fine export le pagine riempiono anche
+  le cache dell'app. Rispetta le modifiche salvate e ignora le pagine con zone
+  manuali.
+- ✓ Azione successiva (FAB): a elaborazione conclusa compare un pulsante
+  flottante con **una sola azione** — sulla tab Originale **🌐 Traduci pagina**,
+  sulla tab Traduzione **▶ Traduci la successiva** — con glow, riflesso animato
+  e punto di notifica. Le azioni locali sono nella mini toolbar; l'export batch
+  è nella toolbar in alto.
+- 👁 Reader ▾: reader interno non-modale e read-only (navigazione, zoom,
+  adatta-larghezza/pagina, rotazione) oppure apertura nel visualizzatore di
+  sistema. Usa un documento separato e si apre sulla pagina corrente.
+- 🎨 Tema Scuro / Chiaro / Come il sistema (⚙️ Impostazioni → Aspetto),
+  applicato a caldo e persistito; i colori vengono dai token di `theme.py`.
+- Animazioni: overlay "liquido" durante estrazione/traduzione + indicatore
+  animato sulla tab attiva; anteprima animata nella finestra batch.
 - ⚙️ Impostazioni (menu in cima a destra): lingua UI (it/en/fr/de/es),
   lingua del documento (origine, default "auto") e lingua della traduzione
-  (destinazione), più le preferenze: zoom di avvio, rendering Markdown,
-  header di estrazione, dimensione font del testo, "riprendi dall'ultima
-  pagina" (per documento) e "ricorda l'ultima tab". Il menu è mostrato nella
-  lingua UI scelta, con anteprima dal vivo dentro il dialogo. Tutto è salvato
-  in `config.json` nella cartella dati dell'app (creato al primo avvio con la
-  lingua dell'OS o italiano) e persiste tra gli aggiornamenti. Cambia solo il
-  "chrome" UI: il testo estratto del PDF resta nella lingua originale del
-  documento.
+  (destinazione); gruppi **Aspetto** (tema), **Avanzate** (svuota cache
+  documento, info cache) e **Notifiche** (avviso a fine export); più le
+  preferenze: qualità di rendering, rendering Markdown, header di estrazione,
+  dimensione font del testo, "riprendi dall'ultima pagina" (per documento) e
+  "ricorda l'ultima tab". Il menu è mostrato nella lingua UI scelta, con
+  anteprima dal vivo. Tutto è salvato in `config.json` nella cartella dati
+  dell'app (creato al primo avvio con la lingua dell'OS o italiano) e persiste
+  tra gli aggiornamenti. Cambia solo il "chrome" UI: il testo estratto del PDF
+  resta nella lingua originale del documento.
 
 ## Installazione (venv dedicato)
 
@@ -94,8 +132,9 @@ python3 -m venv .venv
 
 Il pulsante **❓ Guida** nella toolbar apre il sito di help nel browser di
 sistema. Il sito è un insieme di pagine statiche in `docs/help/` (5 lingue:
-it/en/fr/de/es, 14 sezioni: features, uso, installazione/disinstallazione per
-piattaforma, disclaimer uso lecito, scorciatoie e FAQ) pubblicato su
+it/en/fr/de/es, 18 sezioni: features, uso, esportazione batch/azioni/reader/tema,
+installazione/disinstallazione per piattaforma, disclaimer uso lecito,
+scorciatoie e FAQ) pubblicato su
 **GitHub Pages** dal workflow `.github/workflows/pages.yml` a ogni push su
 `main`:
 
@@ -113,6 +152,10 @@ automatica al push.
   [`docs/MIGLIORIE-MOTORE.md`](docs/MIGLIORIE-MOTORE.md).
 - **Regole dei test** (Golden Rule #1 — ordine + contenuto):
   [`docs/REGOLE-TEST.md`](docs/REGOLE-TEST.md).
+- **Harness di test** (un comando per app + workflow):
+  [`docs/HARNESS-TEST.md`](docs/HARNESS-TEST.md).
+- **Analisi UI** (FAB, mini toolbar, tab Immagini → oggetti):
+  [`docs/ANALISI-UI-AZIONI.md`](docs/ANALISI-UI-AZIONI.md).
 - **Base di conoscenza PyMuPDF4LLM**:
   [`docs/PYMUPDF4LLM-KNOWLEDGE-BASE.md`](docs/PYMUPDF4LLM-KNOWLEDGE-BASE.md).
 - **Guida utente** (it/en/fr/de/es): `docs/help/`.
@@ -121,6 +164,19 @@ automatica al push.
 
 ## Test
 
+**Harness unico** (app + intero workflow: suite completa + pipeline E2E +
+arbitrato visivo, headless, senza corpus né rete):
+
+```bash
+.venv/bin/python tools/harness.py        # oppure: tools/run-harness.sh
+.venv/bin/python tools/harness.py --quick    # solo suite unit (veloce)
+```
+
+Esito `0` = tutto verde; report in `/tmp/opencode/harness/harness_report.{json,md}`.
+Dettagli e layer in [`docs/HARNESS-TEST.md`](docs/HARNESS-TEST.md).
+
+La sola suite, se serve:
+
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
 ```
@@ -128,15 +184,18 @@ automatica al push.
 I test girano su due livelli:
 
 - **unit/sintetici** (pymupdf genera le pagine al volo) e **end-to-end
-  sintetici** (una pagina a due colonne generata, che esercita
-  `pymupdf4llm.to_markdown` → engine): girano **sempre, anche in CI**;
+  sintetici** — inclusi il **workflow completo dell'app**
+  (`tests/test_workflow_e2e.py`: apri → estrai → cattura/interpreta → zone →
+  export → reader → tema → lingue) e la **pipeline E2E** (`tools/e2e.py`):
+  girano **sempre, anche in CI**;
 - **gold sui PDF reali**: vengono **saltati** se i file non ci sono. Il corpus
   sta fuori dal repo; puntare `NOESIS_GOLD_PDF_DIR` alla cartella dei PDF
   (default: `../noesis-pdf-cloner-service/pdfs`) oppure lasciare i PDF nella
   radice del progetto.
 
-Ogni push e ogni PR esegue la suite headless in CI
-(`.github/workflows/tests.yml`, `ubuntu-latest` + `QT_QPA_PLATFORM=offscreen`).
+Ogni push e ogni PR esegue l'harness headless in CI
+(`.github/workflows/tests.yml`, `ubuntu-latest` + `QT_QPA_PLATFORM=offscreen`) e
+pubblica il report come artifact.
 
 ## Build delle release (GitHub Actions)
 

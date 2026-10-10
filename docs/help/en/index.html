@@ -65,19 +65,27 @@
           tables, headings, captions.</p></div>
         <div class="card"><h4>🔍 Side-by-side view</h4><p>Rendered page on the
           left, extracted text on the right, with navigation, table of
-          contents (TOC) and zoom.</p></div>
+          contents (TOC) and a built-in reader.</p></div>
         <div class="card"><h4>🚫 Exclusion zones</h4><p>Drag a red box over
           noise (headers, footers, images, captions) to remove it from the
           text.</p></div>
         <div class="card"><h4>🟩 Inclusion zones</h4><p>Numbered green boxes
           define the manual reading order for complex pages.</p></div>
-        <div class="card"><h4>🖼️ Image extraction</h4><p>Select a page region
-          and save the cropped figure to the gallery.</p></div>
+        <div class="card"><h4>🗂️ Objects</h4><p>Capture a page region (image,
+          table or text) and find it in the collection, with actions per
+          type.</p></div>
         <div class="card"><h4>🌐 Translation</h4><p>Translate the page into
           the chosen target language, with an on-disk cache.</p></div>
         <div class="card"><h4>⚙️ Settings</h4><p>Interface language,
-          translation languages, zoom, font, header and reading
+          translation languages, theme, font, header and reading
           behavior.</p></div>
+        <div class="card"><h4>💾 Batch export</h4><p>Export several
+          extracted/translated pages as a single Markdown, ZIP or
+          folder.</p></div>
+        <div class="card"><h4>✓ Next action</h4><p>A floating button on the
+          text area: translate the page, then translate the next one.</p></div>
+        <div class="card"><h4>🎨 Theme</h4><p>Dark, light or follow the system,
+          applied live.</p></div>
         <div class="card"><h4>🌍 Multilingual UI</h4><p>Italiano, English,
           Français, Deutsch, Español — switchable on the fly.</p></div>
       </div>
@@ -121,11 +129,12 @@
       <table>
         <tr><th>Element</th><th>Function</th></tr>
         <tr><td>📂 Open PDF</td><td>Opens a PDF document</td></tr>
+        <tr><td>💾 Export</td><td>Exports a group of pages (batch); <kbd>Ctrl</kbd>+<kbd>E</kbd></td></tr>
         <tr><td>📑 Index</td><td>Shows/hides the table of contents (TOC) on the left</td></tr>
         <tr><td>◀ Prev. / Next ▶ + numbers</td><td>Page navigation</td></tr>
-        <tr><td>🔍− / Scale / 🔍+</td><td>Page zoom</td></tr>
+        <tr><td>👁 Reader ▾</td><td>Opens the built-in reader or the system viewer</td></tr>
         <tr><td>📝 MD ✓</td><td>Toggles Markdown rendering of the text</td></tr>
-        <tr><td>⚙️ Settings</td><td>Languages, preferences and behavior</td></tr>
+        <tr><td>⚙️ Settings</td><td>Languages, theme, preferences and behavior</td></tr>
         <tr><td>❓ Help</td><td>Opens this help in the browser</td></tr>
       </table>
 
@@ -133,10 +142,9 @@
       <p>Above the page there are the zone tools:</p>
       <table>
         <tr><th>Element</th><th>Function</th></tr>
-        <tr><td>🖱️ Select region</td><td>Extracts the image of the drawn region</td></tr>
-        <tr><td>🚫 Exclude region</td><td>Excludes the region from the text (red box)</td></tr>
-        <tr><td>🟩 Include region</td><td>Defines the reading order (numbered green boxes)</td></tr>
-        <tr><td>🧹 Reset zones</td><td>Removes all zones of the current page</td></tr>
+        <tr><td>📸 Capture ▾</td><td>Menu: 📸 Capture image or 🔤 Capture and interpret (text/OCR)</td></tr>
+        <tr><td>🎯 Zones ▾</td><td>Menu: 🚫 Exclude region (red box), 🟩 Include region (numbered green boxes) and 🧹 Reset zones</td></tr>
+        <tr><td>▶ Extract</td><td>Ends zone editing and re-runs the page extraction</td></tr>
       </table>
 
       <h3>Right panel (text)</h3>
@@ -145,17 +153,19 @@
         <li><strong>📄 Original</strong> — the extracted text (auto or manual).</li>
         <li><strong>🇫🇷 … (flag + language)</strong> — the translation of the
           page into the target language chosen in Settings.</li>
-        <li><strong>🖼️ Images</strong> — the gallery of extracted figures.</li>
+        <li><strong>🗂️ Objects</strong> — the collection of captured images,
+          tables and texts.</li>
       </ul>
       <p>The two text tabs (📄 Original and the translation) are editable
       windows: you can type, select, copy and paste freely (Ctrl+C / Ctrl+V
-      / Ctrl+X / Ctrl+Z). Each window has its own mini toolbar with
-      <strong>A−</strong>, the current size and <strong>A+</strong> to shrink
-      or enlarge the text live, plus <strong>↺</strong> to restore the size
-      set in Settings and <strong>💾</strong> to export the window text as
-      <code>.md</code> or <code>.txt</code> (your edits included, the header
-      excluded). While saving is enabled, an orange <strong>●</strong> dot
-      next to the buttons warns of edits not yet written to disk. The two windows zoom independently. Once you edit a
+      / Ctrl+X / Ctrl+Z). Each window has its own mini toolbar:
+      <strong>A−</strong> / <strong>A+</strong> / <strong>↺</strong> for the
+      text size, <strong>📋</strong> to copy, <strong>💾</strong> to export the
+      window text as <code>.md</code> or <code>.txt</code> (your edits
+      included, the header excluded) and <strong>🔁</strong> to re-extract the
+      page (Original tab) or re-translate it (language tab). While saving is
+      enabled, an orange <strong>●</strong> dot next to the buttons warns of
+      edits not yet written to disk. The two windows zoom independently. Once you edit a
       text, it is shown as plain text. The changes are saved per page, in
       the app's data folder, and come back when you reopen the document.</p>
 
@@ -171,10 +181,8 @@
         <li><strong>Keyboard</strong>: ← → arrows and PageUp/PageDown.</li>
         <li><strong>Table of contents (TOC)</strong>: click 📑 Index and pick
           an entry to jump to the chapter.</li>
-        <li><strong>Zoom</strong>: 🔍−/🔍+ buttons, <kbd>Ctrl</kbd>+<kbd>+</kbd> /
-          <kbd>Ctrl</kbd>+<kbd>−</kbd>, <kbd>Ctrl</kbd>+<kbd>0</kbd> to
-          reset. 1.00× fits the page to the window; the label shows the
-          current scale (0.25×–8.00×).</li>
+        <li><strong>Left pane</strong>: always fitted to the window (no zoom).
+          The reading zoom lives in the <a href="#reader">reader</a>.</li>
         <li><strong>Resume</strong>: if enabled in Settings, the app reopens
           the document at the last page read.</li>
       </ul>
@@ -220,16 +228,18 @@
       (headers, footers, page numbers, images with text, captions, ads), you
       can exclude them manually:</p>
       <ol>
-        <li>Click <strong>🚫 Exclude region</strong>.</li>
+        <li>Open the <strong>🎯 Zones ▾</strong> menu and choose
+          <strong>🚫 Exclude region</strong>.</li>
         <li>Drag a <strong>red box</strong> with the mouse over the content to
           remove.</li>
         <li>The text is recalculated immediately without that content.</li>
-        <li>Press the button again to finish.</li>
+        <li>Choose <strong>🚫 Exclude region</strong> again in the menu to
+          finish.</li>
       </ol>
 
       <h3>Exclude + extract in one gesture</h3>
       <p>If the red zone contains an embedded image, the <strong>whole
-      selected zone</strong> is captured automatically into the 🖼️ Images
+      selected zone</strong> is captured automatically into the 🗂️ Objects
       tab (composite figures — several images, image + caption — are kept
       in full, not just one fragment; the focus stays on the
       <strong>Originale</strong> text window). The status bar confirms the
@@ -238,6 +248,10 @@
       <div class="warning"><strong>Caution</strong> Exclusion is per-page and
         lives only in memory: closing the app loses the zones.</div>
 
+      <p>When you have finished drawing the zones, press <strong>▶ Extract</strong>:
+      the app ends editing, clears the page cache and re-runs it according to
+      the selected zones.</p>
+
       <!-- ═══════════════ INCLUSION ZONES ═══════════════ -->
 
       <h2 id="zones-include">Inclusion zones (green)</h2>
@@ -245,7 +259,8 @@
       boxes) you can define the reading order yourself with the
       <strong>numbered green boxes</strong>:</p>
       <ol>
-        <li>Click <strong>🟩 Include region</strong>.</li>
+        <li>Open the <strong>🎯 Zones ▾</strong> menu and choose
+          <strong>🟩 Include region</strong>.</li>
         <li>Drag a green box over the first reading column/region (the number
           <strong>1</strong> appears).</li>
         <li>Draw the next box in reading order (2, 3, …).</li>
@@ -266,22 +281,39 @@
 
       <!-- ═══════════════ IMAGE EXTRACTION ═══════════════ -->
 
-      <h2 id="images">Image extraction</h2>
-      <p>You can crop a figure directly from the page:</p>
-      <ol>
-        <li>Click <strong>🖱️ Select region</strong>.</li>
-        <li>Drag a rectangle over the figure.</li>
-        <li>The image is saved to the <strong>🖼️ Images</strong> tab.</li>
-      </ol>
-      <p>In the gallery every image has the buttons:</p>
+      <h2 id="images">Capturing objects</h2>
+      <p>From the <strong>📸 Capture ▾</strong> menu you have two actions:</p>
       <ul>
-        <li><strong>💾 Save</strong> — saves to a file (PNG/JPEG).</li>
-        <li><strong>📋 Copy</strong> — copies to the clipboard.</li>
-        <li><strong>🗑️ Remove</strong> — deletes from the gallery.</li>
-        <li>Click the thumbnail to enlarge.</li>
+        <li><strong>📸 Capture image</strong> — saves the region as an
+          image.</li>
+        <li><strong>🔤 Capture and interpret</strong> — saves the image and
+          extracts its <strong>text</strong>: if the region has native text it
+          reads it directly, otherwise it uses OCR; native tables become
+          markdown.</li>
       </ul>
-      <p>Extracted images are stored in the app data folder and are kept
-      between launches.</p>
+      <ol>
+        <li>Choose the action from the <strong>📸 Capture ▾</strong> menu.</li>
+        <li>Drag a rectangle over the image, the table or the object.</li>
+      </ol>
+      <p>If the page already has <a href="#zones-exclude">zones</a>, the
+      capture warns you: reset them with <strong>🧹 Reset zones</strong> first,
+      then capture.</p>
+
+      <h3>The 🗂️ Objects collection</h3>
+      <p>Everything you capture lands in the <strong>🗂️ Objects</strong> tab,
+      grouped by type: <strong>Images</strong>, <strong>Tables</strong> and
+      <strong>Texts</strong>. At the top of the tab you find the type filters,
+      the count, <strong>💾 Export all</strong> (to a folder: images as PNG,
+      texts as <code>.md</code>) and <strong>🗑️ Remove all</strong>.</p>
+      <p>Each object has the actions of its type:</p>
+      <ul>
+        <li><strong>Image</strong> — 💾 Save, 📋 Copy, 🗑️ Remove; click the
+          thumbnail to enlarge.</li>
+        <li><strong>Table</strong> — 📋 Copy markdown, 💾 Save .md, 🗑️ Remove.</li>
+        <li><strong>Text</strong> — 📋 Copy text, 💾 Save .md, 🗑️ Remove.</li>
+      </ul>
+      <p>Automatically extracted figures and manual captures live together in
+      the same collection.</p>
 
       <!-- ═══════════════ TRANSLATION ═══════════════ -->
 
@@ -319,6 +351,57 @@
       <div class="warning"><strong>Caution</strong> Translation requires an
         Internet connection and sends the page text to an external service. Do
         not translate confidential documents unless you have the right to.</div>
+
+      <!-- ═══════════════ ACTIONS AND EXPORT ═══════════════ -->
+
+      <h2 id="batch">Batch export</h2>
+      <p>The <strong>💾 Export</strong> button (or <kbd>Ctrl</kbd>+<kbd>E</kbd>)
+      opens a five-step wizard to export a group of extracted and/or translated
+      pages.</p>
+      <ol>
+        <li><strong>Pages</strong> — current page, range, or a free list
+          (e.g. <code>1,3,7-9</code>; <code>all</code> for every page).</li>
+        <li><strong>Content</strong> — Original, Translation or Both; option
+          <em>Include figures</em>.</li>
+        <li><strong>Languages and engine</strong> — source, target and engine;
+          <em>Translate missing pages first</em>.</li>
+        <li><strong>Output</strong> — a single Markdown, single pages in a ZIP,
+          or single pages in a folder; folder and file name.</li>
+        <li><strong>Summary</strong> — review and start.</li>
+      </ol>
+      <p>A progress window shows the page being processed (with an animated
+      preview), statistics and lets you cancel. When it finishes you can open
+      the folder or copy the file to Downloads. Processed pages also fill the
+      app's caches, so they are available immediately. The export honors saved
+      edits and skips pages with manual zones (it runs in automatic mode).</p>
+
+      <h2 id="page-actions">Next action (FAB)</h2>
+      <p>When processing finishes, a floating button appears at the bottom right
+      of the text area (with an animated sheen and a notification dot). It is a
+      <strong>single action</strong>, the "next step":</p>
+      <ul>
+        <li><strong>Original tab</strong> — <strong>🌐 Translate page</strong>:
+          goes to the page's translation.</li>
+        <li><strong>Translation tab</strong> — <strong>▶ Translate the
+          next</strong>: goes to the next page and translates it.</li>
+      </ul>
+      <p>The other local actions (copy, export, re-extract/re-translate) are in
+      the mini toolbar above the text; the batch export is in the
+      <strong>💾 Export</strong> button at the top.</p>
+
+      <h2 id="reader">Built-in reader</h2>
+      <p>From the <strong>👁 Reader ▾</strong> menu open a non-modal,
+      <em>read-only</em> reader (or the system viewer). The reader has basic
+      commands: navigation, zoom, fit-width/page, rotate and open externally. It
+      opens on the current page and uses a separate document, so it never
+      interferes with the main panel.</p>
+
+      <h2 id="theme">Theme</h2>
+      <p>In <strong>⚙️ Settings → Appearance</strong> choose the
+      <strong>Dark</strong>, <strong>Light</strong> or <strong>Follow the
+      system</strong> theme. The change is immediate and remembered. Animations
+      (overlay during extraction/translation, sheen on the actions button,
+      export preview) follow the active theme.</p>
 
       <!-- ═══════════════ SETTINGS ═══════════════ -->
 
@@ -361,8 +444,28 @@
 
       <h3>View</h3>
       <ul>
-        <li><strong>Initial zoom</strong> — base render resolution, 0.5×–4.0×
-          (affects sharpness; the visible scale starts at 1.00× = fit).</li>
+        <li><strong>Render quality</strong> — base render resolution,
+          0.5×–4.0× (affects sharpness).</li>
+      </ul>
+
+      <h3>Appearance</h3>
+      <ul>
+        <li><strong>Theme</strong> — Dark, Light or Follow the system. Applies
+          immediately and is remembered.</li>
+      </ul>
+
+      <h3>Advanced</h3>
+      <ul>
+        <li><strong>Clear document cache</strong> — removes the current
+          document's cache (extraction + translations), with confirmation.</li>
+        <li><strong>Cache info</strong> — diagnostics panel with cache paths and
+          page state.</li>
+      </ul>
+
+      <h3>Notifications</h3>
+      <ul>
+        <li><strong>Notify when an export finishes</strong> — message and beep
+          at the end of a batch export.</li>
       </ul>
 
       <h3>Behavior</h3>
@@ -499,8 +602,7 @@
         <tr><th>Shortcut</th><th>Action</th></tr>
         <tr><td><kbd>→</kbd> / <kbd>←</kbd></td><td>Next / previous page</td></tr>
         <tr><td><kbd>PageDown</kbd> / <kbd>PageUp</kbd></td><td>Next / previous page</td></tr>
-        <tr><td><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>−</kbd></td><td>Zoom in / out</td></tr>
-        <tr><td><kbd>Ctrl</kbd>+<kbd>0</kbd></td><td>Reset zoom</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Opens the batch export</td></tr>
         <tr><td><kbd>Ctrl</kbd>+<kbd>M</kbd></td><td>Toggle Markdown</td></tr>
       </table>
 
