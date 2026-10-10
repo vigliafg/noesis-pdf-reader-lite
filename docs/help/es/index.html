@@ -136,7 +136,7 @@
         <tr><td>📂 Abrir PDF</td><td>Abre un documento PDF</td></tr>
         <tr><td>💾 Exportar</td><td>Exporta un grupo de páginas (por lotes); <kbd>Ctrl</kbd>+<kbd>E</kbd></td></tr>
         <tr><td>📑 Índice</td><td>Muestra/oculta el índice (TOC) a la izquierda</td></tr>
-        <tr><td>◀ Ant. / Sig. ▶ + números</td><td>Navegación entre páginas</td></tr>
+        <tr><td>◀ / ▶ + n.º pág.</td><td>Navegación entre páginas (cápsula compacta)</td></tr>
         <tr><td>👁 Reader ▾</td><td>Abre el lector integrado o el visor del sistema</td></tr>
         <tr><td>📝 MD ✓</td><td>Activa/desactiva el renderizado Markdown del texto</td></tr>
         <tr><td>⚙️ Configuración</td><td>Idiomas, tema, preferencias y comportamiento</td></tr>
@@ -148,9 +148,14 @@
       <table>
         <tr><th>Elemento</th><th>Función</th></tr>
         <tr><td>📸 Capturar ▾</td><td>Menú: 📸 Capturar imagen o 🔤 Capturar e interpretar (texto/OCR)</td></tr>
-        <tr><td>🎯 Zonas ▾</td><td>Menú: 🚫 Excluir zona (recuadro rojo), 🟩 Incluir zona (recuadros verdes numerados) y 🧹 Restablecer zonas</td></tr>
-        <tr><td>▶ Extraer</td><td>Termina la edición de zonas y vuelve a extraer la página</td></tr>
+        <tr><td>✎ Editar</td><td>Muestra/oculta el panel flotante de edición de zonas (cápsula en el borde derecho de la página)</td></tr>
       </table>
+      <p>El panel <strong>✎ Editar</strong> es una cápsula flotante que
+      permanece activa durante toda la sesión de edición y se cierra al volver a
+      pulsar <strong>✎ Editar</strong> o <strong>▶ Extraer</strong>. Iconos (con
+      información descriptiva al pasar el cursor): <strong>🚫</strong> Excluir
+      zona, <strong>🟩</strong> Incluir zona, <strong>🧹</strong> Restablecer
+      zonas, <strong>▶</strong> Extraer y <strong>✕</strong> Cerrar.</p>
 
       <h3>Panel derecho (texto)</h3>
       <p>Tres pestañas arriba a la derecha:</p>
@@ -238,13 +243,14 @@
       lectura (encabezados, pies, números de página, imágenes con texto,
       leyendas, publicidad), puedes excluirlos manualmente:</p>
       <ol>
-        <li>Abre el menú <strong>🎯 Zonas ▾</strong> y elige
-          <strong>🚫 Excluir zona</strong>.</li>
+        <li>Pulsa <strong>✎ Editar</strong> (arriba a la derecha) para abrir el
+          panel flotante y toca <strong>🚫 Excluir zona</strong>.</li>
         <li>Arrastra con el ratón un <strong>recuadro rojo</strong> sobre el
           contenido que quieras eliminar.</li>
         <li>El texto se recalcula inmediatamente sin ese contenido.</li>
-        <li>Elige de nuevo <strong>🚫 Excluir zona</strong> en el menú para
-          terminar.</li>
+        <li>Vuelve a tocar <strong>🚫 Excluir zona</strong> para terminar (el
+          panel permanece abierto hasta <strong>▶ Extraer</strong> o
+          <strong>✕</strong>).</li>
       </ol>
 
       <h3>Excluir + extraer en un solo gesto</h3>
@@ -260,8 +266,8 @@
         pierden.</div>
 
       <p>Cuando termines de dibujar las zonas, pulsa <strong>▶ Extraer</strong>:
-      la app concluye la edición, vacía la caché de la página y la vuelve a
-      extraer según las zonas seleccionadas.</p>
+      la app concluye la edición (y cierra el panel), vacía la caché de la
+      página y la vuelve a extraer según las zonas seleccionadas.</p>
 
       <!-- ═══════════════ ZONAS DE INCLUSIÓN ═══════════════ -->
 
@@ -270,7 +276,7 @@
       recuadros dispersos) puedes definir tú mismo el orden de lectura con los
       <strong>recuadros verdes numerados</strong>:</p>
       <ol>
-        <li>Abre el menú <strong>🎯 Zonas ▾</strong> y elige
+        <li>Pulsa <strong>✎ Editar</strong> y toca
           <strong>🟩 Incluir zona</strong>.</li>
         <li>Arrastra un recuadro verde sobre la primera columna/región de
           lectura (aparece el número <strong>1</strong>).</li>

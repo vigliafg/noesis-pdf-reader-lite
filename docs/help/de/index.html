@@ -135,7 +135,7 @@
         <tr><td>📂 PDF öffnen</td><td>Öffnet ein PDF-Dokument</td></tr>
         <tr><td>💾 Exportieren</td><td>Exportiert eine Gruppe von Seiten (Batch); <kbd>Strg</kbd>+<kbd>E</kbd></td></tr>
         <tr><td>📑 Inhaltsverzeichnis</td><td>Zeigt/verbirgt das Inhaltsverzeichnis (TOC) links</td></tr>
-        <tr><td>◀ Zurück / Weiter ▶ + Zahlen</td><td>Navigation zwischen den Seiten</td></tr>
+        <tr><td>◀ / ▶ + S.-Nr.</td><td>Navigation zwischen den Seiten (kompakte Kapsel)</td></tr>
         <tr><td>👁 Reader ▾</td><td>Öffnet den integrierten Reader oder den Systembetrachter</td></tr>
         <tr><td>📝 MD ✓</td><td>Schaltet das Markdown-Rendering des Textes um</td></tr>
         <tr><td>⚙️ Einstellungen</td><td>Sprachen, Theme, Einstellungen und Verhalten</td></tr>
@@ -147,9 +147,15 @@
       <table>
         <tr><th>Element</th><th>Funktion</th></tr>
         <tr><td>📸 Erfassen ▾</td><td>Menü: 📸 Bild erfassen oder 🔤 Erfassen und interpretieren (Text/OCR)</td></tr>
-        <tr><td>🎯 Zonen ▾</td><td>Menü: 🚫 Bereich ausschließen (rotes Feld), 🟩 Bereich einschließen (nummerierte grüne Felder) und 🧹 Zonen zurücksetzen</td></tr>
-        <tr><td>▶ Extrahieren</td><td>Beendet die Zonenbearbeitung und startet die Seitenextraktion neu</td></tr>
+        <tr><td>✎ Bearbeiten</td><td>Zeigt/verbirgt das schwebende Zonen-Bearbeitungsfeld (Kapsel am rechten Seitenrand)</td></tr>
       </table>
+      <p>Das Feld <strong>✎ Bearbeiten</strong> ist eine schwebende Kapsel, die
+      während der gesamten Bearbeitung aktiv bleibt und sich schließt, wenn Sie
+      erneut <strong>✎ Bearbeiten</strong> oder <strong>▶ Extrahieren</strong>
+      drücken. Symbole (mit beschreibendem Tooltip beim Überfahren):
+      <strong>🚫</strong> Bereich ausschließen, <strong>🟩</strong> Bereich
+      einschließen, <strong>🧹</strong> Zonen zurücksetzen,
+      <strong>▶</strong> Extrahieren und <strong>✕</strong> Schließen.</p>
 
       <h3>Rechter Bereich (Text)</h3>
       <p>Drei Tabs oben rechts:</p>
@@ -239,13 +245,15 @@
       (Kopfzeilen, Fußzeilen, Seitenzahlen, Bilder mit Text,
       Bildunterschriften, Werbung), können Sie sie manuell ausschließen:</p>
       <ol>
-        <li>Öffnen Sie das Menü <strong>🎯 Zonen ▾</strong> und wählen Sie
+        <li>Drücken Sie <strong>✎ Bearbeiten</strong> (oben rechts), um das
+          schwebende Feld zu öffnen, und tippen Sie auf
           <strong>🚫 Bereich ausschließen</strong>.</li>
         <li>Ziehen Sie mit der Maus ein <strong>rotes Feld</strong> über den
           zu entfernenden Inhalt.</li>
         <li>Der Text wird sofort ohne diesen Inhalt neu berechnet.</li>
-        <li>Wählen Sie im Menü erneut <strong>🚫 Bereich ausschließen</strong>,
-          um zu beenden.</li>
+        <li>Tippen Sie erneut auf <strong>🚫 Bereich ausschließen</strong>, um zu
+          beenden (das Feld bleibt offen bis <strong>▶ Extrahieren</strong> oder
+          <strong>✕</strong>).</li>
       </ol>
 
       <h3>Ausschließen + Extrahieren in einem Schritt</h3>
@@ -261,8 +269,9 @@
         Zonen verloren.</div>
 
       <p>Wenn Sie mit dem Zeichnen der Zonen fertig sind, drücken Sie
-      <strong>▶ Extrahieren</strong>: Die App beendet die Bearbeitung, leert den
-      Cache der Seite und startet sie gemäß den ausgewählten Zonen neu.</p>
+      <strong>▶ Extrahieren</strong>: Die App beendet die Bearbeitung (und
+      schließt das Feld), leert den Cache der Seite und startet sie gemäß den
+      ausgewählten Zonen neu.</p>
 
       <!-- ═══════════════ EINSCHLUSSZONEN ═══════════════ -->
 
@@ -271,7 +280,7 @@
       Felder) können Sie die Lesereihenfolge selbst mit den
       <strong>nummerierten grünen Feldern</strong> festlegen:</p>
       <ol>
-        <li>Öffnen Sie das Menü <strong>🎯 Zonen ▾</strong> und wählen Sie
+        <li>Drücken Sie <strong>✎ Bearbeiten</strong> und tippen Sie auf
           <strong>🟩 Bereich einschließen</strong>.</li>
         <li>Ziehen Sie ein grünes Feld über die erste Lesespalte/-region (die
           Zahl <strong>1</strong> erscheint).</li>

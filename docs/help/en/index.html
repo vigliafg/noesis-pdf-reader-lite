@@ -131,7 +131,7 @@
         <tr><td>📂 Open PDF</td><td>Opens a PDF document</td></tr>
         <tr><td>💾 Export</td><td>Exports a group of pages (batch); <kbd>Ctrl</kbd>+<kbd>E</kbd></td></tr>
         <tr><td>📑 Index</td><td>Shows/hides the table of contents (TOC) on the left</td></tr>
-        <tr><td>◀ Prev. / Next ▶ + numbers</td><td>Page navigation</td></tr>
+        <tr><td>◀ / ▶ + page no.</td><td>Page navigation (compact capsule)</td></tr>
         <tr><td>👁 Reader ▾</td><td>Opens the built-in reader or the system viewer</td></tr>
         <tr><td>📝 MD ✓</td><td>Toggles Markdown rendering of the text</td></tr>
         <tr><td>⚙️ Settings</td><td>Languages, theme, preferences and behavior</td></tr>
@@ -143,9 +143,14 @@
       <table>
         <tr><th>Element</th><th>Function</th></tr>
         <tr><td>📸 Capture ▾</td><td>Menu: 📸 Capture image or 🔤 Capture and interpret (text/OCR)</td></tr>
-        <tr><td>🎯 Zones ▾</td><td>Menu: 🚫 Exclude region (red box), 🟩 Include region (numbered green boxes) and 🧹 Reset zones</td></tr>
-        <tr><td>▶ Extract</td><td>Ends zone editing and re-runs the page extraction</td></tr>
+        <tr><td>✎ Edit</td><td>Shows/hides the floating zone-editing panel (capsule on the page's right edge)</td></tr>
       </table>
+      <p>The <strong>✎ Edit</strong> panel is a floating capsule that stays
+      active for the whole editing session and closes when you press
+      <strong>✎ Edit</strong> again or <strong>▶ Extract</strong>. Icons (with
+      a descriptive tooltip on hover): <strong>🚫</strong> Exclude region,
+      <strong>🟩</strong> Include region, <strong>🧹</strong> Reset zones,
+      <strong>▶</strong> Extract and <strong>✕</strong> Close.</p>
 
       <h3>Right panel (text)</h3>
       <p>Three tabs at the top right:</p>
@@ -228,13 +233,14 @@
       (headers, footers, page numbers, images with text, captions, ads), you
       can exclude them manually:</p>
       <ol>
-        <li>Open the <strong>🎯 Zones ▾</strong> menu and choose
-          <strong>🚫 Exclude region</strong>.</li>
+        <li>Press <strong>✎ Edit</strong> (top right) to open the floating panel
+          and tap <strong>🚫 Exclude region</strong>.</li>
         <li>Drag a <strong>red box</strong> with the mouse over the content to
           remove.</li>
         <li>The text is recalculated immediately without that content.</li>
-        <li>Choose <strong>🚫 Exclude region</strong> again in the menu to
-          finish.</li>
+        <li>Tap <strong>🚫 Exclude region</strong> again to finish (the panel
+          stays open until you press <strong>▶ Extract</strong> or
+          <strong>✕</strong>).</li>
       </ol>
 
       <h3>Exclude + extract in one gesture</h3>
@@ -249,8 +255,8 @@
         lives only in memory: closing the app loses the zones.</div>
 
       <p>When you have finished drawing the zones, press <strong>▶ Extract</strong>:
-      the app ends editing, clears the page cache and re-runs it according to
-      the selected zones.</p>
+      the app ends editing (and closes the panel), clears the page cache and
+      re-runs it according to the selected zones.</p>
 
       <!-- ═══════════════ INCLUSION ZONES ═══════════════ -->
 
@@ -259,7 +265,7 @@
       boxes) you can define the reading order yourself with the
       <strong>numbered green boxes</strong>:</p>
       <ol>
-        <li>Open the <strong>🎯 Zones ▾</strong> menu and choose
+        <li>Press <strong>✎ Edit</strong> and tap
           <strong>🟩 Include region</strong>.</li>
         <li>Drag a green box over the first reading column/region (the number
           <strong>1</strong> appears).</li>

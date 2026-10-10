@@ -32,15 +32,19 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python tools/ui_audit.py \
 
 Nella tab bar, a destra: **radio motore** (`Google`, `Microsoft`) + spinner.
 
-### Mini toolbar delle finestre di testo
+### Toolbar principale, navigazione e mini toolbar (settori 1–3)
 
-| bottone | funzione |
+- **Toolbar principale**: gruppi a **pillola** (`Apri · Esporta · Indice` |
+  `◀ n/N ▶` | `Reader · MD` | `Impostazioni · Guida`), altezza ridotta.
+- **Navigazione**: capsula unica `◀ [n / N] ▶` (più il numero stampato).
+- **Mini toolbar di testo**: **segmentata** in due gruppi con etichette:
+
+| segmento | bottoni |
 |---|---|
-| `A−` / `A+` / `↺` | dimensione font della finestra |
-| `📋` | copia il testo della finestra |
-| `💾` | esporta `.md`/`.txt` della finestra |
-| `🔁` | ri-estrai pagina (Originale) / ritraduci (lingua) |
-| `●` | modifiche non ancora salvate su disco |
+| font | `A−` · `12 pt` · `A+` · `↺` |
+| azioni | `📋 Copia` · `💾 Esporta` · `🔁 Ri-estrai` / `Ritraduci` |
+
+più il punto `●` (modifiche non salvate su disco).
 
 ### FAB — CTA unica
 
@@ -51,6 +55,23 @@ Nella tab bar, a destra: **radio motore** (`Google`, `Microsoft`) + spinner.
 
 Il FAB è in basso a destra della finestra attiva, con badge e glow; compare solo
 quando la tab è attiva **e** il contenuto è pronto; si riposiziona al resize.
+
+### Toolbar di pagina + capsula zone (✎ Edit · V08)
+
+Sopra il PDF: `📸 Cattura ▾` a sinistra, `✎ Edit` a destra. **✎ Edit** apre/chiude
+una **capsula flottante verticale** ancorata al bordo destro della pagina, che
+**resta attiva per tutta l'editing** e si chiude ripremendo `✎ Edit` o premendo
+`▶ Estrai`:
+
+| icona | azione | tooltip |
+|---|---|---|
+| `🚫` | Escludi zona (toggle) | descrittivo |
+| `🟩` | Includi zona (toggle) | descrittivo |
+| `🧹` | Reset zone | descrittivo |
+| `▶` | Estrai con le zone | descrittivo |
+| `✕` | Chiudi | descrittivo |
+
+Intestazione con titolo e conteggio (`N zone`). Niente più menu a cascata.
 
 ### Tab 🗂️ Oggetti
 
@@ -78,6 +99,10 @@ quando la tab è attiva **e** il contenuto è pronto; si riposiziona al resize.
 | **Tab oggetti** | `🖼️ Immagini`, senza toolbar, azioni miste | `🗂️ Oggetti`, toolbar di tab, azioni **per tipo** |
 | **Modello catture** | `_images` + `_capture_text[uri]` | `_captures[uri] = Capture{kind,text,method,source,page}` |
 | **Testo vuoto tab** | "Usa 🖱️ Seleziona zona…" (obsoleto) | "Usa 📸 Cattura…" (`objects.empty`) |
+| **Toolbar principale** | bottoni alti (~40 px), separatori | gruppi a **pillola**, altezza ~30 px |
+| **Navigazione pagina** | `◀ Prec. · n · di · N · Succ. ▶` | capsula `◀ [n / N] ▶` |
+| **Mini toolbar testo** | glifi 26 px, senza etichette | **segmentata** con etichette |
+| **Zone** | menu a cascata `🎯 Zone ▾` + `▶ Estrai` | capsula flottante `✎ Edit` (V08), persistente |
 
 ## 3. Workflow FAB — correttezza (verificata)
 

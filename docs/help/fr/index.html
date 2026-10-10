@@ -134,7 +134,7 @@
         <tr><td>📂 Ouvrir un PDF</td><td>Ouvre un document PDF</td></tr>
         <tr><td>💾 Exporter</td><td>Exporte un groupe de pages (par lots) ; <kbd>Ctrl</kbd>+<kbd>E</kbd></td></tr>
         <tr><td>📑 Sommaire</td><td>Affiche/masque la table des matières (TOC) à gauche</td></tr>
-        <tr><td>◀ Préc. / Suiv. ▶ + nombres</td><td>Navigation entre les pages</td></tr>
+        <tr><td>◀ / ▶ + n° page</td><td>Navigation entre les pages (capsule compacte)</td></tr>
         <tr><td>👁 Reader ▾</td><td>Ouvre le lecteur intégré ou la visionneuse système</td></tr>
         <tr><td>📝 MD ✓</td><td>Active/désactive le rendu Markdown du texte</td></tr>
         <tr><td>⚙️ Paramètres</td><td>Langues, thème, préférences et comportement</td></tr>
@@ -146,9 +146,15 @@
       <table>
         <tr><th>Élément</th><th>Fonction</th></tr>
         <tr><td>📸 Capturer ▾</td><td>Menu : 📸 Capturer l'image ou 🔤 Capturer et interpréter (texte/OCR)</td></tr>
-        <tr><td>🎯 Zones ▾</td><td>Menu : 🚫 Exclure une zone (boîte rouge), 🟩 Inclure une zone (boîtes vertes numérotées) et 🧹 Réinitialiser les zones</td></tr>
-        <tr><td>▶ Extraire</td><td>Termine l'édition des zones et relance l'extraction de la page</td></tr>
+        <tr><td>✎ Modifier</td><td>Affiche/masque le panneau flottant d'édition des zones (capsule sur le bord droit de la page)</td></tr>
       </table>
+      <p>Le panneau <strong>✎ Modifier</strong> est une capsule flottante qui
+      reste active pendant toute la session d'édition et se ferme en
+      réappuyant sur <strong>✎ Modifier</strong> ou sur
+      <strong>▶ Extraire</strong>. Icônes (avec info-bulle descriptive au
+      survol) : <strong>🚫</strong> Exclure une zone, <strong>🟩</strong> Inclure
+      une zone, <strong>🧹</strong> Réinitialiser, <strong>▶</strong> Extraire et
+      <strong>✕</strong> Fermer.</p>
 
       <h3>Panneau droit (texte)</h3>
       <p>Trois onglets en haut à droite :</p>
@@ -234,13 +240,15 @@
       lecture (en-têtes, pieds de page, numéros de page, images avec texte,
       légendes, publicités), vous pouvez les exclure manuellement :</p>
       <ol>
-        <li>Ouvrez le menu <strong>🎯 Zones ▾</strong> et choisissez
+        <li>Appuyez sur <strong>✎ Modifier</strong> (en haut à droite) pour
+          ouvrir le panneau flottant, puis touchez
           <strong>🚫 Exclure une zone</strong>.</li>
         <li>Faites glisser une <strong>boîte rouge</strong> avec la souris sur
           le contenu à retirer.</li>
         <li>Le texte est recalculé immédiatement sans ce contenu.</li>
-        <li>Choisissez à nouveau <strong>🚫 Exclure une zone</strong> dans le
-          menu pour terminer.</li>
+        <li>Touchez à nouveau <strong>🚫 Exclure une zone</strong> pour terminer
+          (le panneau reste ouvert jusqu'à <strong>▶ Extraire</strong> ou
+          <strong>✕</strong>).</li>
       </ol>
 
       <h3>Exclure + extraire en un seul geste</h3>
@@ -256,8 +264,9 @@
         perdre les zones.</div>
 
       <p>Quand vous avez fini de dessiner les zones, appuyez sur
-      <strong>▶ Extraire</strong> : l'app termine l'édition, vide le cache de
-      la page et la relance selon les zones sélectionnées.</p>
+      <strong>▶ Extraire</strong> : l'app termine l'édition (et ferme le
+      panneau), vide le cache de la page et la relance selon les zones
+      sélectionnées.</p>
 
       <!-- ═══════════════ ZONES D'INCLUSION ═══════════════ -->
 
@@ -266,7 +275,7 @@
       colonnes ou des boîtes dispersées), vous pouvez définir vous-même
       l'ordre de lecture avec les <strong>boîtes vertes numérotées</strong> :</p>
       <ol>
-        <li>Ouvrez le menu <strong>🎯 Zones ▾</strong> et choisissez
+        <li>Appuyez sur <strong>✎ Modifier</strong> et touchez
           <strong>🟩 Inclure une zone</strong>.</li>
         <li>Faites glisser une boîte verte sur la première
           colonne/région de lecture (le numéro <strong>1</strong> apparaît).</li>

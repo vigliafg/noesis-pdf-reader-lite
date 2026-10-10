@@ -131,7 +131,7 @@
         <tr><td>📂 Apri PDF</td><td>Apre un documento PDF</td></tr>
         <tr><td>💾 Esporta</td><td>Esporta un gruppo di pagine (batch); <kbd>Ctrl</kbd>+<kbd>E</kbd></td></tr>
         <tr><td>📑 Indice</td><td>Mostra/nasconde l'indice (TOC) a sinistra</td></tr>
-        <tr><td>◀ Prec. / Succ. ▶ + numeri</td><td>Navigazione tra le pagine</td></tr>
+        <tr><td>◀ / ▶ + n. pagina</td><td>Navigazione tra le pagine (capsula compatta)</td></tr>
         <tr><td>👁 Reader ▾</td><td>Apre il reader interno o il visualizzatore di sistema</td></tr>
         <tr><td>📝 MD ✓</td><td>Attiva/disattiva il rendering Markdown del testo</td></tr>
         <tr><td>⚙️ Impostazioni</td><td>Lingue, tema, preferenze e comportamento</td></tr>
@@ -143,9 +143,14 @@
       <table>
         <tr><th>Elemento</th><th>Funzione</th></tr>
         <tr><td>📸 Cattura ▾</td><td>Menu: 📸 Cattura immagine oppure 🔤 Cattura e interpreta (testo/OCR)</td></tr>
-        <tr><td>🎯 Zone ▾</td><td>Menu: 🚫 Escludi zona (box rosso), 🟩 Includi zona (box verdi numerati) e 🧹 Reset zone</td></tr>
-        <tr><td>▶ Estrai</td><td>Conclude l'editing delle zone e riesegue l'estrazione della pagina</td></tr>
+        <tr><td>✎ Edit</td><td>Apre/chiude il pannello flottante di editing zone (capsula sul bordo destro della pagina)</td></tr>
       </table>
+      <p>Il pannello <strong>✎ Edit</strong> è una capsula flottante che resta
+      attiva per tutta la sessione di editing e si chiude ripremendo
+      <strong>✎ Edit</strong> o premendo <strong>▶ Estrai</strong>. Icone con
+      tooltip descrittivo al passaggio: <strong>🚫</strong> Escludi zona,
+      <strong>🟩</strong> Includi zona, <strong>🧹</strong> Reset zone,
+      <strong>▶</strong> Estrai e <strong>✕</strong> Chiudi.</p>
 
       <h3>Pannello destro (testo)</h3>
       <p>Tre tab, in alto a destra:</p>
@@ -231,13 +236,14 @@
       (header, footer, numeri di pagina, immagini con testo, didascalie,
       pubblicità), puoi escluderli manualmente:</p>
       <ol>
-        <li>Apri il menu <strong>🎯 Zone ▾</strong> e scegli
-          <strong>🚫 Escludi zona</strong>.</li>
+        <li>Premi <strong>✎ Edit</strong> (in alto a destra) per aprire il
+          pannello flottante e tocca <strong>🚫 Escludi zona</strong>.</li>
         <li>Trascina col mouse un <strong>box rosso</strong> sul contenuto da
           rimuovere.</li>
         <li>Il testo viene ricalcolato immediatamente senza quel contenuto.</li>
-        <li>Scegli di nuovo <strong>🚫 Escludi zona</strong> nel menu per
-          terminare.</li>
+        <li>Ripremi <strong>🚫 Escludi zona</strong> per terminare (il pannello
+          resta aperto finché non premi <strong>▶ Estrai</strong> o
+          <strong>✕</strong>).</li>
       </ol>
 
       <h3>Escludi + estrai in un solo gesto</h3>
@@ -253,8 +259,8 @@
         perse.</div>
 
       <p>Quando hai finito di disegnare le zone, premi <strong>▶ Estrai</strong>:
-      l'app conclude l'editing, svuota la cache della pagina e la riesegue
-      secondo le zone selezionate.</p>
+      l'app conclude l'editing (e chiude il pannello), svuota la cache della
+      pagina e la riesegue secondo le zone selezionate.</p>
 
       <!-- ═══════════════ ZONE DI INCLUSIONE ═══════════════ -->
 
@@ -262,7 +268,7 @@
       <p>Per le pagine a layout complesso (es. più colonne o box sparsi) puoi
       definire tu l'ordine di lettura con i <strong>box verdi numerati</strong>:</p>
       <ol>
-        <li>Apri il menu <strong>🎯 Zone ▾</strong> e scegli
+        <li>Premi <strong>✎ Edit</strong> e tocca
           <strong>🟩 Includi zona</strong>.</li>
         <li>Trascina un box verde sulla prima colonna/regione di lettura
           (compare il numero <strong>1</strong>).</li>

@@ -134,6 +134,23 @@ def inventory_from_window(w) -> dict:
         "translated": _fab(tp._fab_translated),
     }
 
+    # ── toolbar di pagina + capsula flottante zone (Settore 4 · V08) ────
+    inv["page_toolbar"] = {
+        "capture": w.btn_capture.text(),
+        "edit": w.btn_edit.text(),
+        "edit_tooltip": w.btn_edit.toolTip(),
+    }
+    zb = w.zone_bar
+    inv["zone_capsule"] = {
+        "title": zb.lbl_title.text(),
+        "count": zb.lbl_count.text(),
+        "buttons": [
+            {"icon": b.text(), "tooltip": b.toolTip()}
+            for b in (zb.btn_exclude, zb.btn_include, zb.btn_reset,
+                      zb.btn_extract, zb.btn_close)
+        ],
+    }
+
     # ── tab Oggetti: mini toolbar di tab + azioni card per tipo ─────────
     ot = tp.objects_toolbar
     uri = _sample_png_data_uri()
@@ -239,6 +256,14 @@ def _md(inv: dict) -> str:
     lines.append("## FAB (CTA unica)")
     for name, fab in inv["fab"].items():
         lines.append(f"- **{name}**: `{fab['label']}` — {fab['tooltip']}")
+    lines.append("")
+    lines.append("## Toolbar di pagina + capsula zone (✎ Edit · V08)")
+    pt = inv["page_toolbar"]
+    lines.append(f"- cattura: `{pt['capture']}` · edit: `{pt['edit']}` — {pt['edit_tooltip']}")
+    zc = inv["zone_capsule"]
+    lines.append(f"- capsula `{zc['title']}` (`{zc['count']}`):")
+    for b in zc["buttons"]:
+        lines.append(f"  - `{b['icon']}` — {b['tooltip'].splitlines()[0]}")
     lines.append("")
     lines.append("## Tab Oggetti")
     tt = inv["images"]["tab_toolbar"]

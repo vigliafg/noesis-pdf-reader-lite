@@ -283,27 +283,48 @@ _MAIN_QSS = Template(
     QMainWindow { background: $bg; }
     QWidget { selection-background-color: $sel_bg; selection-color: $sel_text; }
     QToolBar {
-        background: $bg_alt; padding: 4px; spacing: 6px;
+        background: $bg_alt; padding: 3px; spacing: 4px;
         border-bottom: 1px solid $border;
     }
     QToolBar QPushButton {
         background: $bg_input; color: $text; border: 1px solid $border2;
-        border-radius: 4px; padding: 6px 14px; font-size: 13px;
+        border-radius: 6px; padding: 3px 10px; font-size: 12.5px;
     }
     QToolBar QPushButton:hover { background: $bg_hover; }
     QToolBar QPushButton:pressed { background: $bg_pressed; }
     QToolBar QPushButton:checked { background: $accent; color: $accent_text; }
     QToolBar QToolButton {
         background: $bg_input; color: $text; border: 1px solid $border2;
-        border-radius: 4px; padding: 6px 10px; font-size: 13px;
+        border-radius: 6px; padding: 3px 10px; font-size: 12.5px;
     }
     QToolBar QToolButton:hover { background: $bg_hover; }
     QToolBar QToolButton:pressed { background: $bg_pressed; }
     QToolBar QToolButton::menu-indicator { image: none; }
+    /* Gruppi a "pillola" della toolbar principale (Settore 1 · V4): i
+       bottoni perdono bordo/sfondo e vivono dentro una capsula comune. */
+    QFrame#tbGroup {
+        background: $bg_input; border: 1px solid $border2;
+        border-radius: 14px;
+    }
+    QFrame#tbGroup QPushButton, QFrame#tbGroup QToolButton {
+        background: transparent; border: none; border-radius: 11px;
+        padding: 3px 11px; font-size: 12.5px;
+    }
+    QFrame#tbGroup QPushButton:hover, QFrame#tbGroup QToolButton:hover {
+        background: $bg_hover;
+    }
+    QFrame#tbGroup QPushButton:checked, QFrame#tbGroup QToolButton:checked {
+        background: $accent; color: $accent_text;
+    }
+    QFrame#tbGroup QLabel { color: $text3; font-size: 12.5px; }
     QToolBar QSpinBox {
         background: $bg_input; color: $text; border: 1px solid $border2;
-        border-radius: 4px; padding: 4px 8px; font-size: 13px;
-        min-width: 60px;
+        border-radius: 6px; padding: 3px 6px; font-size: 12.5px;
+        min-width: 42px;
+    }
+    QFrame#tbGroup QSpinBox {
+        background: transparent; border: none; padding: 2px 2px;
+        min-width: 34px;
     }
     /* Page-number box: no up/down buttons (they made the widget look
        cluttered); navigation is via ◀ ▶ or by typing a page number. */

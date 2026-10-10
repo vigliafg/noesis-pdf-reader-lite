@@ -193,13 +193,14 @@ class UiInventoryTests(unittest.TestCase):
         self.assertEqual(
             inv["fab"]["origin"]["label"], main.T("actions.origin.translate"))
         self.assertTrue(inv["fab"]["translated"]["cta"])
-        # le due mini toolbar di testo esistono con A−/A+/↺/💾
+        # le due mini toolbar di testo (segmentate) hanno font + azioni
         for name in ("original", "translated"):
             texts = [b["text"] for b in inv["text_toolbars"][name]["buttons"]]
             self.assertIn("A−", texts)
             self.assertIn("A+", texts)
             self.assertIn("↺", texts)
-            self.assertIn("💾", texts)
+            self.assertIn(main.T("editor.copy"), texts)
+            self.assertIn(main.T("editor.export_short"), texts)
         # la tab Oggetti ha la sua mini toolbar (filtri + azioni bulk)
         tt = inv["images"]["tab_toolbar"]
         self.assertIn(main.T("objects.filter.all"), tt["filters"])
@@ -209,6 +210,12 @@ class UiInventoryTests(unittest.TestCase):
         self.assertIn(main.T("gallery.save"), actions["image"])
         self.assertIn(main.T("objects.copy_md"), actions["table"])
         self.assertIn(main.T("capture.copy_text"), actions["text"])
+        # toolbar di pagina + capsula zone (✎ Edit · V08)
+        self.assertEqual(
+            inv["page_toolbar"]["edit"], main.T("page_toolbar.edit"))
+        zb = inv["zone_capsule"]
+        self.assertEqual(len(zb["buttons"]), 5)
+        self.assertTrue(all(b["tooltip"].strip() for b in zb["buttons"]))
 
 
 @unittest.skipUnless(_OK, f"Qt/pymupdf/ui_audit non disponibili: {_ERR}")

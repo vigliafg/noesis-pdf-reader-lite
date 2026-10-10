@@ -43,8 +43,11 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   `cleanup_html_tags`, `cleanup_fffd`, `cleanup_soft_hyphens`, `cleanup_despace`,
   `cleanup_numbered_headings`, `cleanup_split_bold_heading`, `reorder_guard`,
   `fix_empty_cells`, `normalize_table_captions`, `link_figures`, `spacing`, …).
-- Navigazione (prec/succ, spin), indice (TOC), toggle Markdown; il pannello
-  sinistro è sempre adattato alla finestra (lo zoom di lettura è nel reader).
+- Toolbar principale a **gruppi a pillola** (Apri/Esporta/Indice · navigazione ·
+  Reader/MD · Impostazioni/Guida), altezza compatta; **navigazione** in una
+  capsula unica `◀ [n / N] ▶` (più il numero stampato); indice (TOC) e toggle
+  Markdown. Il pannello sinistro è sempre adattato alla finestra (lo zoom di
+  lettura è nel reader).
 - Tab testo: Originale / Traduzione / 🗂️ Oggetti. L'Originale mostra un
   unico testo: l'output del motore adattativo (auto) oppure, quando ci sono
   zone manuali, il risultato ricostruito da esse; la tab di traduzione
@@ -52,10 +55,10 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   traduce la versione mostrata nella lingua impostata da ⚙️ Impostazioni
   (traduzione rinviata a dopo una pausa di 600 ms durante il disegno delle
   zone). Cache su disco per (pagina, lingua di destinazione).
-- Mini toolbar di ogni finestra di testo: **A− / A+ / ↺** (dimensione),
-  **📋** copia, **💾** esporta (`.md`/`.txt`, con le modifiche, senza header) e
-  **🔁** ri-estrai (Originale) / ritraduci (lingua); il punto **●** segnala
-  modifiche non salvate.
+- Mini toolbar **segmentata** di ogni finestra di testo: **A− · 12 pt · A+ · ↺**
+  (dimensione) e **📋 Copia · 💾 Esporta** (`.md`/`.txt`, con le modifiche,
+  senza header) **· 🔁 Ri-estrai** (Originale) / **Ritraduci** (lingua); il punto
+  **●** segnala modifiche non salvate.
 - Cattura di oggetti: dal menu **📸 Cattura ▾** due azioni —
   **📸 Cattura immagine** e **🔤 Cattura e interpreta** (immagine + testo:
   nativo se presente, altrimenti OCR; le tabelle native diventano markdown).
@@ -75,11 +78,13 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   la numerazione; ciò che è fuori dai box verdi viene scartato (whitelist).
   Un box verde = una colonna/regione. Rosso e verde compongono: il rosso
   toglie il rumore, il verde ordina; dove si sovrappongono vince il rosso.
-- 🎯 Zone ▾: menu compatto nella mini-toolbar che raccoglie 🚫 Escludi,
-  🟩 Includi e 🧹 Reset; il pulsante mostra il modo attivo.
-- ▶ Estrai: conclude l'editing delle zone, svuota la cache della pagina
+- ✎ Edit: apre/chiude una **capsula flottante** sul bordo destro della pagina
+  con le azioni zone (`🚫 Escludi`, `🟩 Includi`, `🧹 Reset`, `▶ Estrai`, `✕`),
+  icone con tooltip descrittivo. Resta attiva per tutta l'editing e si chiude
+  ripremendo ✎ Edit o premendo ▶ Estrai (niente più menu a cascata).
+- ▶ Estrai (nella capsula): conclude l'editing, svuota la cache della pagina
   (estrazione + traduzione, non le figure) e la riesegue secondo le zone
-  selezionate; il pulsante è attivo solo quando la pagina ha zone.
+  selezionate; è attivo solo quando la pagina ha zone.
 - 💾 Esporta batch (o `Ctrl+E`): procedura guidata in 5
   passi per esportare un gruppo di pagine estratte e/o tradotte — pagina
   corrente, intervallo o lista libera (`1,3,7-9`, `all`); contenuto

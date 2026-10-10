@@ -188,9 +188,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "Succ. ▶", "en": "Next ▶", "fr": "Suiv. ▶",
         "de": "Weiter ▶", "es": "Sig. ▶",
     },
-    "toolbar.of": {
-        "it": "di", "en": "of", "fr": "de", "de": "von", "es": "de",
-    },
     "toolbar.printed": {
         "it": "· st. {n}", "en": "· p. {n}", "fr": "· p. {n}",
         "de": "· S. {n}", "es": "· p. {n}",
@@ -346,11 +343,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "es": "📸 Capturar",
     },
     "page_toolbar.capture.tip": {
-        "it": "Trascina col mouse su un'immagine, una tabella o un altro\noggetto della pagina per catturarlo nella tab 🖼️ Immagini",
-        "en": "Drag the mouse over an image, a table or any other\nobject on the page to capture it into the 🖼️ Images tab",
-        "fr": "Glissez la souris sur une image, un tableau ou tout autre\nobjet de la page pour le capturer dans l'onglet 🖼️ Images",
-        "de": "Ziehen Sie mit der Maus über ein Bild, eine Tabelle oder ein\nanderes Objekt der Seite, um es in den Tab 🖼️ Bilder aufzunehmen",
-        "es": "Arrastra el ratón sobre una imagen, una tabla o cualquier otro\nobjeto de la página para capturarlo en la pestaña 🖼️ Imágenes",
+        "it": "Trascina col mouse su un'immagine, una tabella o un altro\noggetto della pagina per catturarlo nella tab 🗂️ Oggetti",
+        "en": "Drag the mouse over an image, a table or any other\nobject on the page to capture it into the 🗂️ Objects tab",
+        "fr": "Glissez la souris sur une image, un tableau ou tout autre\nobjet de la page pour le capturer dans l'onglet 🗂️ Objets",
+        "de": "Ziehen Sie mit der Maus über ein Bild, eine Tabelle oder ein\nanderes Objekt der Seite, um es in den Tab 🗂️ Objekte aufzunehmen",
+        "es": "Arrastra el ratón sobre una imagen, una tabla o cualquier otro\nobjeto de la página para capturarlo en la pestaña 🗂️ Objetos",
     },
     "page_toolbar.capture.blocked": {
         "it": "Fai il reset delle zone prima di catturare",
@@ -406,11 +403,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Interpretierten Text speichern",
         "es": "Guardar texto interpretado",
     },
-    "page_toolbar.extract": {
-        "it": "▶ Estrai", "en": "▶ Extract",
-        "fr": "▶ Extraire", "de": "▶ Extrahieren",
-        "es": "▶ Extraer",
-    },
     "page_toolbar.extract.tip": {
         "it": "Conclude l'editing delle zone e riesegue l'estrazione della pagina",
         "en": "Ends zone editing and re-runs the page extraction",
@@ -418,22 +410,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Beendet die Zonenbearbeitung und startet die Seitenextraktion neu",
         "es": "Termina la edición de zonas y vuelve a extraer la página",
     },
-    "page_toolbar.exclude": {
-        "it": "🚫 Escludi zona", "en": "🚫 Exclude region",
-        "fr": "🚫 Exclure une zone", "de": "🚫 Bereich ausschließen",
-        "es": "🚫 Excluir zona",
-    },
     "page_toolbar.exclude.tip": {
-        "it": "Trascina col mouse una zona (header, footer, immagine,\ndidascalia…) per escluderla: il motore adattativo riordina\nil testo rimanente. È aggiuntivo al sistema automatico.\n\nSe la zona contiene un'immagine, viene estratta anche nella\ntab 🖼️ Immagini (escludi + estrai in un solo gesto).",
-        "en": "Drag a region (header, footer, image, caption…) with the\nmouse to exclude it: the adaptive engine reorders the\nremaining text. It adds to the automatic system.\n\nIf the region contains an image, it is also extracted into\nthe 🖼️ Images tab (exclude + extract in one gesture).",
-        "fr": "Glissez une zone (en-tête, pied de page, image,\nlégende…) pour l'exclure : le moteur adaptatif réordonne\nle texte restant. C'est un ajout au système automatique.\n\nSi la zone contient une image, elle est aussi extraite dans\nl'onglet 🖼️ Images (exclure + extraire en un seul geste).",
-        "de": "Ziehen Sie einen Bereich (Kopfzeile, Fußzeile, Bild,\nBildunterschrift…) zum Ausschließen: Die adaptive Engine\nordnet den verbleibenden Text neu. Ergänzend zum\nautomatischen System.\n\nEnthält der Bereich ein Bild, wird es auch in den Tab\n🖼️ Bilder extrahiert (Ausschließen + Extrahieren in einem\nSchritt).",
-        "es": "Arrastra una zona (encabezado, pie de página, imagen,\nleyenda…) para excluirla: el motor adaptativo reordena\nel texto restante. Es adicional al sistema automático.\n\nSi la zona contiene una imagen, también se extrae en la\npestaña 🖼️ Imágenes (excluir + extraer en un solo gesto).",
-    },
-    "page_toolbar.include": {
-        "it": "🟩 Includi zona", "en": "🟩 Include region",
-        "fr": "🟩 Inclure une zone", "de": "🟩 Bereich einschließen",
-        "es": "🟩 Incluir zona",
+        "it": "Trascina col mouse una zona (header, footer, immagine,\ndidascalia…) per escluderla: il motore adattativo riordina\nil testo rimanente. È aggiuntivo al sistema automatico.\n\nSe la zona contiene un'immagine, viene estratta anche nella\ntab 🗂️ Oggetti (escludi + estrai in un solo gesto).",
+        "en": "Drag a region (header, footer, image, caption…) with the\nmouse to exclude it: the adaptive engine reorders the\nremaining text. It adds to the automatic system.\n\nIf the region contains an image, it is also extracted into\nthe 🗂️ Objects tab (exclude + extract in one gesture).",
+        "fr": "Glissez une zone (en-tête, pied de page, image,\nlégende…) pour l'exclure : le moteur adaptatif réordonne\nle texte restant. C'est un ajout au système automatique.\n\nSi la zone contient une image, elle est aussi extraite dans\nl'onglet 🗂️ Objets (exclure + extraire en un seul geste).",
+        "de": "Ziehen Sie einen Bereich (Kopfzeile, Fußzeile, Bild,\nBildunterschrift…) zum Ausschließen: Die adaptive Engine\nordnet den verbleibenden Text neu. Ergänzend zum\nautomatischen System.\n\nEnthält der Bereich ein Bild, wird es auch in den Tab\n🗂️ Objekte extrahiert (Ausschließen + Extrahieren in einem\nSchritt).",
+        "es": "Arrastra una zona (encabezado, pie de página, imagen,\nleyenda…) para excluirla: el motor adaptativo reordena\nel texto restante. Es adicional al sistema automático.\n\nSi la zona contiene una imagen, también se extrae en la\npestaña 🗂️ Objetos (excluir + extraer en un solo gesto).",
     },
     "page_toolbar.include.tip": {
         "it": "Trascina col mouse i box verdi nell'ordine di lettura che vuoi:\nil testo verrà ricostruito seguendo la numerazione (1, 2, 3…).\nUn box verde = una colonna/regione di lettura.",
@@ -442,17 +424,39 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Ziehen Sie die grünen Boxen mit der Maus in der\ngewünschten Lesereihenfolge: Der Text wird gemäß der\nNummerierung (1, 2, 3…) neu aufgebaut. Eine grüne Box =\neine Lesespalte/-region.",
         "es": "Arrastra los recuadros verdes con el ratón en el orden de\nlectura que quieras: el texto se reconstruye siguiendo la\nnumeración (1, 2, 3…). Un recuadro verde = una\ncolumna/región de lectura.",
     },
-    "page_toolbar.reset": {
-        "it": "🧹 Reset zone", "en": "🧹 Reset zones",
-        "fr": "🧹 Réinitialiser les zones", "de": "🧹 Zonen zurücksetzen",
-        "es": "🧹 Restablecer zonas",
-    },
     "page_toolbar.reset.tip": {
         "it": "Rimuove tutte le zone (rosse e verdi) dalla pagina corrente",
         "en": "Removes all zones (red and green) from the current page",
         "fr": "Supprime toutes les zones (rouges et vertes) de la page courante",
         "de": "Entfernt alle Zonen (rot und grün) von der aktuellen Seite",
         "es": "Elimina todas las zonas (rojas y verdes) de la página actual",
+    },
+    # Pannello flottante di editing zone (aperto da ✎ Edit, chiude con Estrai)
+    "page_toolbar.edit": {
+        "it": "✎ Edit", "en": "✎ Edit", "fr": "✎ Modifier",
+        "de": "✎ Bearbeiten", "es": "✎ Editar",
+    },
+    "page_toolbar.edit.tip": {
+        "it": "Mostra o nascondi il pannello di modifica delle zone",
+        "en": "Show or hide the zone-editing panel",
+        "fr": "Afficher ou masquer le panneau d'édition des zones",
+        "de": "Zonen-Bearbeitungsfeld ein-/ausblenden",
+        "es": "Mostrar u ocultar el panel de edición de zonas",
+    },
+    "page_toolbar.edit.close.tip": {
+        "it": "Chiudi l'editing (oppure premi ▶ Estrai)",
+        "en": "Close editing (or press ▶ Extract)",
+        "fr": "Fermer l'édition (ou appuyez sur ▶ Extraire)",
+        "de": "Bearbeitung schließen (oder ▶ Extrahieren)",
+        "es": "Cerrar la edición (o pulsa ▶ Extraer)",
+    },
+    "page_toolbar.zone.title": {
+        "it": "Zone", "en": "Zones", "fr": "Zones",
+        "de": "Zonen", "es": "Zonas",
+    },
+    "page_toolbar.zone.count": {
+        "it": "{n} zone", "en": "{n} zones", "fr": "{n} zones",
+        "de": "{n} Zonen", "es": "{n} zonas",
     },
     # ── right panel tabs ────────────────────────────────────────────────────
     "tab.original": {
@@ -503,6 +507,23 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "Modifiche non salvate", "en": "Unsaved edits",
         "fr": "Modifications non enregistrées",
         "de": "Nicht gespeicherte Änderungen", "es": "Cambios sin guardar",
+    },
+    # Etichette compatte della mini toolbar segmentata (Settore 3 · V3).
+    "editor.copy": {
+        "it": "📋 Copia", "en": "📋 Copy", "fr": "📋 Copier",
+        "de": "📋 Kopieren", "es": "📋 Copiar",
+    },
+    "editor.export_short": {
+        "it": "💾 Esporta", "en": "💾 Export", "fr": "💾 Exporter",
+        "de": "💾 Exportieren", "es": "💾 Exportar",
+    },
+    "editor.reextract": {
+        "it": "🔁 Ri-estrai", "en": "🔁 Re-extract", "fr": "🔁 Ré-extraire",
+        "de": "🔁 Neu extrahieren", "es": "🔁 Re-extraer",
+    },
+    "editor.retranslate": {
+        "it": "🔁 Ritraduci", "en": "🔁 Retranslate", "fr": "🔁 Retraduire",
+        "de": "🔁 Neu übersetzen", "es": "🔁 Retraducir",
     },
     # Azioni locali della finestra (mini toolbar): copia.
     "toolbar.copy.tip": {
@@ -1111,18 +1132,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "Niente da copiare.", "en": "Nothing to copy.",
         "fr": "Rien à copier.", "de": "Nichts zu kopieren.",
         "es": "Nada que copiar.",
-    },
-    # ── mini-toolbar: gruppo Zone ───────────────────────────────────────
-    "page_toolbar.zone_group": {
-        "it": "🎯 Zone ▾", "en": "🎯 Zones ▾", "fr": "🎯 Zones ▾",
-        "de": "🎯 Zonen ▾", "es": "🎯 Zonas ▾",
-    },
-    "page_toolbar.zone.tip": {
-        "it": "Escludi/includi zone o azzera",
-        "en": "Exclude/include regions or reset",
-        "fr": "Exclure/inclure des zones ou réinitialiser",
-        "de": "Zonen ausschließen/einschließen oder zurücksetzen",
-        "es": "Excluir/incluir zonas o restablecer",
     },
     # ── esportazione batch: wizard ──────────────────────────────────────
     "export.wizard.title": {
