@@ -114,6 +114,12 @@ rilancia con `--lean` (o `--latest`).
 
 ## Dettaglio e mappatura sui nostri difetti
 
+- `docs/STUDIO-IDEE-MOTORI-ESTERNI-2026-10-10.md` — **master**: tutte le idee
+  classificate per area (ordine, tabelle, testo/glifo, figure, heading/liste,
+  furniture, validazione, metodologia) con soglie e `file:riga`.
+- `docs/PIANO-migliorie4engines-2026-10-10.md` — **il piano** che ordina le idee
+  in backlog (additivo/riferimento/sostitutivo selettivo) con roadmap e criteri
+  di accettazione.
 - `docs/STUDIO-MOTORI-GEOMETRICI-ESTERNI-2026-10-10.md` — consolidato dei
   quattro progetti, con **cross-map** sulle nostre classi di difetto e priorità.
 - `docs/STUDIO-PAPERO-PDF-EXTRACTOR-2026-10-10.md` — analisi completa di papero.

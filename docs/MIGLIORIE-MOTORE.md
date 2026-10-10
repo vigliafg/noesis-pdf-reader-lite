@@ -177,7 +177,9 @@ tabelle, figure, leggibilità, layout difficili.
 `HANDOFF-pack7-figure-2026-10-01.md`, `DIARIO-2026-10-04.md`.
 
 **Piani**: `PIANO-fix-layout-2026-09-29.md`,
-`PIANO-gnn-ordine-tabelle-2026-10-04.md`, `NEXT_STEPS-cattura-manuale.md`.
+`PIANO-gnn-ordine-tabelle-2026-10-04.md`, `NEXT_STEPS-cattura-manuale.md`,
+`PIANO-migliorie4engines-2026-10-10.md` (migliorie additive/riferimento dai
+quattro motori geometrici esterni: backlog ordinato + roadmap + accettazione).
 (Il piano `piano-implementazione-rilevamento-2026-10-09.md` è fuori dal repo, in
 `~/.opencode/plan`.)
 

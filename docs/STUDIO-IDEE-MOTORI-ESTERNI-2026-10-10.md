@@ -18,7 +18,9 @@
 > - **PdfPig** `91ddd23`, Apache-2.0.
 > - **pdfplumber** `4c64b92`, MIT; **pdfminer.six** `a18de2a`, MIT.
 >
-> **Rimandi interni.** `STUDIO-MOTORI-GEOMETRICI-ESTERNI-2026-10-10.md` (prima
+> **Rimandi interni.** `PIANO-migliorie4engines-2026-10-10.md` (**il piano**
+> che ordina in backlog le idee di questo studio, con roadmap e accettazione);
+> `STUDIO-MOTORI-GEOMETRICI-ESTERNI-2026-10-10.md` (prima
 > ricognizione), `STUDIO-E2E-VERDETTO-2026-10-11.md` (difetti aperti),
 > `HANDOFF-2026-10-11.md` §7, `MIGLIORIE-MOTORE.md`, `STUDIO-PAGE-MODEL-2026-10-11.md`.
 
