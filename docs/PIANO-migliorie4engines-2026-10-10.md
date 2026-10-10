@@ -315,7 +315,133 @@ guardia.
 
 ---
 
-## 9. Appendice — mappa sorgente → destinazione
+## 9. Tecnica di toggling (feature on/off)
+
+> Obiettivo: ogni voce del piano è attivabile/disattivabile **a runtime** e
+> testabile **con/senza**, senza reinventare il sistema esistente.
+
+### 9.1 Meccanismo esistente (da riusare)
+- `layout_engine.Fix(id, description, order, when, apply)` + `FIX_REGISTRY` +
+  `plan_fixes()` + `apply_plan()`.
+- Override utente `fix_rules.json` (accanto a `layout_engine.py`, opzionale):
+  `{"disable": [...], "rules": [...]}`; letto da `_load_overrides` (lru-cached)
+  e da `is_fix_disabled(id)`.
+- Due tipi di toggle: **fix di registro** (entrano nel piano) e **check dirette**
+  `is_fix_disabled("link_figures")` in `main.py`/`ir_layout`.
+
+**Lacuna**: il file è **opt-out** (tutto ON). Le nuove feature devono essere
+**opt-in** (OFF di default) e testabili con/senza.
+
+### 9.2 Registro `FEATURES` + accessor
+
+```python
+@dataclass(frozen=True)
+class Feature:
+    id: str
+    default: bool        # False per le nuove (opt-in)
+    stage: str           # pre_span|order|table|text|furniture|heading|list|figure|caption|metric|ref
+    role: str            # fix | gate | metric | ref
+    params: dict         # nome -> default (soglie)
+```
+
+Accessor unici (accanto a `is_fix_disabled`):
+
+```python
+features.enabled(id) -> bool           # default -> file -> override ambientale
+features.param(id, name) -> value      # soglia configurabile
+```
+
+### 9.3 Schema `fix_rules.json` esteso
+
+```json
+{
+  "disable": [ "...fix esistenti..." ],
+  "enable":  [ "dedupe_overlap_chars", "glyph_vocab_grounded" ],
+  "params":  { "caption_probability": {"threshold": 0.75, "offset_font": 1.0},
+               "grid_quality_guard": {"min_rows": 3, "row_order_eps": 1.5} },
+  "rules":   [ "...regole custom esistenti..." ]
+}
+```
+
+Precedenza: `default` → `enable`/`disable` (**disable vince**) → **override
+ambientale** (test/CLI).
+
+### 9.4 Override ambientale (test con/senza, senza toccare file)
+- **Context manager**: `with layout_engine.feature_override({"glyph_vocab_grounded": True}): ...`
+- **Env**: `NOESIS_FEATURES="+dedupe_overlap_chars,-table_image_fallback"` (letto all'avvio).
+- Bypassa la cache `lru_cache` di `_load_overrides` (evita il "file modificato, cache vecchia").
+
+### 9.5 Uso al punto d'applicazione
+
+```python
+if layout_engine.enabled("dedupe_overlap_chars"):
+    md = _dedupe_overlap_chars(md, page)
+# o come fix di registro: when=lambda p, b: enabled("grid_quality_guard")
+```
+
+### 9.6 Due scope
+- **Runtime** (in `layout_engine`/`main`/`ir_layout`): cambiano l'output; default
+  OFF; **non** esposti nel menu Impostazioni (sperimentali → solo
+  `fix_rules.json`/env).
+- **Tool/dev** (in `tools/`): invarianti/metriche/riferimenti; attivati da
+  CLI/env, **mai** a runtime.
+
+### 9.7 Toggle per ciascuna voce
+
+| voce | flag id | scope | default | dove | param | metrica A/B |
+|---|---|---|---|---|---|---|
+| M4E-1.1 | `metric_sans_separators` | tool | off | `tools/detectors.py`,`tools/e2e.py` | — | FP detector |
+| M4E-1.2 | `dedupe_overlap_chars` | runtime | off | `ir_layout`/`_cosmetic_ir` | `tol_ratio=1/3` | `diag.duplicate_lines` |
+| M4E-1.3 | `furniture_crosspage` | runtime | off | `layout_engine` Pack1 | `repeat_need=2`,`gap=30` | `header_content` |
+| M4E-1.4 | `caption_probability` | runtime | off | `ir_layout._link_captions` | `threshold=0.75`,`offset_font=1.0` | caption orfane/dup |
+| M4E-1.5 | `glyph_accents_compose`,`typeset_math` | runtime | off | `ir_layout` pre-span | — | md + unit |
+| M4E-2.1 | `glyph_vocab_grounded` | runtime | off | `main._fix_*` | `minlen=3`,`slack=1` | `diag.glued_words` |
+| M4E-3.1 | `table_image_fallback` | runtime | off | `main._apply_ir_on_page_full` | `trigger=quality` | `ce24 p480` |
+| M4E-3.2 | `grid_quality_guard` | runtime | off | `ir_layout` ramo table | `min_rows=3`,`row_order_eps=1.5` | `base_r/grid_r` |
+| M4E-4.1 | `heading_probability` | runtime | off | `layout_engine` heading | `threshold=0.75` | heading ok/ko |
+| M4E-4.2 | `list_neighbor_merge` | runtime | off | `layout_engine` liste | `xgap_ratio=0.3`,`lookback=500` | liste ok/ko |
+| M4E-4.3 | `chart_vector_detect` | runtime | off | `ir_layout` figure | `fuzziness=0.15` | `figure_missing` |
+| M4E-5.1 | `ref_order_allen` | tool | off | `tools/measure_order.py` | `T=5` | confronto ordine |
+| M4E-5.2 | `ref_validation` | tool | off | `tools/invariants.py` | — | FP invarianti |
+| M4E-5.3 | `ref_struct_tree` | tool | off | `tools/` | — | confronto struttura |
+
+### 9.8 Harness A/B ("con/senza")
+
+```bash
+tools/e2e.py --sample <held-out.json> --mode auto --ab dedupe_overlap_chars
+```
+
+Riporta: (1) **byte-diff** del markdown (vuoto se OFF, non-vuoto se ON → prova
+che il flag collega la feature); (2) **delta `diag`** (`glued_words`,
+`duplicate_lines`, `figure_blank`, `table_misalign`, `order`, `flow`);
+(3) **delta north-star** (#difetti reali); (4) **determinismo** (OFF = baseline
+byte-identico). `tools/campaign_report.py` aggrega una **tabella per-flag**.
+
+### 9.9 Garanzie
+1. **OFF = baseline**: senza file/env l'output è **byte-identico a oggi**.
+2. Nessun flag ON di default prima della validazione held-out.
+3. `disable` vince sempre.
+4. Determinismo (letture statiche di stato).
+5. Tuning **solo su held-out**.
+
+### 9.10 Pitfall
+- **Gate/chooser**: `table_image_fallback`/`grid_quality_guard` cambiano la
+  metrica → vanno letti **anche** in `_ir_gate`/`_choose_output`.
+- **Galleria**: tabelle-come-immagine → bucket/flag separato.
+- **Cache** `_load_overrides` (lru): per l'A/B usare l'override ambientale.
+- **Interazioni**: un flag alla volta nell'A/B; ordine via `Fix.order`.
+- **`when(profile,backend)`**: il flag si **combina** col predicato, non lo
+  sostituisce.
+
+### 9.11 Promozione
+`default=False` + test `off=baseline` → A/B held-out → se la north-star scende,
+**flip di `default` a `True`** (una riga, code review); resta disattivabile via
+`disable`. Esito negativo → resta `False` e l'esito si registra (come gli
+esperimenti parcheggiati in `MIGLIORIE-MOTORE.md` §3).
+
+---
+
+## 10. Appendice — mappa sorgente → destinazione
 
 | voce | sorgente (motore) | destinazione (nostro) |
 |---|---|---|
@@ -337,7 +463,8 @@ guardia.
 **Flag `fix_rules.json`** (proposti): `dedupe_overlap_chars`,
 `caption_probability`, `table_image_fallback`, `grid_quality_guard`,
 `heading_probability`, `list_neighbor_merge`, `chart_vector_detect`,
-`glyph_vocab_grounded`. (Ogni fix resta attivabile/disattivabile, come i Pack.)
+`glyph_vocab_grounded`. (Ogni fix resta attivabile/disattivabile, come i Pack;
+la **tecnica completa** di toggling e il test con/senza sono in **§9**.)
 
 ---
 
