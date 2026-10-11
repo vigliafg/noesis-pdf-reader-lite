@@ -129,28 +129,29 @@
       <table>
         <tr><th>Element</th><th>Function</th></tr>
         <tr><td>📂 Open PDF</td><td>Opens a PDF document</td></tr>
+        <tr><td>📑 Index</td><td>Shows/hides the table of contents (TOC) on the left (right after <em>Open</em>)</td></tr>
         <tr><td>💾 Export</td><td>Exports a group of pages (batch); <kbd>Ctrl</kbd>+<kbd>E</kbd></td></tr>
-        <tr><td>📑 Index</td><td>Shows/hides the table of contents (TOC) on the left</td></tr>
         <tr><td>◀ / ▶ + page no.</td><td>Page navigation (compact capsule)</td></tr>
-        <tr><td>👁 Reader ▾</td><td>Opens the built-in reader or the system viewer</td></tr>
         <tr><td>📝 MD ✓</td><td>Toggles Markdown rendering of the text</td></tr>
         <tr><td>⚙️ Settings</td><td>Languages, theme, preferences and behavior</td></tr>
         <tr><td>❓ Help</td><td>Opens this help in the browser</td></tr>
       </table>
 
       <h3>Page panel (left)</h3>
-      <p>Above the page there are the zone tools:</p>
+      <p>On the <strong>viewport edges</strong> there are icon rails:</p>
       <table>
-        <tr><th>Element</th><th>Function</th></tr>
-        <tr><td>📸 Capture ▾</td><td>Menu: 📸 Capture image or 🔤 Capture and interpret (text/OCR)</td></tr>
-        <tr><td>✎ Edit</td><td>Shows/hides the floating zone-editing panel (capsule on the page's right edge)</td></tr>
+        <tr><th>Edge</th><th>Element</th><th>Function</th></tr>
+        <tr><td>left</td><td>📖 Reader</td><td>Built-in reader or system viewer</td></tr>
+        <tr><td>right</td><td>🛠 Actions</td><td>A <strong>single</strong> button opening the <strong>capture + zones</strong> panel</td></tr>
       </table>
-      <p>The <strong>✎ Edit</strong> panel is a floating capsule that stays
-      active for the whole editing session and closes when you press
-      <strong>✎ Edit</strong> again or <strong>▶ Extract</strong>. Icons (with
-      a descriptive tooltip on hover): <strong>🚫</strong> Exclude region,
-      <strong>🟩</strong> Include region, <strong>🧹</strong> Reset zones,
-      <strong>▶</strong> Extract and <strong>✕</strong> Close.</p>
+      <p>The <strong>🛠 Actions</strong> button opens a <strong>single panel</strong>
+      of round coloured icons that drops <strong>below</strong> the button
+      (bottom right), so it <strong>does not cover the page area</strong> where
+      you draw zones. It gathers capture (blue = capture image, purple =
+      interpret) and zones (red = exclude, green = include, amber = reset,
+      blue = extract, grey = close), with an <strong>outline shadow</strong>.
+      The panel stays active for the whole session and closes when you press
+      <strong>Actions</strong> again or <strong>Extract</strong>.</p>
 
       <h3>Right panel (text)</h3>
       <p>Three tabs at the top right:</p>
@@ -233,8 +234,8 @@
       (headers, footers, page numbers, images with text, captions, ads), you
       can exclude them manually:</p>
       <ol>
-        <li>Press <strong>✎ Edit</strong> (top right) to open the floating panel
-          and tap <strong>🚫 Exclude region</strong>.</li>
+        <li>Press <strong>🛠 Actions</strong> (viewport right edge) and tap
+          <strong>Exclude region</strong>.</li>
         <li>Drag a <strong>red box</strong> with the mouse over the content to
           remove.</li>
         <li>The text is recalculated immediately without that content.</li>
@@ -265,8 +266,8 @@
       boxes) you can define the reading order yourself with the
       <strong>numbered green boxes</strong>:</p>
       <ol>
-        <li>Press <strong>✎ Edit</strong> and tap
-          <strong>🟩 Include region</strong>.</li>
+        <li>Press <strong>🛠 Actions</strong> and tap
+          <strong>Include region</strong>.</li>
         <li>Drag a green box over the first reading column/region (the number
           <strong>1</strong> appears).</li>
         <li>Draw the next box in reading order (2, 3, …).</li>
@@ -288,7 +289,8 @@
       <!-- ═══════════════ IMAGE EXTRACTION ═══════════════ -->
 
       <h2 id="images">Capturing objects</h2>
-      <p>From the <strong>📸 Capture ▾</strong> menu you have two actions:</p>
+      <p>From the <strong>🛠 Actions</strong> panel (button on the viewport
+      right edge) you have two capture actions:</p>
       <ul>
         <li><strong>📸 Capture image</strong> — saves the region as an
           image.</li>
@@ -298,7 +300,7 @@
           markdown.</li>
       </ul>
       <ol>
-        <li>Choose the action from the <strong>📸 Capture ▾</strong> menu.</li>
+        <li>Choose the action from the <strong>🛠 Actions</strong> panel.</li>
         <li>Drag a rectangle over the image, the table or the object.</li>
       </ol>
       <p>If the page already has <a href="#zones-exclude">zones</a>, the
@@ -404,7 +406,8 @@
       <strong>💾 Export</strong> button at the top.</p>
 
       <h2 id="reader">Built-in reader</h2>
-      <p>From the <strong>👁 Reader ▾</strong> menu open a non-modal,
+      <p>From the <strong>📖 Reader</strong> button (viewport left edge) open a
+      non-modal,
       <em>read-only</em> reader (or the system viewer). The reader has basic
       commands: navigation, zoom, fit-width/page, rotate and open externally. It
       opens on the current page and uses a separate document, so it never

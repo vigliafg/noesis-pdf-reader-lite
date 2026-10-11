@@ -210,12 +210,12 @@ class UiInventoryTests(unittest.TestCase):
         self.assertIn(main.T("gallery.save"), actions["image"])
         self.assertIn(main.T("objects.copy_md"), actions["table"])
         self.assertIn(main.T("capture.copy_text"), actions["text"])
-        # toolbar di pagina + capsula zone (✎ Edit · V08)
+        # rail del viewport: Reader + unico pulsante azioni (pannello unico)
         self.assertEqual(
-            inv["page_toolbar"]["edit"], main.T("page_toolbar.edit"))
-        zb = inv["zone_capsule"]
-        self.assertEqual(len(zb["buttons"]), 5)
-        self.assertTrue(all(b["tooltip"].strip() for b in zb["buttons"]))
+            inv["page_toolbar"]["tools"], main.T("page_toolbar.tools.tip"))
+        tc = inv["tools_capsule"]
+        self.assertEqual(len(tc["buttons"]), 7)
+        self.assertTrue(all(b["tooltip"].strip() for b in tc["buttons"]))
 
 
 @unittest.skipUnless(_OK, f"Qt/pymupdf/ui_audit non disponibili: {_ERR}")

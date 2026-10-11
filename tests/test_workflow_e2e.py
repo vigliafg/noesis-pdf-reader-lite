@@ -435,8 +435,8 @@ class FullWorkflowTests(unittest.TestCase):
                 self.w._retranslate_all()
                 self.assertEqual(self.w.btn_open.text(), main.T("toolbar.open"))
                 self.assertEqual(
-                    self.w.act_capture_image.text(),
-                    main.T("page_toolbar.capture.image"))
+                    self.w.tools_bar.btn_image.toolTip(),
+                    main.T("page_toolbar.capture.tip"))
                 seen.add(self.w.btn_open.text())
         finally:
             main.set_language("it")

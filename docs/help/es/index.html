@@ -134,28 +134,30 @@
       <table>
         <tr><th>Elemento</th><th>Función</th></tr>
         <tr><td>📂 Abrir PDF</td><td>Abre un documento PDF</td></tr>
+        <tr><td>📑 Índice</td><td>Muestra/oculta el índice (TOC) a la izquierda (justo tras <em>Abrir</em>)</td></tr>
         <tr><td>💾 Exportar</td><td>Exporta un grupo de páginas (por lotes); <kbd>Ctrl</kbd>+<kbd>E</kbd></td></tr>
-        <tr><td>📑 Índice</td><td>Muestra/oculta el índice (TOC) a la izquierda</td></tr>
         <tr><td>◀ / ▶ + n.º pág.</td><td>Navegación entre páginas (cápsula compacta)</td></tr>
-        <tr><td>👁 Reader ▾</td><td>Abre el lector integrado o el visor del sistema</td></tr>
         <tr><td>📝 MD ✓</td><td>Activa/desactiva el renderizado Markdown del texto</td></tr>
         <tr><td>⚙️ Configuración</td><td>Idiomas, tema, preferencias y comportamiento</td></tr>
         <tr><td>❓ Ayuda</td><td>Abre esta ayuda en el navegador</td></tr>
       </table>
 
       <h3>Panel de página (izquierda)</h3>
-      <p>Encima de la página están las herramientas de zona:</p>
+      <p>En los <strong>bordes del viewport</strong> hay raíles de iconos:</p>
       <table>
-        <tr><th>Elemento</th><th>Función</th></tr>
-        <tr><td>📸 Capturar ▾</td><td>Menú: 📸 Capturar imagen o 🔤 Capturar e interpretar (texto/OCR)</td></tr>
-        <tr><td>✎ Editar</td><td>Muestra/oculta el panel flotante de edición de zonas (cápsula en el borde derecho de la página)</td></tr>
+        <tr><th>Borde</th><th>Elemento</th><th>Función</th></tr>
+        <tr><td>izquierdo</td><td>📖 Reader</td><td>Lector integrado o visor del sistema</td></tr>
+        <tr><td>derecho</td><td>🛠 Acciones</td><td>Un <strong>único</strong> botón que abre el panel <strong>captura + zonas</strong></td></tr>
       </table>
-      <p>El panel <strong>✎ Editar</strong> es una cápsula flotante que
-      permanece activa durante toda la sesión de edición y se cierra al volver a
-      pulsar <strong>✎ Editar</strong> o <strong>▶ Extraer</strong>. Iconos (con
-      información descriptiva al pasar el cursor): <strong>🚫</strong> Excluir
-      zona, <strong>🟩</strong> Incluir zona, <strong>🧹</strong> Restablecer
-      zonas, <strong>▶</strong> Extraer y <strong>✕</strong> Cerrar.</p>
+      <p>El botón <strong>🛠 Acciones</strong> abre un <strong>panel único</strong>
+      de iconos redondos de colores, que sale <strong>debajo</strong> del botón
+      (abajo a la derecha), para <strong>no tapar la zona de la página</strong>
+      donde se dibujan las zonas. Reúne captura (azul = capturar imagen,
+      violeta = interpretar) y zonas (rojo = excluir, verde = incluir, ámbar =
+      restablecer, azul = extraer, gris = cerrar), con <strong>sombra en el
+      contorno</strong>. El panel permanece activo durante toda la sesión y se
+      cierra al volver a pulsar <strong>Acciones</strong> o
+      <strong>Extraer</strong>.</p>
 
       <h3>Panel derecho (texto)</h3>
       <p>Tres pestañas arriba a la derecha:</p>
@@ -243,8 +245,8 @@
       lectura (encabezados, pies, números de página, imágenes con texto,
       leyendas, publicidad), puedes excluirlos manualmente:</p>
       <ol>
-        <li>Pulsa <strong>✎ Editar</strong> (arriba a la derecha) para abrir el
-          panel flotante y toca <strong>🚫 Excluir zona</strong>.</li>
+        <li>Pulsa <strong>🛠 Acciones</strong> (borde derecho del viewport) y
+          toca <strong>Excluir zona</strong>.</li>
         <li>Arrastra con el ratón un <strong>recuadro rojo</strong> sobre el
           contenido que quieras eliminar.</li>
         <li>El texto se recalcula inmediatamente sin ese contenido.</li>
@@ -276,8 +278,8 @@
       recuadros dispersos) puedes definir tú mismo el orden de lectura con los
       <strong>recuadros verdes numerados</strong>:</p>
       <ol>
-        <li>Pulsa <strong>✎ Editar</strong> y toca
-          <strong>🟩 Incluir zona</strong>.</li>
+        <li>Pulsa <strong>🛠 Acciones</strong> y toca
+          <strong>Incluir zona</strong>.</li>
         <li>Arrastra un recuadro verde sobre la primera columna/región de
           lectura (aparece el número <strong>1</strong>).</li>
         <li>Dibuja el siguiente recuadro en orden de lectura (2, 3, …).</li>
@@ -299,7 +301,8 @@
       <!-- ═══════════════ EXTRACCIÓN DE IMÁGENES ═══════════════ -->
 
       <h2 id="images">Captura de objetos</h2>
-      <p>Desde el menú <strong>📸 Capturar ▾</strong> tienes dos acciones:</p>
+      <p>Desde el panel <strong>🛠 Acciones</strong> (botón en el borde derecho
+      del viewport) tienes dos acciones de captura:</p>
       <ul>
         <li><strong>📸 Capturar imagen</strong> — guarda la zona como
           imagen.</li>
@@ -309,7 +312,7 @@
           markdown.</li>
       </ul>
       <ol>
-        <li>Elige la acción en el menú <strong>📸 Capturar ▾</strong>.</li>
+        <li>Elige la acción en el panel <strong>🛠 Acciones</strong>.</li>
         <li>Arrastra un rectángulo sobre la imagen, la tabla o el objeto.</li>
       </ol>
       <p>Si la página ya tiene <a href="#zones-exclude">zonas</a>, la captura
@@ -422,7 +425,8 @@
       botón <strong>💾 Exportar</strong> de arriba.</p>
 
       <h2 id="reader">Lector integrado</h2>
-      <p>Desde el menú <strong>👁 Reader ▾</strong> abre un lector no modal y
+      <p>Desde el botón <strong>📖 Reader</strong> (borde izquierdo del
+      viewport) abre un lector no modal y
       <em>de solo lectura</em> (o el visor del sistema). El lector tiene los
       comandos básicos: navegación, zoom, ajustar al ancho/página, rotación y
       apertura externa. Se abre en la página actual y usa un documento

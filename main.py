@@ -74,7 +74,7 @@ except ImportError:
 
 from PyQt6.QtCore import (
     Qt, QThread, QTimer, QEvent, pyqtSignal, QUrl, QStandardPaths, QRectF,
-    QLocale, QPropertyAnimation, QEasingCurve, pyqtProperty, QRect,
+    QLocale, QPropertyAnimation, QEasingCurve, pyqtProperty, QRect, QSize,
 )
 from PyQt6.QtGui import (
     QImage, QPixmap, QFont, QKeySequence, QShortcut, QIcon,
@@ -107,6 +107,7 @@ from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QFormLayout,
+    QGridLayout,
     QGroupBox,
     QDockWidget,
     QTreeWidget,
@@ -124,6 +125,10 @@ from PyQt6.QtWidgets import (
     QMenu,
     QProgressBar,
 )
+
+# Icone SVG (rail del viewport e pannelli): rese a QIcon a runtime così da
+# avere icone nitide e colorabili (non emoji) su qualunque tema.
+from PyQt6.QtSvg import QSvgRenderer
 
 # URL della guida online (sito statico pubblicato su GitHub Pages).
 # Aprire con QDesktopServices.openUrl apre il browser di sistema: nessuna
@@ -4313,14 +4318,152 @@ class ObjectsToolbar(QWidget):
         self.set_count(0)  # refreshed on the next rebuild
 
 
-class ZoneEditBar(QFrame):
-    """Capsula flottante verticale per l'editing delle zone (Settore 4 · V08).
+# ── icone SVG dei rail del viewport e dei pannelli (stile outline, Feather) ──
+_EDGE_SVG: dict[str, str] = {
+    "camera": (
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>'
+        '<circle cx="12" cy="13" r="4"/></svg>'
+    ),
+    "scan": (
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/>'
+        '<line x1="7" y1="12" x2="17" y2="12"/></svg>'
+    ),
+    "zone": (
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<rect x="3" y="5" width="18" height="14" rx="2" stroke-dasharray="4 3"/></svg>'
+    ),
+    "exclude": (
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<rect x="3" y="5" width="18" height="14" rx="2"/>'
+        '<line x1="5" y1="19" x2="19" y2="5"/></svg>'
+    ),
+    "include": (
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<rect x="3" y="5" width="18" height="14" rx="2"/>'
+        '<line x1="12" y1="9" x2="12" y2="15"/><line x1="9" y1="12" x2="15" y2="12"/></svg>'
+    ),
+    "reset": (
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<polyline points="1 4 1 10 7 10"/>'
+        '<path d="M3.5 15a9 9 0 1 0 2.1-9.4L1 10"/></svg>'
+    ),
+    "extract": (
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>'
+        '<polyline points="14 2 14 8 20 8"/><polygon points="10 12 15 15 10 18 10 12"/></svg>'
+    ),
+    "close": (
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>'
+    ),
+    "book": (
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>'
+        '<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>'
+    ),
+    "tool": (
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77'
+        'a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91'
+        'a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'
+    ),
+}
 
-    Compare premendo ✎ Edit (in alto a destra nella tab del PDF) e **resta
-    attiva per tutta la sessione di editing**; si chiude ripremendo ✎ Edit o
-    premendo ▶ Estrai. Ogni icona ha un tooltip descrittivo.
+
+def _edge_icon(name: str, color: str = "#ffffff", size: int = 22) -> QIcon:
+    """QIcon da un'icona SVG del rail, colorata (stroke) e rasterizzata."""
+    svg = _EDGE_SVG.get(name, "").replace("currentColor", color)
+    renderer = QSvgRenderer(svg.encode("utf-8"))
+    pm = QPixmap(size, size)
+    pm.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pm)
+    try:
+        renderer.render(painter)
+    finally:
+        painter.end()
+    return QIcon(pm)
+
+
+def _hover_color(color: str, factor: float = 130) -> str:
+    """Versione più chiara/scura di un colore per l'hover."""
+    c = QColor(color)
+    return c.lighter(int(factor)).name() if c.isValid() else color
+
+
+
+class _EdgePanel(QFrame):
+    """Capsula flottante a icone, con **ombra sul contorno** (stile C02).
+
+    Base comune dei pannelli Cattura ed Edit: cerchi pieni colorati con icone
+    SVG bianche, bordo colorato e alone/ombra esterna del pannello.
     """
 
+    def __init__(self, accent_key: str, parent=None):
+        super().__init__(parent)
+        self._accent_key = accent_key
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._buttons: list[QPushButton] = []
+
+    def _mk(self, icon: str, tip: str, ckey: str,
+            checkable: bool = False) -> QPushButton:
+        b = QPushButton(self)
+        b.setToolTip(tip)
+        b.setCheckable(checkable)
+        b.setCursor(Qt.CursorShape.PointingHandCursor)
+        b.setFixedSize(42, 42)
+        b.setIcon(_edge_icon(icon, "#ffffff", 20))
+        b.setIconSize(QSize(20, 20))
+        b.setProperty("ckey", ckey)
+        return b
+
+    def _color_buttons(self) -> None:
+        q = theme.color
+        for b in self._buttons:
+            base = q(b.property("ckey"))
+            b.setStyleSheet(
+                "QPushButton { background: %s; border: none;"
+                " border-radius: 21px; }"
+                "QPushButton:hover { background: %s; }"
+                "QPushButton:checked { background: %s;"
+                " border: 2px solid rgba(255,255,255,0.9); }"
+                "QPushButton:disabled { background: %s; border: 1px solid %s; }"
+                % (base, _hover_color(base), base, q("bg_input"), q("border2"))
+            )
+
+    def _style_panel(self, qss: str) -> None:
+        self.setStyleSheet(qss)
+        accent = QColor(theme.color(self._accent_key))
+        accent.setAlpha(150)
+        eff = QGraphicsDropShadowEffect(self)
+        eff.setBlurRadius(38)
+        eff.setOffset(0, 0)
+        eff.setColor(accent)
+        self.setGraphicsEffect(eff)
+
+
+class ToolsBar(_EdgePanel):
+    """Pannello **unico** delle azioni pagina: cattura + zone (stile C02).
+
+    Fuoriesce **sotto** il pulsante del bordo destro, in una griglia compatta di
+    icone rotonde colorate, così da **non coprire l'area della pagina** su cui
+    si disegnano le zone. Raccoglie cattura (immagine/interpreta) e zone
+    (escludi/includi/reset/estrai/chiudi), con ombra sul contorno del pannello.
+    """
+
+    image_requested = pyqtSignal()
+    interpret_requested = pyqtSignal()
     exclude_toggled = pyqtSignal(bool)
     include_toggled = pyqtSignal(bool)
     reset_requested = pyqtSignal()
@@ -4328,100 +4471,92 @@ class ZoneEditBar(QFrame):
     close_requested = pyqtSignal()
 
     def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("zoneBar")
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setFixedWidth(58)
+        super().__init__("edge_extract", parent)
+        self.setObjectName("toolsBar")
 
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(6, 9, 6, 9)
-        lay.setSpacing(5)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(10, 9, 10, 10)
+        outer.setSpacing(6)
 
-        self.lbl_title = QLabel(T("page_toolbar.zone.title"))
+        self.lbl_title = QLabel(T("page_toolbar.tools.title"))
         self.lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lay.addWidget(self.lbl_title)
+        outer.addWidget(self.lbl_title)
         self.lbl_count = QLabel("")
         self.lbl_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lay.addWidget(self.lbl_count)
-        lay.addWidget(self._sep())
+        outer.addWidget(self.lbl_count)
 
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setSpacing(7)
+        outer.addLayout(grid)
+
+        # riga 0 · cattura
+        self.btn_image = self._mk(
+            "camera", T("page_toolbar.capture.tip"), "edge_capture")
+        self.btn_image.clicked.connect(self.image_requested.emit)
+        grid.addWidget(self.btn_image, 0, 0)
+
+        self.btn_interpret = self._mk(
+            "scan", T("page_toolbar.capture.interpret.tip"), "edge_interpret")
+        self.btn_interpret.clicked.connect(self.interpret_requested.emit)
+        grid.addWidget(self.btn_interpret, 0, 1)
+
+        # righe 1-3 · zone
         self.btn_exclude = self._mk(
-            "🚫", T("page_toolbar.exclude.tip"), checkable=True)
+            "exclude", T("page_toolbar.exclude.tip"), "edge_exclude", True)
         self.btn_exclude.toggled.connect(self.exclude_toggled.emit)
-        lay.addWidget(self.btn_exclude)
+        grid.addWidget(self.btn_exclude, 1, 0)
 
         self.btn_include = self._mk(
-            "🟩", T("page_toolbar.include.tip"), checkable=True)
+            "include", T("page_toolbar.include.tip"), "edge_include", True)
         self.btn_include.toggled.connect(self.include_toggled.emit)
-        lay.addWidget(self.btn_include)
+        grid.addWidget(self.btn_include, 1, 1)
 
-        self.btn_reset = self._mk("🧹", T("page_toolbar.reset.tip"))
+        self.btn_reset = self._mk(
+            "reset", T("page_toolbar.reset.tip"), "edge_reset")
         self.btn_reset.clicked.connect(self.reset_requested.emit)
-        lay.addWidget(self.btn_reset)
-        lay.addWidget(self._sep())
+        grid.addWidget(self.btn_reset, 2, 0)
 
-        self.btn_extract = self._mk("▶", T("page_toolbar.extract.tip"))
-        self.btn_extract.setProperty("primary", True)
+        self.btn_extract = self._mk(
+            "extract", T("page_toolbar.extract.tip"), "edge_extract")
         self.btn_extract.setEnabled(False)
         self.btn_extract.clicked.connect(self.extract_requested.emit)
-        lay.addWidget(self.btn_extract)
+        grid.addWidget(self.btn_extract, 2, 1)
 
-        self.btn_close = self._mk("✕", T("page_toolbar.edit.close.tip"))
+        self.btn_close = self._mk(
+            "close", T("page_toolbar.edit.close.tip"), "edge_close")
         self.btn_close.clicked.connect(self.close_requested.emit)
-        lay.addWidget(self.btn_close)
+        grid.addWidget(self.btn_close, 3, 0)
 
+        self._buttons = [
+            self.btn_image, self.btn_interpret, self.btn_exclude,
+            self.btn_include, self.btn_reset, self.btn_extract, self.btn_close,
+        ]
         self.apply_theme()
-
-    def _mk(self, icon: str, tip: str, checkable: bool = False) -> QPushButton:
-        b = QPushButton(icon)
-        b.setToolTip(tip)
-        b.setCheckable(checkable)
-        b.setCursor(Qt.CursorShape.PointingHandCursor)
-        b.setFixedSize(42, 42)
-        return b
-
-    def _sep(self) -> QFrame:
-        s = QFrame()
-        s.setObjectName("zoneSep")
-        s.setFixedHeight(1)
-        return s
 
     def set_count(self, n: int) -> None:
         self.lbl_count.setText(T("page_toolbar.zone.count", n=n))
 
+    def refresh_extract(self) -> None:
+        """Icona di Estrai: bianca se attiva, attenuata se disabilitata."""
+        color = "#ffffff" if self.btn_extract.isEnabled() else theme.color("text5")
+        self.btn_extract.setIcon(_edge_icon("extract", color, 20))
+
     def apply_theme(self) -> None:
         q = theme.color
-        self.setStyleSheet(
-            "QFrame#zoneBar { background: %s; border: 1px solid %s;"
-            " border-radius: 24px; }"
-            "QFrame#zoneBar QLabel { color: %s; font-size: 10.5px; border: none; }"
-            "QFrame#zoneSep { background: %s; border: none; }"
-            "QFrame#zoneBar QPushButton { background: %s; color: %s;"
-            " border: 1px solid %s; border-radius: 21px; font-size: 17px; }"
-            "QFrame#zoneBar QPushButton:hover { background: %s; }"
-            "QFrame#zoneBar QPushButton:checked { background: %s; color: %s;"
-            " border-color: %s; }"
-            "QFrame#zoneBar QPushButton[primary=\"true\"] { background: %s;"
-            " color: %s; border-color: %s; }"
-            "QFrame#zoneBar QPushButton[primary=\"true\"]:hover { background: %s; }"
-            "QFrame#zoneBar QPushButton:disabled { color: %s; }"
-            "QFrame#zoneBar QPushButton[primary=\"true\"]:disabled {"
-            " background: %s; border-color: %s; color: %s; }"
-            % (
-                q("bg_alt"), q("border2"),
-                q("text4"), q("border2"),
-                q("bg_input"), q("text"), q("border2"),
-                q("bg_hover"),
-                q("accent"), q("accent_text"), q("accent"),
-                q("accent"), q("accent_text"), q("accent"),
-                q("accent_hover"),
-                q("disabled_text"),
-                q("bg_input"), q("border2"), q("disabled_text"),
-            )
+        self._style_panel(
+            "QFrame#toolsBar { background: %s; border: 1.5px solid %s;"
+            " border-radius: 22px; }"
+            "QFrame#toolsBar QLabel { color: %s; font-size: 10.5px; }"
+            % (q("bg_alt"), q("edge_extract"), q("text4"))
         )
+        self._color_buttons()
+        self.refresh_extract()
 
     def retranslate(self) -> None:
-        self.lbl_title.setText(T("page_toolbar.zone.title"))
+        self.lbl_title.setText(T("page_toolbar.tools.title"))
+        self.btn_image.setToolTip(T("page_toolbar.capture.tip"))
+        self.btn_interpret.setToolTip(T("page_toolbar.capture.interpret.tip"))
         self.btn_exclude.setToolTip(T("page_toolbar.exclude.tip"))
         self.btn_include.setToolTip(T("page_toolbar.include.tip"))
         self.btn_reset.setToolTip(T("page_toolbar.reset.tip"))
@@ -7426,7 +7561,9 @@ class MainWindow(QMainWindow):
         # Splitter
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        # Left — mini toolbar + scroll area wrapping the page view
+        # Left — scroll area wrapping the page view. I rail del viewport
+        # (Reader a sinistra, Cattura/Edit a destra) e i pannelli flottanti
+        # sono figli dello scroll area, costruiti da _build_view_rails().
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.pdf_view = PdfPageView()
@@ -7435,28 +7572,13 @@ class MainWindow(QMainWindow):
         self.pdf_view.region_included.connect(self._on_region_included)
         self.scroll_area.setWidget(self.pdf_view)
 
-        # Capsula flottante di editing zone (Settore 4 · V08): figlia dello
-        # scroll area, nascosta finché ✎ Edit non la apre. Resta attiva per
-        # tutta la sessione di editing; si chiude con ✕ o ▶ Estrai.
-        self.zone_bar = ZoneEditBar(self.scroll_area)
-        self.zone_bar.hide()
-        self.btn_exclude = self.zone_bar.btn_exclude
-        self.btn_include = self.zone_bar.btn_include
-        self.btn_extract_zones = self.zone_bar.btn_extract
-        self.btn_reset_zones = self.zone_bar.btn_reset
-        self.zone_bar.exclude_toggled.connect(self._on_exclude_toggled)
-        self.zone_bar.include_toggled.connect(self._on_include_toggled)
-        self.zone_bar.reset_requested.connect(self._on_reset_zones)
-        self.zone_bar.extract_requested.connect(self._extract_with_zones)
-        self.zone_bar.close_requested.connect(
-            lambda: self.btn_edit.setChecked(False))
+        self._build_view_rails()
         self.scroll_area.installEventFilter(self)
 
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(0)
-        left_layout.addWidget(self._build_page_toolbar())
         left_layout.addWidget(self.scroll_area)
 
         # Right — text panel with translation tabs
@@ -7505,6 +7627,12 @@ class MainWindow(QMainWindow):
         self.toc_panel.apply_theme()
         self.pdf_view.apply_theme()
         self.lbl_printed.setStyleSheet("color: %s;" % theme.color("text5"))
+        bar = getattr(self, "main_bar", None)
+        if bar is not None and bar.layout() is not None:
+            bar.layout().setContentsMargins(0, 0, 0, 0)
+        tools = getattr(self, "tools_bar", None)
+        if tools is not None:
+            tools.apply_theme()
         reader = getattr(self, "_reader_window", None)
         if reader is not None:
             reader.retranslate()
@@ -7520,15 +7648,17 @@ class MainWindow(QMainWindow):
     def _build_toolbar(self, parent_layout: QVBoxLayout):
         bar = QToolBar(T("toolbar.nav"))
         bar.setMovable(False)
+        # Altezza compatta: ~1/3 in meno della toolbar precedente. Lo stile
+        # Qt aggiunge 6px sopra/sotto al layout: li azzeriamo per contenere.
+        bar.setFixedHeight(26)
         parent_layout.addWidget(bar)
+        self.main_bar = bar
+        if bar.layout() is not None:
+            bar.layout().setContentsMargins(0, 0, 0, 0)
 
-        # ── gruppo azioni file: Apri · Esporta · Indice (pillola, V4) ────
+        # ── gruppo azioni file: Apri · Indice · Esporta (pillola) ───────
         self.btn_open = QPushButton(T("toolbar.open"))
         self.btn_open.clicked.connect(self._on_open)
-
-        self.btn_export_batch = QPushButton(T("toolbar.export"))
-        self.btn_export_batch.setToolTip(T("toolbar.export.tip"))
-        self.btn_export_batch.clicked.connect(self._on_export_batch)
 
         self.btn_toc = QPushButton(T("toolbar.toc"))
         self.btn_toc.setCheckable(True)
@@ -7537,8 +7667,13 @@ class MainWindow(QMainWindow):
         self.btn_toc.clicked.connect(
             lambda checked: self.toc_dock.setVisible(checked)
         )
+
+        self.btn_export_batch = QPushButton(T("toolbar.export"))
+        self.btn_export_batch.setToolTip(T("toolbar.export.tip"))
+        self.btn_export_batch.clicked.connect(self._on_export_batch)
+
         bar.addWidget(
-            self._pill(self.btn_open, self.btn_export_batch, self.btn_toc))
+            self._pill(self.btn_open, self.btn_toc, self.btn_export_batch))
 
         # ── navigazione pagina: capsula unica ◀ [n / N] ▶ (V3) ──────────
         self.btn_prev = QPushButton("◀")
@@ -7557,6 +7692,7 @@ class MainWindow(QMainWindow):
         self.page_spin.setKeyboardTracking(False)
         self.page_spin.valueChanged.connect(self._on_spin)
         self.page_spin.setEnabled(False)
+        self.page_spin.setMaximumHeight(20)  # toolbar compatta (−1/3 in altezza)
 
         self.lbl_of = QLabel("/")
         self.lbl_total = QLabel("0")
@@ -7576,27 +7712,14 @@ class MainWindow(QMainWindow):
             self.lbl_printed, self.btn_next,
         ))
 
-        # Reader: menu con reader interno + visualizzatore di sistema.
-        self.btn_reader = QToolButton()
-        self.btn_reader.setText(T("toolbar.reader"))
-        self.btn_reader.setToolTip(T("toolbar.reader.tip"))
-        self.btn_reader.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.btn_reader.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._reader_menu = QMenu(self.btn_reader)
-        self.act_reader_internal = self._reader_menu.addAction(
-            T("toolbar.reader.internal"), self._open_reader)
-        self.act_reader_external = self._reader_menu.addAction(
-            T("toolbar.reader.external"), self._open_external_viewer)
-        self.btn_reader.setMenu(self._reader_menu)
-
-        # Markdown rendering toggle
+        # Markdown rendering toggle (il Reader è sul bordo sinistro del PDF).
         self.btn_md_toggle = QPushButton(T("toolbar.md.on"))
         self.btn_md_toggle.setToolTip(T("toolbar.md.tip"))
         self.btn_md_toggle.setCheckable(True)
         self.btn_md_toggle.setChecked(self._render_md)
         self.btn_md_toggle.clicked.connect(self._toggle_markdown)
 
-        bar.addWidget(self._pill(self.btn_reader, self.btn_md_toggle))
+        bar.addWidget(self._pill(self.btn_md_toggle))
 
         # Impostazioni (lingua UI, lingue traduzione, preferenze) — spinto a
         # destra da uno spacer espanso. Il cambio lingua UI avviene SOLO qui.
@@ -7617,85 +7740,138 @@ class MainWindow(QMainWindow):
         bar.addWidget(self._pill(self.btn_settings, self.btn_help))
 
     def _pill(self, *widgets) -> QFrame:
-        """Raggruppa widget della toolbar in una capsula (Settore 1 · V4)."""
+        """Raggruppa widget della toolbar in una capsula."""
         frame = QFrame()
         frame.setObjectName("tbGroup")
         lay = QHBoxLayout(frame)
-        lay.setContentsMargins(3, 3, 3, 3)
+        lay.setContentsMargins(2, 2, 2, 2)
         lay.setSpacing(1)
         for w in widgets:
             lay.addWidget(w)
         return frame
 
-    def _build_page_toolbar(self):
-        """Mini toolbar shown above the PDF page viewer (left panel)."""
-        bar = QToolBar(T("page_toolbar.title"))
-        bar.setMovable(False)
+    def _build_view_rails(self):
+        """Rail sul viewport: **Reader** a sinistra, **unico pulsante** a destra.
 
-        # Cattura: menu con due azioni — solo immagine, oppure immagine+testo
-        # (interpretazione nativo/OCR).
-        self.btn_capture = QToolButton()
-        self.btn_capture.setText(T("page_toolbar.capture"))
-        self.btn_capture.setToolTip(T("page_toolbar.capture.tip"))
-        self.btn_capture.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.btn_capture.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._capture_menu = QMenu(self.btn_capture)
-        self.act_capture_image = self._capture_menu.addAction(
-            T("page_toolbar.capture.image"),
-            lambda: self._begin_capture(False))
-        self.act_capture_interpret = self._capture_menu.addAction(
-            T("page_toolbar.capture.interpret"),
-            lambda: self._begin_capture(True))
-        self.act_capture_interpret.setToolTip(
-            T("page_toolbar.capture.interpret.tip"))
-        self.btn_capture.setMenu(self._capture_menu)
-        bar.addWidget(self.btn_capture)
+        Il pulsante di destra apre un **pannello unico** (cattura + zone) che
+        fuoriesce **sotto** di esso, così da non coprire l'area della pagina su
+        cui si disegnano le zone. Niente mini-toolbar sopra la pagina.
+        """
+        # ── bordo sinistro: Reader (menu interno / visualizzatore) ─────
+        self.reader_rail = QFrame(self.scroll_area)
+        self.reader_rail.setObjectName("edgeRail")
+        _rl = QVBoxLayout(self.reader_rail)
+        _rl.setContentsMargins(0, 0, 0, 0)
+        _rl.setSpacing(8)
 
-        # ✎ Edit resta in alto a destra della tab PDF: apre/chiude il pannello
-        # flottante di editing delle zone (Settore 4 · V08). Niente più menu a
-        # cascata: le azioni vivono nella capsula flottante sul bordo pagina.
-        _sp = QWidget()
-        _sp.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        bar.addWidget(_sp)
+        self.btn_reader = QToolButton(self.reader_rail)
+        self.btn_reader.setObjectName("edgeBtn")
+        self.btn_reader.setProperty("kind", "reader")
+        self.btn_reader.setToolTip(T("toolbar.reader.tip"))
+        self.btn_reader.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_reader.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.btn_reader.setIcon(_edge_icon("book", "#ffffff", 22))
+        self.btn_reader.setIconSize(QSize(22, 22))
+        self.btn_reader.setFixedSize(46, 46)
+        self._reader_menu = QMenu(self.btn_reader)
+        self.act_reader_internal = self._reader_menu.addAction(
+            T("toolbar.reader.internal"), self._open_reader)
+        self.act_reader_external = self._reader_menu.addAction(
+            T("toolbar.reader.external"), self._open_external_viewer)
+        self.btn_reader.setMenu(self._reader_menu)
+        _rl.addWidget(self.btn_reader)
+        self.reader_rail.hide()
 
-        self.btn_edit = QPushButton(T("page_toolbar.edit"))
-        self.btn_edit.setToolTip(T("page_toolbar.edit.tip"))
-        self.btn_edit.setCheckable(True)
-        self.btn_edit.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_edit.toggled.connect(self._on_edit_toggled)
-        bar.addWidget(self.btn_edit)
-        return bar
+        # ── bordo destro: unico pulsante "azioni pagina" ───────────────
+        self.right_rail = QFrame(self.scroll_area)
+        self.right_rail.setObjectName("edgeRail")
+        _rr = QVBoxLayout(self.right_rail)
+        _rr.setContentsMargins(0, 0, 0, 0)
+        _rr.setSpacing(10)
 
-    def _on_edit_toggled(self, on: bool) -> None:
-        """Apre/chiude la capsula flottante di editing zone (✎ Edit)."""
+        self.btn_tools = QPushButton(self.right_rail)
+        self.btn_tools.setObjectName("edgeBtn")
+        self.btn_tools.setProperty("kind", "tools")
+        self.btn_tools.setToolTip(T("page_toolbar.tools.tip"))
+        self.btn_tools.setCheckable(True)
+        self.btn_tools.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_tools.setIcon(_edge_icon("tool", "#ffffff", 22))
+        self.btn_tools.setIconSize(QSize(22, 22))
+        self.btn_tools.setFixedSize(46, 46)
+        self.btn_tools.toggled.connect(self._on_tools_toggled)
+        _rr.addWidget(self.btn_tools)
+        self.right_rail.hide()
+
+        # ── pannello unico (cattura + zone), esce SOTTO il pulsante ────
+        self.tools_bar = ToolsBar(self.scroll_area)
+        self.tools_bar.hide()
+        self.tools_bar.image_requested.connect(
+            lambda: self._on_capture_action(False))
+        self.tools_bar.interpret_requested.connect(
+            lambda: self._on_capture_action(True))
+        self.tools_bar.exclude_toggled.connect(self._on_exclude_toggled)
+        self.tools_bar.include_toggled.connect(self._on_include_toggled)
+        self.tools_bar.reset_requested.connect(self._on_reset_zones)
+        self.tools_bar.extract_requested.connect(self._extract_with_zones)
+        self.tools_bar.close_requested.connect(
+            lambda: self.btn_tools.setChecked(False))
+
+        # alias usati dal resto del codice e dai test
+        self.btn_exclude = self.tools_bar.btn_exclude
+        self.btn_include = self.tools_bar.btn_include
+        self.btn_extract_zones = self.tools_bar.btn_extract
+        self.btn_reset_zones = self.tools_bar.btn_reset
+
+    def _on_tools_toggled(self, on: bool) -> None:
+        """Apre/chiude il pannello unico delle azioni pagina."""
         if on:
-            self._position_zone_bar()
-            self.zone_bar.show()
-            self.zone_bar.raise_()
+            self._position_view_overlays()
+            self.tools_bar.show()
+            self.tools_bar.raise_()
         else:
-            self.zone_bar.hide()
+            self.tools_bar.hide()
+            self._set_select_mode(False)
             self._set_exclude_mode(False)
             self._set_include_mode(False)
 
-    def _position_zone_bar(self) -> None:
-        """Ancora la capsula al bordo destro del PDF, centrata in verticale."""
-        bar = getattr(self, "zone_bar", None)
-        if bar is None:
+    def _on_capture_action(self, interpret: bool) -> None:
+        """Esegue l'azione di cattura scelta e chiude il pannello."""
+        self.btn_tools.setChecked(False)
+        self._begin_capture(interpret)
+
+    def _position_view_overlays(self) -> None:
+        """Reader a sinistra, pulsante a destra; pannello **sotto** il pulsante."""
+        area = getattr(self, "scroll_area", None)
+        if area is None:
             return
-        bar.adjustSize()
-        area = self.scroll_area
-        x = max(8, area.viewport().width() - bar.width() - 12)
-        y = max(8, (area.viewport().height() - bar.height()) // 2)
-        bar.move(x, y)
+        vw = area.viewport().width()
+        vh = area.viewport().height()
+        reader = getattr(self, "reader_rail", None)
+        if reader is not None:
+            reader.adjustSize()
+            reader.move(12, max(8, (vh - reader.height()) // 2))
+        right = getattr(self, "right_rail", None)
+        panel = getattr(self, "tools_bar", None)
+        rx, ry, rw, rh = vw - 70, 8, 46, 46
+        if right is not None:
+            right.adjustSize()
+            rw, rh = right.width(), right.height()
+            rx = max(8, vw - rw - 12)
+            ry = max(8, (vh - rh) // 2)
+            right.move(rx, ry)
+        if panel is not None:
+            panel.adjustSize()
+            px = max(8, rx + rw - panel.width())     # allineato a destra
+            py = ry + rh + 8                         # SOTTO il pulsante
+            if py + panel.height() > vh - 8:
+                py = max(8, vh - panel.height() - 8)
+            panel.move(px, py)
 
     def eventFilter(self, obj, event):
-        """Riposiziona la capsula zone al resize dell'area PDF."""
+        """Riposiziona rail e pannello al resize dell'area PDF."""
         if (obj is getattr(self, "scroll_area", None)
                 and event.type() == QEvent.Type.Resize):
-            bar = getattr(self, "zone_bar", None)
-            if bar is not None and bar.isVisible():
-                self._position_zone_bar()
+            self._position_view_overlays()
         return super().eventFilter(obj, event)
 
     def _update_zone_button(self) -> None:
@@ -7703,11 +7879,12 @@ class MainWindow(QMainWindow):
         self._update_extract_button()
 
     def _update_capture_button(self) -> None:
-        """Reflect the active capture mode on the ``📸 Cattura ▾`` button."""
-        self.btn_capture.setText(
-            T("page_toolbar.capture.active") if self._capture_active
-            else T("page_toolbar.capture")
-        )
+        """Il pulsante di cattura è un trigger a icona: nessun testo da aggiornare.
+
+        Non tocca lo stato ``checked`` (lo governa il pannello) per evitare
+        riaprire la capsula quando parte la modalità cattura.
+        """
+        return
 
     def _display_text(
         self,
@@ -8156,10 +8333,11 @@ class MainWindow(QMainWindow):
         Aggiorna anche il conteggio zone mostrato nella capsula flottante.
         """
         self.btn_extract_zones.setEnabled(self._page_has_zones(self._current_page))
-        if hasattr(self, "zone_bar"):
+        if hasattr(self, "tools_bar"):
             n = (len(self._excluded_zones.get(self._current_page, ()))
                  + len(self._inclusion_zones.get(self._current_page, ())))
-            self.zone_bar.set_count(n)
+            self.tools_bar.set_count(n)
+            self.tools_bar.refresh_extract()
 
     def _extract_with_zones(self) -> None:
         """Conclude l'editing delle zone: svuota la cache della pagina (raw +
@@ -8168,8 +8346,8 @@ class MainWindow(QMainWindow):
         if not self._pdf_path or self._mupdf_doc is None or self._page_count == 0:
             return
         # Conclude la fase di editing: chiudi la capsula e spegni i modi.
-        if hasattr(self, "btn_edit"):
-            self.btn_edit.setChecked(False)
+        if hasattr(self, "btn_tools"):
+            self.btn_tools.setChecked(False)
         self._set_select_mode(False)
         self._set_exclude_mode(False)
         self._set_include_mode(False)
@@ -8918,7 +9096,6 @@ class MainWindow(QMainWindow):
         self.btn_toc.setToolTip(T("toolbar.toc.tip"))
         self.btn_prev.setToolTip(T("toolbar.prev"))
         self.btn_next.setToolTip(T("toolbar.next"))
-        self.btn_reader.setText(T("toolbar.reader"))
         self.btn_reader.setToolTip(T("toolbar.reader.tip"))
         self.act_reader_internal.setText(T("toolbar.reader.internal"))
         self.act_reader_external.setText(T("toolbar.reader.external"))
@@ -8926,15 +9103,8 @@ class MainWindow(QMainWindow):
             T("toolbar.md.on") if self._render_md else T("toolbar.md.plain")
         )
         self.btn_md_toggle.setToolTip(T("toolbar.md.tip"))
-        self.btn_capture.setToolTip(T("page_toolbar.capture.tip"))
-        self.act_capture_image.setText(T("page_toolbar.capture.image"))
-        self.act_capture_interpret.setText(T("page_toolbar.capture.interpret"))
-        self.act_capture_interpret.setToolTip(
-            T("page_toolbar.capture.interpret.tip"))
-        self._update_capture_button()
-        self.btn_edit.setText(T("page_toolbar.edit"))
-        self.btn_edit.setToolTip(T("page_toolbar.edit.tip"))
-        self.zone_bar.retranslate()
+        self.btn_tools.setToolTip(T("page_toolbar.tools.tip"))
+        self.tools_bar.retranslate()
         self._update_zone_button()
         self.toc_dock.setWindowTitle(T("dock.toc"))
         self.pdf_view.retranslate()
@@ -9045,6 +9215,12 @@ class MainWindow(QMainWindow):
             self.btn_export_batch.setEnabled(True)
             self.btn_reader.setEnabled(True)
             self.lbl_total.setText(str(self._page_count))
+
+            # Mostra i rail del viewport (Reader a sinistra, Cattura/Edit a
+            # destra) e riposizionali sul bordo.
+            self.reader_rail.show()
+            self.right_rail.show()
+            self._position_view_overlays()
 
             # Build the multi-level table of contents
             self.toc_panel.build_toc(self._mupdf_doc)

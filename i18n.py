@@ -450,6 +450,17 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Bearbeitung schließen (oder ▶ Extrahieren)",
         "es": "Cerrar la edición (o pulsa ▶ Extraer)",
     },
+    "page_toolbar.tools.title": {
+        "it": "Azioni", "en": "Actions", "fr": "Actions",
+        "de": "Aktionen", "es": "Acciones",
+    },
+    "page_toolbar.tools.tip": {
+        "it": "Azioni pagina: cattura e zone (pannello sotto il pulsante)",
+        "en": "Page actions: capture and zones (panel below the button)",
+        "fr": "Actions de page : capture et zones (panneau sous le bouton)",
+        "de": "Seitenaktionen: Erfassen und Zonen (Feld unter der Schaltfläche)",
+        "es": "Acciones de página: captura y zonas (panel bajo el botón)",
+    },
     "page_toolbar.zone.title": {
         "it": "Zone", "en": "Zones", "fr": "Zones",
         "de": "Zonen", "es": "Zonas",

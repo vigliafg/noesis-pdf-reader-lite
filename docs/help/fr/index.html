@@ -132,29 +132,30 @@
       <table>
         <tr><th>Élément</th><th>Fonction</th></tr>
         <tr><td>📂 Ouvrir un PDF</td><td>Ouvre un document PDF</td></tr>
+        <tr><td>📑 Sommaire</td><td>Affiche/masque la table des matières (TOC) à gauche (juste après <em>Ouvrir</em>)</td></tr>
         <tr><td>💾 Exporter</td><td>Exporte un groupe de pages (par lots) ; <kbd>Ctrl</kbd>+<kbd>E</kbd></td></tr>
-        <tr><td>📑 Sommaire</td><td>Affiche/masque la table des matières (TOC) à gauche</td></tr>
         <tr><td>◀ / ▶ + n° page</td><td>Navigation entre les pages (capsule compacte)</td></tr>
-        <tr><td>👁 Reader ▾</td><td>Ouvre le lecteur intégré ou la visionneuse système</td></tr>
         <tr><td>📝 MD ✓</td><td>Active/désactive le rendu Markdown du texte</td></tr>
         <tr><td>⚙️ Paramètres</td><td>Langues, thème, préférences et comportement</td></tr>
         <tr><td>❓ Aide</td><td>Ouvre cette aide dans le navigateur</td></tr>
       </table>
 
       <h3>Panneau de page (gauche)</h3>
-      <p>Au-dessus de la page se trouvent les outils de zone :</p>
+      <p>Sur les <strong>bords du viewport</strong> se trouvent des rails à icônes :</p>
       <table>
-        <tr><th>Élément</th><th>Fonction</th></tr>
-        <tr><td>📸 Capturer ▾</td><td>Menu : 📸 Capturer l'image ou 🔤 Capturer et interpréter (texte/OCR)</td></tr>
-        <tr><td>✎ Modifier</td><td>Affiche/masque le panneau flottant d'édition des zones (capsule sur le bord droit de la page)</td></tr>
+        <tr><th>Bord</th><th>Élément</th><th>Fonction</th></tr>
+        <tr><td>gauche</td><td>📖 Reader</td><td>Lecteur intégré ou visionneuse système</td></tr>
+        <tr><td>droit</td><td>🛠 Actions</td><td>Un <strong>seul</strong> bouton ouvrant le panneau <strong>capture + zones</strong></td></tr>
       </table>
-      <p>Le panneau <strong>✎ Modifier</strong> est une capsule flottante qui
-      reste active pendant toute la session d'édition et se ferme en
-      réappuyant sur <strong>✎ Modifier</strong> ou sur
-      <strong>▶ Extraire</strong>. Icônes (avec info-bulle descriptive au
-      survol) : <strong>🚫</strong> Exclure une zone, <strong>🟩</strong> Inclure
-      une zone, <strong>🧹</strong> Réinitialiser, <strong>▶</strong> Extraire et
-      <strong>✕</strong> Fermer.</p>
+      <p>Le bouton <strong>🛠 Actions</strong> ouvre un <strong>panneau unique</strong>
+      d'icônes rondes colorées, qui sort <strong>sous</strong> le bouton (en bas
+      à droite), afin de <strong>ne pas couvrir la zone de la page</strong> où
+      l'on dessine les zones. Il réunit la capture (bleu = capturer l'image,
+      violet = interpréter) et les zones (rouge = exclure, vert = inclure,
+      ambre = réinitialiser, bleu = extraire, gris = fermer), avec une
+      <strong>ombre sur le contour</strong>. Le panneau reste actif pendant
+      toute la session et se ferme en réappuyant sur <strong>Actions</strong> ou
+      sur <strong>Extraire</strong>.</p>
 
       <h3>Panneau droit (texte)</h3>
       <p>Trois onglets en haut à droite :</p>
@@ -240,9 +241,8 @@
       lecture (en-têtes, pieds de page, numéros de page, images avec texte,
       légendes, publicités), vous pouvez les exclure manuellement :</p>
       <ol>
-        <li>Appuyez sur <strong>✎ Modifier</strong> (en haut à droite) pour
-          ouvrir le panneau flottant, puis touchez
-          <strong>🚫 Exclure une zone</strong>.</li>
+        <li>Appuyez sur <strong>🛠 Actions</strong> (bord droit du viewport) et
+          touchez <strong>Exclure une zone</strong>.</li>
         <li>Faites glisser une <strong>boîte rouge</strong> avec la souris sur
           le contenu à retirer.</li>
         <li>Le texte est recalculé immédiatement sans ce contenu.</li>
@@ -275,8 +275,8 @@
       colonnes ou des boîtes dispersées), vous pouvez définir vous-même
       l'ordre de lecture avec les <strong>boîtes vertes numérotées</strong> :</p>
       <ol>
-        <li>Appuyez sur <strong>✎ Modifier</strong> et touchez
-          <strong>🟩 Inclure une zone</strong>.</li>
+        <li>Appuyez sur <strong>🛠 Actions</strong> et touchez
+          <strong>Inclure une zone</strong>.</li>
         <li>Faites glisser une boîte verte sur la première
           colonne/région de lecture (le numéro <strong>1</strong> apparaît).</li>
         <li>Dessinez la boîte suivante dans l'ordre de lecture (2, 3, …).</li>
@@ -299,7 +299,8 @@
       <!-- ═══════════════ EXTRACTION D'IMAGES ═══════════════ -->
 
       <h2 id="images">Capture d'objets</h2>
-      <p>Depuis le menu <strong>📸 Capturer ▾</strong>, deux actions :</p>
+      <p>Depuis le panneau <strong>🛠 Actions</strong> (bouton sur le bord droit
+      du viewport), deux actions de capture :</p>
       <ul>
         <li><strong>📸 Capturer l'image</strong> — enregistre la zone comme
           image.</li>
@@ -309,7 +310,7 @@
           deviennent du markdown.</li>
       </ul>
       <ol>
-        <li>Choisissez l'action dans le menu <strong>📸 Capturer ▾</strong>.</li>
+        <li>Choisissez l'action dans le panneau <strong>🛠 Actions</strong>.</li>
         <li>Faites glisser un rectangle sur l'image, le tableau ou l'objet.</li>
       </ol>
       <p>Si la page a déjà des <a href="#zones-exclude">zones</a>, la capture
@@ -420,7 +421,8 @@
       bouton <strong>💾 Exporter</strong> en haut.</p>
 
       <h2 id="reader">Lecteur intégré</h2>
-      <p>Depuis le menu <strong>👁 Reader ▾</strong>, ouvrez un lecteur non
+      <p>Depuis le bouton <strong>📖 Reader</strong> (bord gauche du viewport),
+      ouvrez un lecteur non
       modal et <em>en lecture seule</em> (ou la visionneuse système). Le lecteur
       a les commandes de base : navigation, zoom, ajuster à la largeur/page,
       rotation et ouverture externe. Il s'ouvre sur la page courante et utilise

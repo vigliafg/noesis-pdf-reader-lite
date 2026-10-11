@@ -43,11 +43,11 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   `cleanup_html_tags`, `cleanup_fffd`, `cleanup_soft_hyphens`, `cleanup_despace`,
   `cleanup_numbered_headings`, `cleanup_split_bold_heading`, `reorder_guard`,
   `fix_empty_cells`, `normalize_table_captions`, `link_figures`, `spacing`, …).
-- Toolbar principale a **gruppi a pillola** (Apri/Esporta/Indice · navigazione ·
-  Reader/MD · Impostazioni/Guida), altezza compatta; **navigazione** in una
-  capsula unica `◀ [n / N] ▶` (più il numero stampato); indice (TOC) e toggle
-  Markdown. Il pannello sinistro è sempre adattato alla finestra (lo zoom di
-  lettura è nel reader).
+- Toolbar principale a **gruppi a pillola** (Apri · **Indice** · Esporta ·
+  navigazione · MD · Impostazioni/Guida), altezza **−1/3** e gruppi più
+  distanziati; **Indice** è subito a destra di **Apri**; **navigazione** in una
+  capsula unica `◀ [n / N] ▶` (più il numero stampato). Il pannello sinistro è
+  sempre adattato alla finestra (lo zoom di lettura è nel reader).
 - Tab testo: Originale / Traduzione / 🗂️ Oggetti. L'Originale mostra un
   unico testo: l'output del motore adattativo (auto) oppure, quando ci sono
   zone manuali, il risultato ricostruito da esse; la tab di traduzione
@@ -59,8 +59,9 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   (dimensione) e **📋 Copia · 💾 Esporta** (`.md`/`.txt`, con le modifiche,
   senza header) **· 🔁 Ri-estrai** (Originale) / **Ritraduci** (lingua); il punto
   **●** segnala modifiche non salvate.
-- Cattura di oggetti: dal menu **📸 Cattura ▾** due azioni —
-  **📸 Cattura immagine** e **🔤 Cattura e interpreta** (immagine + testo:
+- Cattura di oggetti: dal pannello **🛠 Azioni** (bordo destro del viewport)
+  due azioni di cattura — **Cattura immagine** e **Cattura e interpreta**
+  (immagine + testo:
   nativo se presente, altrimenti OCR; le tabelle native diventano markdown).
   Tutto finisce nella tab **🗂️ Oggetti**, raggruppato per tipo (immagini /
   tabelle / testi) con filtri, conteggio, **💾 Esporta tutti** e **🗑️ Rimuovi
@@ -78,10 +79,14 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   la numerazione; ciò che è fuori dai box verdi viene scartato (whitelist).
   Un box verde = una colonna/regione. Rosso e verde compongono: il rosso
   toglie il rumore, il verde ordina; dove si sovrappongono vince il rosso.
-- ✎ Edit: apre/chiude una **capsula flottante** sul bordo destro della pagina
-  con le azioni zone (`🚫 Escludi`, `🟩 Includi`, `🧹 Reset`, `▶ Estrai`, `✕`),
-  icone con tooltip descrittivo. Resta attiva per tutta l'editing e si chiude
-  ripremendo ✎ Edit o premendo ▶ Estrai (niente più menu a cascata).
+- Rail del viewport: **Reader** sul **bordo sinistro**; un **unico pulsante
+  🛠 Azioni** sul **bordo destro**. Il pulsante apre un **unico pannello** a
+  icone rotonde colorate che fuoriesce **sotto** di esso (in basso a destra),
+  così da **non coprire l'area della pagina** dove si disegnano le zone.
+  Raccoglie cattura (azzurro cattura, viola interpreta) e zone (rosso escludi,
+  verde includi, ambra reset, blu estrai, grigio chiudi), con **ombra sul
+  contorno**; resta attivo per tutta la sessione e si chiude ripremendo
+  **Azioni** o premendo **Estrai**.
 - ▶ Estrai (nella capsula): conclude l'editing, svuota la cache della pagina
   (estrazione + traduzione, non le figure) e la riesegue secondo le zone
   selezionate; è attivo solo quando la pagina ha zone.
@@ -102,9 +107,10 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   sulla tab Traduzione **▶ Traduci la successiva** — con glow, riflesso animato
   e punto di notifica. Le azioni locali sono nella mini toolbar; l'export batch
   è nella toolbar in alto.
-- 👁 Reader ▾: reader interno non-modale e read-only (navigazione, zoom,
-  adatta-larghezza/pagina, rotazione) oppure apertura nel visualizzatore di
-  sistema. Usa un documento separato e si apre sulla pagina corrente.
+- 📖 Reader (bordo sinistro del viewport): reader interno non-modale e
+  read-only (navigazione, zoom, adatta-larghezza/pagina, rotazione) oppure
+  apertura nel visualizzatore di sistema. Usa un documento separato e si apre
+  sulla pagina corrente.
 - 🎨 Tema Scuro / Chiaro / Come il sistema (⚙️ Impostazioni → Aspetto),
   applicato a caldo e persistito; i colori vengono dai token di `theme.py`.
 - Animazioni: overlay "liquido" durante estrazione/traduzione + indicatore

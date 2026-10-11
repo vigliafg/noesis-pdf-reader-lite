@@ -121,6 +121,17 @@ DARK: dict[str, str] = {
     "zone_exclude": "#d9534f",
     "zone_include": "#5cb85c",
     "zone_badge": "#2e7d32",
+    # ── rail del viewport: reader (sinistra), cattura/edit (destra) ──
+    #    palette "Classico" (C02 · solido) — colori significativi per azione
+    "edge_reader": "#2f6fe4",
+    "edge_capture": "#4f8cff",
+    "edge_edit": "#2f6fe4",
+    "edge_interpret": "#7b5cff",
+    "edge_exclude": "#ff5d5d",
+    "edge_include": "#37c26b",
+    "edge_reset": "#f0b429",
+    "edge_extract": "#2f6fe4",
+    "edge_close": "#8a93a0",
 }
 
 LIGHT: dict[str, str] = {
@@ -219,6 +230,15 @@ LIGHT: dict[str, str] = {
     "zone_exclude": "#d9534f",
     "zone_include": "#5cb85c",
     "zone_badge": "#2e7d32",
+    "edge_reader": "#1e5fd0",
+    "edge_capture": "#2f6fe4",
+    "edge_edit": "#1e5fd0",
+    "edge_interpret": "#6a49f2",
+    "edge_exclude": "#e04141",
+    "edge_include": "#1f9d55",
+    "edge_reset": "#c98a00",
+    "edge_extract": "#1e5fd0",
+    "edge_close": "#5b6470",
 }
 
 PALETTES: dict[str, dict[str, str]] = {"dark": DARK, "light": LIGHT}
@@ -283,32 +303,32 @@ _MAIN_QSS = Template(
     QMainWindow { background: $bg; }
     QWidget { selection-background-color: $sel_bg; selection-color: $sel_text; }
     QToolBar {
-        background: $bg_alt; padding: 3px; spacing: 4px;
+        background: $bg_alt; padding: 0px 6px; spacing: 16px;
         border-bottom: 1px solid $border;
     }
     QToolBar QPushButton {
         background: $bg_input; color: $text; border: 1px solid $border2;
-        border-radius: 6px; padding: 3px 10px; font-size: 12.5px;
+        border-radius: 5px; padding: 1px 8px; font-size: 11.5px;
     }
     QToolBar QPushButton:hover { background: $bg_hover; }
     QToolBar QPushButton:pressed { background: $bg_pressed; }
     QToolBar QPushButton:checked { background: $accent; color: $accent_text; }
     QToolBar QToolButton {
         background: $bg_input; color: $text; border: 1px solid $border2;
-        border-radius: 6px; padding: 3px 10px; font-size: 12.5px;
+        border-radius: 5px; padding: 1px 8px; font-size: 11.5px;
     }
     QToolBar QToolButton:hover { background: $bg_hover; }
     QToolBar QToolButton:pressed { background: $bg_pressed; }
     QToolBar QToolButton::menu-indicator { image: none; }
-    /* Gruppi a "pillola" della toolbar principale (Settore 1 · V4): i
-       bottoni perdono bordo/sfondo e vivono dentro una capsula comune. */
+    /* Gruppi a "pillola" della toolbar principale: i bottoni perdono
+       bordo/sfondo e vivono dentro una capsula comune. */
     QFrame#tbGroup {
         background: $bg_input; border: 1px solid $border2;
-        border-radius: 14px;
+        border-radius: 11px;
     }
     QFrame#tbGroup QPushButton, QFrame#tbGroup QToolButton {
-        background: transparent; border: none; border-radius: 11px;
-        padding: 3px 11px; font-size: 12.5px;
+        background: transparent; border: none; border-radius: 8px;
+        padding: 1px 9px; font-size: 11.5px;
     }
     QFrame#tbGroup QPushButton:hover, QFrame#tbGroup QToolButton:hover {
         background: $bg_hover;
@@ -316,22 +336,41 @@ _MAIN_QSS = Template(
     QFrame#tbGroup QPushButton:checked, QFrame#tbGroup QToolButton:checked {
         background: $accent; color: $accent_text;
     }
-    QFrame#tbGroup QLabel { color: $text3; font-size: 12.5px; }
+    QFrame#tbGroup QLabel { color: $text3; font-size: 11.5px; }
     QToolBar QSpinBox {
         background: $bg_input; color: $text; border: 1px solid $border2;
-        border-radius: 6px; padding: 3px 6px; font-size: 12.5px;
-        min-width: 42px;
+        border-radius: 5px; padding: 1px 5px; font-size: 11.5px;
+        min-width: 38px;
     }
     QFrame#tbGroup QSpinBox {
-        background: transparent; border: none; padding: 2px 2px;
-        min-width: 34px;
+        background: transparent; border: none; padding: 1px 2px;
+        min-width: 32px;
     }
     /* Page-number box: no up/down buttons (they made the widget look
        cluttered); navigation is via ◀ ▶ or by typing a page number. */
     QToolBar QSpinBox::up-button, QToolBar QSpinBox::down-button {
         width: 0px; border: none; background: transparent;
     }
-    QToolBar QLabel { color: $text3; font-size: 13px; }
+    QToolBar QLabel { color: $text3; font-size: 11.5px; }
+
+    /* ── rail del viewport: Reader (sinistra), Cattura/Edit (destra) ──
+       Pulsanti tondi pieni, colore significativo per tipo (C02 · solido). */
+    QFrame#edgeRail { background: transparent; border: none; }
+    QPushButton#edgeBtn, QToolButton#edgeBtn {
+        border: none; border-radius: 23px; color: #ffffff;
+    }
+    QPushButton#edgeBtn[kind="reader"], QToolButton#edgeBtn[kind="reader"] {
+        background: $edge_reader;
+    }
+    QPushButton#edgeBtn[kind="capture"] { background: $edge_capture; }
+    QPushButton#edgeBtn[kind="edit"] { background: $edge_edit; }
+    QPushButton#edgeBtn:hover, QToolButton#edgeBtn:hover {
+        border: 2px solid rgba(255, 255, 255, 0.55);
+    }
+    QPushButton#edgeBtn:checked, QToolButton#edgeBtn:checked {
+        border: 2px solid rgba(255, 255, 255, 0.95);
+    }
+    QToolButton#edgeBtn::menu-indicator { image: none; }
     QStatusBar { background: $bg_alt; color: $text4; }
 
     /* Punti che altrimenti ereditano il tema di sistema: colori espliciti

@@ -34,8 +34,10 @@ Nella tab bar, a destra: **radio motore** (`Google`, `Microsoft`) + spinner.
 
 ### Toolbar principale, navigazione e mini toolbar (settori 1–3)
 
-- **Toolbar principale**: gruppi a **pillola** (`Apri · Esporta · Indice` |
-  `◀ n/N ▶` | `Reader · MD` | `Impostazioni · Guida`), altezza ridotta.
+- **Toolbar principale**: gruppi a **pillola** (`Apri · Indice · Esporta` |
+  `◀ n/N ▶` | `MD` | `Impostazioni · Guida`), altezza **−1/3** (26 px) e gruppi
+  più distanziati; `Indice` subito dopo `Apri`. Il **Reader** è sul bordo
+  sinistro del viewport (non più in toolbar).
 - **Navigazione**: capsula unica `◀ [n / N] ▶` (più il numero stampato).
 - **Mini toolbar di testo**: **segmentata** in due gruppi con etichette:
 
@@ -56,22 +58,26 @@ più il punto `●` (modifiche non salvate su disco).
 Il FAB è in basso a destra della finestra attiva, con badge e glow; compare solo
 quando la tab è attiva **e** il contenuto è pronto; si riposiziona al resize.
 
-### Toolbar di pagina + capsula zone (✎ Edit · V08)
+### Rail del viewport: Reader (sinistra) + unico pulsante azioni (destra)
 
-Sopra il PDF: `📸 Cattura ▾` a sinistra, `✎ Edit` a destra. **✎ Edit** apre/chiude
-una **capsula flottante verticale** ancorata al bordo destro della pagina, che
-**resta attiva per tutta l'editing** e si chiude ripremendo `✎ Edit` o premendo
-`▶ Estrai`:
+Sui bordi del PDF: **📖 Reader** a sinistra; un **unico pulsante 🛠 Azioni** a
+destra. Il pulsante apre un **unico pannello** a icone rotonde colorate che
+fuoriesce **sotto** di esso (in basso a destra), così da **non coprire l'area
+della pagina** dove si disegnano le zone (stile C02 · solido). Il pannello
+raccoglie cattura **e** zone:
 
-| icona | azione | tooltip |
+| icona | azione | colore |
 |---|---|---|
-| `🚫` | Escludi zona (toggle) | descrittivo |
-| `🟩` | Includi zona (toggle) | descrittivo |
-| `🧹` | Reset zone | descrittivo |
-| `▶` | Estrai con le zone | descrittivo |
-| `✕` | Chiudi | descrittivo |
+| camera | Cattura immagine | azzurro |
+| scan | Cattura e interpreta | viola |
+| exclude | Escludi zona (toggle) | rosso |
+| include | Includi zona (toggle) | verde |
+| reset | Reset zone | ambra |
+| extract | Estrai con le zone | blu |
+| close | Chiudi | grigio |
 
-Intestazione con titolo e conteggio (`N zone`). Niente più menu a cascata.
+Intestazione con titolo e conteggio (`N zone`). Il pannello resta attivo per
+tutta la sessione e si chiude ripremendo **Azioni** o premendo **Estrai**.
 
 ### Tab 🗂️ Oggetti
 
@@ -99,10 +105,11 @@ Intestazione con titolo e conteggio (`N zone`). Niente più menu a cascata.
 | **Tab oggetti** | `🖼️ Immagini`, senza toolbar, azioni miste | `🗂️ Oggetti`, toolbar di tab, azioni **per tipo** |
 | **Modello catture** | `_images` + `_capture_text[uri]` | `_captures[uri] = Capture{kind,text,method,source,page}` |
 | **Testo vuoto tab** | "Usa 🖱️ Seleziona zona…" (obsoleto) | "Usa 📸 Cattura…" (`objects.empty`) |
-| **Toolbar principale** | bottoni alti (~40 px), separatori | gruppi a **pillola**, altezza ~30 px |
+| **Toolbar principale** | bottoni alti (~40 px), `👁 Reader ▾` incluso | gruppi a **pillola**, altezza **26 px (−1/3)**, gruppi più distanziati |
 | **Navigazione pagina** | `◀ Prec. · n · di · N · Succ. ▶` | capsula `◀ [n / N] ▶` |
 | **Mini toolbar testo** | glifi 26 px, senza etichette | **segmentata** con etichette |
-| **Zone** | menu a cascata `🎯 Zone ▾` + `▶ Estrai` | capsula flottante `✎ Edit` (V08), persistente |
+| **Reader** | voce in toolbar (`👁 Reader ▾`) | pulsante sul **bordo sinistro** del viewport |
+| **Cattura/Edit** | menu a cascata / toolbar sopra la pagina | **unico pulsante 🛠 Azioni**, pannello sotto il pulsante (in basso a destra) |
 
 ## 3. Workflow FAB — correttezza (verificata)
 

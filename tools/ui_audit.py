@@ -134,20 +134,20 @@ def inventory_from_window(w) -> dict:
         "translated": _fab(tp._fab_translated),
     }
 
-    # ── toolbar di pagina + capsula flottante zone (Settore 4 · V08) ────
+    # ── rail del viewport: Reader (sinistra) + unico pulsante azioni ────
     inv["page_toolbar"] = {
-        "capture": w.btn_capture.text(),
-        "edit": w.btn_edit.text(),
-        "edit_tooltip": w.btn_edit.toolTip(),
+        "tools": w.btn_tools.toolTip(),
+        "reader": w.btn_reader.toolTip(),
     }
-    zb = w.zone_bar
-    inv["zone_capsule"] = {
-        "title": zb.lbl_title.text(),
-        "count": zb.lbl_count.text(),
+    tb = w.tools_bar
+    inv["tools_capsule"] = {
+        "title": tb.lbl_title.text(),
+        "count": tb.lbl_count.text(),
         "buttons": [
-            {"icon": b.text(), "tooltip": b.toolTip()}
-            for b in (zb.btn_exclude, zb.btn_include, zb.btn_reset,
-                      zb.btn_extract, zb.btn_close)
+            {"icon": b.property("ckey"), "tooltip": b.toolTip()}
+            for b in (tb.btn_image, tb.btn_interpret, tb.btn_exclude,
+                      tb.btn_include, tb.btn_reset, tb.btn_extract,
+                      tb.btn_close)
         ],
     }
 
@@ -257,12 +257,13 @@ def _md(inv: dict) -> str:
     for name, fab in inv["fab"].items():
         lines.append(f"- **{name}**: `{fab['label']}` — {fab['tooltip']}")
     lines.append("")
-    lines.append("## Toolbar di pagina + capsula zone (✎ Edit · V08)")
+    lines.append("## Rail del viewport: Reader + unico pulsante azioni")
     pt = inv["page_toolbar"]
-    lines.append(f"- cattura: `{pt['capture']}` · edit: `{pt['edit']}` — {pt['edit_tooltip']}")
-    zc = inv["zone_capsule"]
-    lines.append(f"- capsula `{zc['title']}` (`{zc['count']}`):")
-    for b in zc["buttons"]:
+    lines.append(f"- reader: {pt['reader']}")
+    lines.append(f"- azioni: {pt['tools']}")
+    tc = inv["tools_capsule"]
+    lines.append(f"- pannello `{tc['title']}` (`{tc['count']}`):")
+    for b in tc["buttons"]:
         lines.append(f"  - `{b['icon']}` — {b['tooltip'].splitlines()[0]}")
     lines.append("")
     lines.append("## Tab Oggetti")

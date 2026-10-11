@@ -281,24 +281,24 @@ class ZoneActionsTests(unittest.TestCase):
 
     def test_edit_toggles_floating_capsule(self):
         # la capsula parte nascosta; ✎ Edit la apre e la richiude
-        self.assertTrue(self.w.zone_bar.isHidden())
-        self.w.btn_edit.setChecked(True)
-        self.assertFalse(self.w.zone_bar.isHidden())
-        self.w.btn_edit.setChecked(False)
-        self.assertTrue(self.w.zone_bar.isHidden())
+        self.assertTrue(self.w.tools_bar.isHidden())
+        self.w.btn_tools.setChecked(True)
+        self.assertFalse(self.w.tools_bar.isHidden())
+        self.w.btn_tools.setChecked(False)
+        self.assertTrue(self.w.tools_bar.isHidden())
 
     def test_extract_closes_capsule_and_ends_editing(self):
         page = self.w._current_page
         self.w._inclusion_zones.setdefault(page, []).append(
             (10.0, 10.0, 100.0, 50.0))
-        self.w.btn_edit.setChecked(True)
-        self.assertFalse(self.w.zone_bar.isHidden())
+        self.w.btn_tools.setChecked(True)
+        self.assertFalse(self.w.tools_bar.isHidden())
         self.w._extract_with_zones()
-        self.assertFalse(self.w.btn_edit.isChecked())
-        self.assertTrue(self.w.zone_bar.isHidden())
+        self.assertFalse(self.w.btn_tools.isChecked())
+        self.assertTrue(self.w.tools_bar.isHidden())
 
     def test_capsule_icons_have_descriptive_tooltips(self):
-        bar = self.w.zone_bar
+        bar = self.w.tools_bar
         for b in (bar.btn_exclude, bar.btn_include, bar.btn_reset,
                   bar.btn_extract, bar.btn_close):
             self.assertTrue(b.toolTip().strip(), "tooltip mancante")

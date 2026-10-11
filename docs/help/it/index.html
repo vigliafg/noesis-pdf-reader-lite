@@ -129,28 +129,29 @@
       <table>
         <tr><th>Elemento</th><th>Funzione</th></tr>
         <tr><td>📂 Apri PDF</td><td>Apre un documento PDF</td></tr>
+        <tr><td>📑 Indice</td><td>Mostra/nasconde l'indice (TOC) a sinistra (subito dopo <em>Apri</em>)</td></tr>
         <tr><td>💾 Esporta</td><td>Esporta un gruppo di pagine (batch); <kbd>Ctrl</kbd>+<kbd>E</kbd></td></tr>
-        <tr><td>📑 Indice</td><td>Mostra/nasconde l'indice (TOC) a sinistra</td></tr>
         <tr><td>◀ / ▶ + n. pagina</td><td>Navigazione tra le pagine (capsula compatta)</td></tr>
-        <tr><td>👁 Reader ▾</td><td>Apre il reader interno o il visualizzatore di sistema</td></tr>
         <tr><td>📝 MD ✓</td><td>Attiva/disattiva il rendering Markdown del testo</td></tr>
         <tr><td>⚙️ Impostazioni</td><td>Lingue, tema, preferenze e comportamento</td></tr>
         <tr><td>❓ Guida</td><td>Apre questa guida nel browser</td></tr>
       </table>
 
       <h3>Pannello di pagina (sinistra)</h3>
-      <p>Sopra la pagina ci sono gli strumenti di zona:</p>
+      <p>Sui <strong>bordi del viewport</strong> ci sono i rail a icone:</p>
       <table>
-        <tr><th>Elemento</th><th>Funzione</th></tr>
-        <tr><td>📸 Cattura ▾</td><td>Menu: 📸 Cattura immagine oppure 🔤 Cattura e interpreta (testo/OCR)</td></tr>
-        <tr><td>✎ Edit</td><td>Apre/chiude il pannello flottante di editing zone (capsula sul bordo destro della pagina)</td></tr>
+        <tr><th>Bordo</th><th>Elemento</th><th>Funzione</th></tr>
+        <tr><td>sinistro</td><td>📖 Reader</td><td>Reader interno o visualizzatore di sistema</td></tr>
+        <tr><td>destro</td><td>🛠 Azioni</td><td>Un <strong>unico</strong> pulsante che apre il pannello di <strong>cattura + zone</strong></td></tr>
       </table>
-      <p>Il pannello <strong>✎ Edit</strong> è una capsula flottante che resta
-      attiva per tutta la sessione di editing e si chiude ripremendo
-      <strong>✎ Edit</strong> o premendo <strong>▶ Estrai</strong>. Icone con
-      tooltip descrittivo al passaggio: <strong>🚫</strong> Escludi zona,
-      <strong>🟩</strong> Includi zona, <strong>🧹</strong> Reset zone,
-      <strong>▶</strong> Estrai e <strong>✕</strong> Chiudi.</p>
+      <p>Il pulsante <strong>🛠 Azioni</strong> apre un <strong>unico pannello</strong>
+      a icone rotonde colorate, che fuoriesce <strong>sotto</strong> il pulsante
+      (in basso a destra), così da <strong>non coprire l'area della pagina</strong>
+      su cui si disegnano le zone. Raccoglie cattura (azzurro = cattura
+      immagine, viola = interpreta) e zone (rosso = escludi, verde = includi,
+      ambra = reset, blu = estrai, grigio = chiudi), con <strong>ombra sul
+      contorno</strong>. Il pannello resta attivo per tutta la sessione e si
+      chiude ripremendo <strong>Azioni</strong> o premendo <strong>Estrai</strong>.</p>
 
       <h3>Pannello destro (testo)</h3>
       <p>Tre tab, in alto a destra:</p>
@@ -236,8 +237,8 @@
       (header, footer, numeri di pagina, immagini con testo, didascalie,
       pubblicità), puoi escluderli manualmente:</p>
       <ol>
-        <li>Premi <strong>✎ Edit</strong> (in alto a destra) per aprire il
-          pannello flottante e tocca <strong>🚫 Escludi zona</strong>.</li>
+        <li>Premi <strong>🛠 Azioni</strong> (bordo destro del viewport) e tocca
+          <strong>Escludi zona</strong>.</li>
         <li>Trascina col mouse un <strong>box rosso</strong> sul contenuto da
           rimuovere.</li>
         <li>Il testo viene ricalcolato immediatamente senza quel contenuto.</li>
@@ -268,8 +269,8 @@
       <p>Per le pagine a layout complesso (es. più colonne o box sparsi) puoi
       definire tu l'ordine di lettura con i <strong>box verdi numerati</strong>:</p>
       <ol>
-        <li>Premi <strong>✎ Edit</strong> e tocca
-          <strong>🟩 Includi zona</strong>.</li>
+        <li>Premi <strong>🛠 Azioni</strong> e tocca
+          <strong>Includi zona</strong>.</li>
         <li>Trascina un box verde sulla prima colonna/regione di lettura
           (compare il numero <strong>1</strong>).</li>
         <li>Disegna il box successivo nell'ordine di lettura (2, 3, …).</li>
@@ -291,7 +292,8 @@
       <!-- ═══════════════ ESTRAZIONE IMMAGINI ═══════════════ -->
 
       <h2 id="images">Cattura di oggetti</h2>
-      <p>Dal menu <strong>📸 Cattura ▾</strong> hai due azioni:</p>
+      <p>Dal pannello <strong>🛠 Azioni</strong> (pulsante sul bordo destro del
+      viewport) hai due azioni di cattura:</p>
       <ul>
         <li><strong>📸 Cattura immagine</strong> — salva la regione come
           immagine.</li>
@@ -301,7 +303,7 @@
           markdown.</li>
       </ul>
       <ol>
-        <li>Scegli l'azione dal menu <strong>📸 Cattura ▾</strong>.</li>
+        <li>Scegli l'azione dal pannello <strong>🛠 Azioni</strong>.</li>
         <li>Trascina un rettangolo sull'immagine, sulla tabella o
           sull'oggetto.</li>
       </ol>
@@ -410,7 +412,8 @@
       <strong>💾 Esporta</strong> in alto.</p>
 
       <h2 id="reader">Reader interno</h2>
-      <p>Dal menu <strong>👁 Reader ▾</strong> apri un reader non-modale e
+      <p>Dal pulsante <strong>📖 Reader</strong> (bordo sinistro del viewport)
+      apri un reader non-modale e
       <em>read-only</em> (o il visualizzatore di sistema). Il reader ha i comandi
       di base: navigazione, zoom, adatta-larghezza/pagina, rotazione e apertura
       esterna. Si apre sulla pagina corrente e usa un documento separato, quindi
