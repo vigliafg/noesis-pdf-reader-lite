@@ -32,21 +32,20 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python tools/ui_audit.py \
 
 Nella tab bar, a destra: **radio motore** (`Google`, `Microsoft`) + spinner.
 
-### Toolbar principale, navigazione e mini toolbar (settori 1–3)
+### Toolbar principale, navigazione e controlli di testo
 
-- **Toolbar principale**: gruppi a **pillola** (`Apri · Indice · Esporta` |
-  `◀ n/N ▶` | `MD` | `Impostazioni · Guida`), altezza **−1/3** (26 px) e gruppi
-  più distanziati; `Indice` subito dopo `Apri`. Il **Reader** è sul bordo
-  sinistro del viewport (non più in toolbar).
+- **Toolbar principale**: gruppi a **pillola** (`Apri · Indice` | `◀ n/N ▶` |
+  **💾 Esporta** azzurro, allineato al bordo sinistro del testo | radio
+  `Google · Microsoft` | `Impostazioni · Guida`), altezza **−1/3** (26 px) e
+  gruppi più distanziati; `Indice` subito dopo `Apri`. Il **Reader** è sul bordo
+  sinistro del viewport (non più in toolbar); il toggle **MD** è nel pannello
+  **Typo**.
 - **Navigazione**: capsula unica `◀ [n / N] ▶` (più il numero stampato).
-- **Mini toolbar di testo**: **segmentata** in due gruppi con etichette:
-
-| segmento | bottoni |
-|---|---|
-| font | `A−` · `12 pt` · `A+` · `↺` |
-| azioni | `📋 Copia` · `💾 Esporta` · `🔁 Ri-estrai` / `Ritraduci` |
-
-più il punto `●` (modifiche non salvate su disco).
+- **Finestre di testo**: due pulsanti **flottanti** —
+  **🔧 Azioni** (alto a destra) apre una capsula a icone
+  (`copia · esporta · ri-estrai/ritraduci · CTA Traduci / Traduci-successivo`,
+  che **lampeggia**); **T Typo** (alto a sinistra) apre
+  `A− · n pt · A+ · ↺` · `Sans · Serif · Mono` · toggle `📝 MD`.
 
 ### FAB — CTA unica
 
@@ -96,18 +95,18 @@ tutta la sessione e si chiude ripremendo **Azioni** o premendo **Estrai**.
 
 | aspetto | prima | dopo |
 |---|---|---|
-| **Esporta** | in mini toolbar (`💾`) **e** nel FAB → doppione | solo mini toolbar |
+| **Esporta** | in mini toolbar (`💾`) **e** nel FAB → doppione | solo pannello **🔧 Azioni** |
 | **Esporta batch** | nel FAB **e** in toolbar principale → doppione | solo toolbar principale |
-| **Copia** | solo nel FAB | mini toolbar |
-| **Ri-estrai / Ritraduci** | solo nel FAB | mini toolbar |
+| **Copia** | solo nel FAB | pannello **🔧 Azioni** |
+| **Ri-estrai / Ritraduci** | solo nel FAB | pannello **🔧 Azioni** |
 | **FAB** | menu con 5–6 voci | **CTA unica** (traduci / successiva) |
 | **Traduci pagina** | voce di menu del FAB | la CTA del FAB |
 | **Tab oggetti** | `🖼️ Immagini`, senza toolbar, azioni miste | `🗂️ Oggetti`, toolbar di tab, azioni **per tipo** |
 | **Modello catture** | `_images` + `_capture_text[uri]` | `_captures[uri] = Capture{kind,text,method,source,page}` |
 | **Testo vuoto tab** | "Usa 🖱️ Seleziona zona…" (obsoleto) | "Usa 📸 Cattura…" (`objects.empty`) |
-| **Toolbar principale** | bottoni alti (~40 px), `👁 Reader ▾` incluso | gruppi a **pillola**, altezza **26 px (−1/3)**, gruppi più distanziati |
+| **Toolbar principale** | bottoni alti (~40 px), `👁 Reader ▾` incluso | gruppi a **pillola**, altezza **26 px (−1/3)**; **💾 Esporta** azzurro allineato al testo, radio **Google/Microsoft** in toolbar, **MD** nel pannello Typo |
 | **Navigazione pagina** | `◀ Prec. · n · di · N · Succ. ▶` | capsula `◀ [n / N] ▶` |
-| **Mini toolbar testo** | glifi 26 px, senza etichette | **segmentata** con etichette |
+| **Controlli di testo** | mini toolbar a riga (glifi 26 px) | pulsanti flottanti **🔧 Azioni** + **T Typo** |
 | **Reader** | voce in toolbar (`👁 Reader ▾`) | pulsante sul **bordo sinistro** del viewport |
 | **Cattura/Edit** | menu a cascata / toolbar sopra la pagina | **unico pulsante 🛠 Azioni**, pannello sotto il pulsante (in basso a destra) |
 

@@ -43,11 +43,11 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   `cleanup_html_tags`, `cleanup_fffd`, `cleanup_soft_hyphens`, `cleanup_despace`,
   `cleanup_numbered_headings`, `cleanup_split_bold_heading`, `reorder_guard`,
   `fix_empty_cells`, `normalize_table_captions`, `link_figures`, `spacing`, …).
-- Toolbar principale a **gruppi a pillola** (Apri · **Indice** · Esporta ·
-  navigazione · MD · Impostazioni/Guida), altezza **−1/3** e gruppi più
-  distanziati; **Indice** è subito a destra di **Apri**; **navigazione** in una
-  capsula unica `◀ [n / N] ▶` (più il numero stampato). Il pannello sinistro è
-  sempre adattato alla finestra (lo zoom di lettura è nel reader).
+- Toolbar principale a **gruppi a pillola**: `Apri · Indice` · navigazione
+  `◀ [n / N] ▶` · **💾 Esporta** (azzurro, allineato al bordo sinistro del
+  testo) · radio **Google/Microsoft** · `Impostazioni · Guida`; altezza **−1/3**,
+  gruppi più distanziati, **Indice** subito dopo **Apri**. Il pannello sinistro
+  è sempre adattato alla finestra (lo zoom di lettura è nel reader).
 - Tab testo: Originale / Traduzione / 🗂️ Oggetti. L'Originale mostra un
   unico testo: l'output del motore adattativo (auto) oppure, quando ci sono
   zone manuali, il risultato ricostruito da esse; la tab di traduzione
@@ -55,10 +55,12 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   traduce la versione mostrata nella lingua impostata da ⚙️ Impostazioni
   (traduzione rinviata a dopo una pausa di 600 ms durante il disegno delle
   zone). Cache su disco per (pagina, lingua di destinazione).
-- Mini toolbar **segmentata** di ogni finestra di testo: **A− · 12 pt · A+ · ↺**
-  (dimensione) e **📋 Copia · 💾 Esporta** (`.md`/`.txt`, con le modifiche,
-  senza header) **· 🔁 Ri-estrai** (Originale) / **Ritraduci** (lingua); il punto
-  **●** segnala modifiche non salvate.
+- Finestre di testo (Originale / lingua) con **due pulsanti flottanti**:
+  **🔧 Azioni** (in alto a destra) apre una capsula a icone — copia, esporta,
+  ri-estrai/ritraduci e la CTA **Traduci** / **Traduci la successiva** che
+  **lampeggia**; **T Typo** (in alto a sinistra) apre ingrandimento
+  (`A− · n pt · A+ · ↺`), carattere (`Sans · Serif · Mono`) e il toggle
+  **📝 MD** (rendering Markdown / testo semplice).
 - Cattura di oggetti: dal pannello **🛠 Azioni** (bordo destro del viewport)
   due azioni di cattura — **Cattura immagine** e **Cattura e interpreta**
   (immagine + testo:

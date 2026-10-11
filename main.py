@@ -75,6 +75,7 @@ except ImportError:
 from PyQt6.QtCore import (
     Qt, QThread, QTimer, QEvent, pyqtSignal, QUrl, QStandardPaths, QRectF,
     QLocale, QPropertyAnimation, QEasingCurve, pyqtProperty, QRect, QSize,
+    QPoint,
 )
 from PyQt6.QtGui import (
     QImage, QPixmap, QFont, QKeySequence, QShortcut, QIcon,
@@ -3342,7 +3343,7 @@ class TextPanel(QTextEdit):
 
     _CSS_TEMPLATE = """
     <style>
-      body {{ font-family: 'Segoe UI', sans-serif; font-size: {size}px;
+      body {{ font-family: {family}; font-size: {size}px;
              color: {text}; line-height: 1.7; margin: 0; }}
       h1 {{ font-size: 1.5em; border-bottom: 2px solid {link}; padding-bottom: 4px; }}
       h2 {{ font-size: 1.3em; color: {h2}; margin-top: 1em; }}
@@ -3379,6 +3380,7 @@ class TextPanel(QTextEdit):
         self.setDocument(_ImageDocument(self))
         self._base_font_size = 12
         self._font_size = 12
+        self._font_family = "sans"   # "sans" | "serif" | "mono" (pannello Typo)
         self._render_source: str = ""     # markdown/raw-html source for re-renders
         self._buffer: str = ""            # current plain content (rendered or edited)
         self._as_markdown: bool = True
@@ -3402,6 +3404,7 @@ class TextPanel(QTextEdit):
         """
         return self._CSS_TEMPLATE.format(
             size=self._font_size,
+            family=self._family_css(),
             text=theme.color("doc_text"),
             link=theme.color("doc_link"),
             h2=theme.color("doc_h2"),
@@ -3591,13 +3594,39 @@ class TextPanel(QTextEdit):
 
     # ── font zoom ──────────────────────────────────────────────────────
 
+    # Famiglie del pannello "Typo": preset Sans / Serif / Mono.
+    _FAMILY_CSS = {
+        "sans": "'Segoe UI', system-ui, sans-serif",
+        "serif": "Georgia, 'Times New Roman', serif",
+        "mono": "'Consolas', 'Courier New', monospace",
+    }
+    _FAMILY_FONT = {"sans": "Segoe UI", "serif": "Georgia", "mono": "Consolas"}
+
+    def _family_css(self) -> str:
+        return self._FAMILY_CSS.get(self._font_family, self._FAMILY_CSS["sans"])
+
     def font_size(self) -> int:
         return self._font_size
+
+    def font_family(self) -> str:
+        return self._font_family
 
     def set_font_size(self, px: int) -> None:
         """Set the base size (from Settings) and apply it."""
         self._base_font_size = px
         self._apply_font_size(px)
+
+    def set_font_family(self, fam: str) -> None:
+        """Set the text family (sans/serif/mono) and re-render."""
+        fam = fam if fam in self._FAMILY_CSS else "sans"
+        if fam == self._font_family:
+            return
+        self._font_family = fam
+        if self._plain_mode and not self._raw_html:
+            self.document().setDefaultFont(
+                QFont(self._FAMILY_FONT[fam], self._font_size))
+        else:
+            self._render()
 
     def zoom_in(self) -> None:
         self._apply_font_size(self._font_size + 1)
@@ -3615,7 +3644,8 @@ class TextPanel(QTextEdit):
             return
         self._font_size = px
         if self._plain_mode and not self._raw_html:
-            self.document().setDefaultFont(QFont("Segoe UI", px))
+            self.document().setDefaultFont(
+                QFont(self._FAMILY_FONT.get(self._font_family, "Segoe UI"), px))
         else:
             self._render()  # markdown / raw HTML: re-render with new CSS size
         self.font_size_changed.emit(px)
@@ -4379,6 +4409,37 @@ _EDGE_SVG: dict[str, str] = {
         'a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91'
         'a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'
     ),
+    "copy": (
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<rect x="9" y="9" width="13" height="13" rx="2"/>'
+        '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'
+    ),
+    "download": (
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>'
+        '<polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>'
+    ),
+    "globe": (
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>'
+        '<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 '
+        '15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>'
+    ),
+    "arrow-right": (
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<line x1="5" y1="12" x2="19" y2="12"/>'
+        '<polyline points="12 5 19 12 12 19"/></svg>'
+    ),
+    "type": (
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<polyline points="4 7 4 4 20 4 20 7"/>'
+        '<line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>'
+    ),
 }
 
 
@@ -4415,6 +4476,38 @@ class _EdgePanel(QFrame):
         self._accent_key = accent_key
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._buttons: list[QPushButton] = []
+        # Lampeggio dell'icona attiva: "sono quella selezionata, lavori in corso".
+        self._pulse_on = False
+        self._pulse_timer = QTimer(self)
+        self._pulse_timer.setInterval(550)
+        self._pulse_timer.timeout.connect(self._pulse_tick)
+
+    def _pulse_tick(self) -> None:
+        self._pulse_on = not self._pulse_on
+        self._color_buttons()
+
+    def _refresh_pulse(self) -> None:
+        """Avvia/ferma il lampeggio se c'è un'icona attiva o lampeggiante."""
+        has_blink = any(b.property("blink") for b in self._buttons)
+        active = has_blink or any(
+            b.isChecked() for b in self._buttons if b.isCheckable())
+        if active and self.isVisible():
+            if not self._pulse_timer.isActive():
+                self._pulse_on = True
+                self._pulse_timer.start()
+        else:
+            self._pulse_timer.stop()
+            self._pulse_on = False
+        self._color_buttons()
+
+    def showEvent(self, event):  # noqa: N802 — API Qt
+        super().showEvent(event)
+        self._refresh_pulse()
+
+    def hideEvent(self, event):  # noqa: N802 — API Qt
+        self._pulse_timer.stop()
+        self._pulse_on = False
+        super().hideEvent(event)
 
     def _mk(self, icon: str, tip: str, ckey: str,
             checkable: bool = False) -> QPushButton:
@@ -4430,17 +4523,32 @@ class _EdgePanel(QFrame):
 
     def _color_buttons(self) -> None:
         q = theme.color
+        on = self._pulse_on
         for b in self._buttons:
             base = q(b.property("ckey"))
-            b.setStyleSheet(
-                "QPushButton { background: %s; border: none;"
-                " border-radius: 21px; }"
-                "QPushButton:hover { background: %s; }"
-                "QPushButton:checked { background: %s;"
-                " border: 2px solid rgba(255,255,255,0.9); }"
-                "QPushButton:disabled { background: %s; border: 1px solid %s; }"
-                % (base, _hover_color(base), base, q("bg_input"), q("border2"))
-            )
+            if b.property("blink"):
+                # Icona "attenzione" (CTA): lampeggia sempre mentre il pannello
+                # è visibile (bianco pieno ↔ trasparente).
+                border = "3px solid #ffffff" if on else "3px solid transparent"
+                b.setStyleSheet(
+                    "QPushButton { background: %s; border: %s;"
+                    " border-radius: 21px; }"
+                    "QPushButton:hover { background: %s; }"
+                    "QPushButton:disabled { background: %s;"
+                    " border-color: transparent; }"
+                    % (base, border, _hover_color(base), q("bg_input"))
+                )
+            else:
+                border_col = "#ffffff" if on else "rgba(255,255,255,0.16)"
+                b.setStyleSheet(
+                    "QPushButton { background: %s; border: 3px solid transparent;"
+                    " border-radius: 21px; }"
+                    "QPushButton:hover { background: %s; }"
+                    "QPushButton:checked { background: %s; border-color: %s; }"
+                    "QPushButton:disabled { background: %s;"
+                    " border-color: transparent; }"
+                    % (base, _hover_color(base), base, border_col, q("bg_input"))
+                )
 
     def _style_panel(self, qss: str) -> None:
         self.setStyleSheet(qss)
@@ -4475,8 +4583,8 @@ class ToolsBar(_EdgePanel):
         self.setObjectName("toolsBar")
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(10, 9, 10, 10)
-        outer.setSpacing(6)
+        outer.setContentsMargins(9, 10, 9, 10)
+        outer.setSpacing(7)
 
         self.lbl_title = QLabel(T("page_toolbar.tools.title"))
         self.lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -4485,54 +4593,51 @@ class ToolsBar(_EdgePanel):
         self.lbl_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
         outer.addWidget(self.lbl_count)
 
-        grid = QGridLayout()
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setSpacing(7)
-        outer.addLayout(grid)
-
-        # riga 0 · cattura
+        # una sola colonna verticale di icone
         self.btn_image = self._mk(
             "camera", T("page_toolbar.capture.tip"), "edge_capture")
         self.btn_image.clicked.connect(self.image_requested.emit)
-        grid.addWidget(self.btn_image, 0, 0)
+        outer.addWidget(self.btn_image)
 
         self.btn_interpret = self._mk(
             "scan", T("page_toolbar.capture.interpret.tip"), "edge_interpret")
         self.btn_interpret.clicked.connect(self.interpret_requested.emit)
-        grid.addWidget(self.btn_interpret, 0, 1)
+        outer.addWidget(self.btn_interpret)
 
-        # righe 1-3 · zone
         self.btn_exclude = self._mk(
             "exclude", T("page_toolbar.exclude.tip"), "edge_exclude", True)
         self.btn_exclude.toggled.connect(self.exclude_toggled.emit)
-        grid.addWidget(self.btn_exclude, 1, 0)
+        self.btn_exclude.toggled.connect(self._refresh_pulse)
+        outer.addWidget(self.btn_exclude)
 
         self.btn_include = self._mk(
             "include", T("page_toolbar.include.tip"), "edge_include", True)
         self.btn_include.toggled.connect(self.include_toggled.emit)
-        grid.addWidget(self.btn_include, 1, 1)
+        self.btn_include.toggled.connect(self._refresh_pulse)
+        outer.addWidget(self.btn_include)
 
         self.btn_reset = self._mk(
             "reset", T("page_toolbar.reset.tip"), "edge_reset")
         self.btn_reset.clicked.connect(self.reset_requested.emit)
-        grid.addWidget(self.btn_reset, 2, 0)
+        outer.addWidget(self.btn_reset)
 
         self.btn_extract = self._mk(
             "extract", T("page_toolbar.extract.tip"), "edge_extract")
         self.btn_extract.setEnabled(False)
         self.btn_extract.clicked.connect(self.extract_requested.emit)
-        grid.addWidget(self.btn_extract, 2, 1)
+        outer.addWidget(self.btn_extract)
 
         self.btn_close = self._mk(
             "close", T("page_toolbar.edit.close.tip"), "edge_close")
         self.btn_close.clicked.connect(self.close_requested.emit)
-        grid.addWidget(self.btn_close, 3, 0)
+        outer.addWidget(self.btn_close)
 
         self._buttons = [
             self.btn_image, self.btn_interpret, self.btn_exclude,
             self.btn_include, self.btn_reset, self.btn_extract, self.btn_close,
         ]
         self.apply_theme()
+        self._refresh_pulse()
 
     def set_count(self, n: int) -> None:
         self.lbl_count.setText(T("page_toolbar.zone.count", n=n))
@@ -4565,6 +4670,215 @@ class ToolsBar(_EdgePanel):
         self.set_count(0)
 
 
+class TabActionsBar(_EdgePanel):
+    """Pannello azioni di una tab di testo (origin/lingua), stile PDF.
+
+    Aperto dal pulsante flottante in alto a destra della finestra di testo.
+    Raccoglie: copia, esporta, ri-estrai/ritraduci e la **CTA** (Traduci /
+    Traduci la successiva) che **lampeggia**.
+    """
+
+    copy_requested = pyqtSignal()
+    export_requested = pyqtSignal()
+    reextract_requested = pyqtSignal()      # solo origin
+    retranslate_requested = pyqtSignal()    # solo lingua
+    translate_requested = pyqtSignal()      # CTA
+
+    def __init__(self, kind: str = "origin", parent=None):
+        super().__init__("edge_extract", parent)
+        self.setObjectName("tabActionsBar")
+        self._kind = kind
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(9, 10, 9, 10)
+        lay.setSpacing(7)
+
+        self.lbl_title = QLabel(T("tab_actions.title"))
+        self.lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(self.lbl_title)
+
+        self.btn_copy = self._mk(
+            "copy", T("toolbar.copy.tip"), "edge_capture")
+        self.btn_copy.clicked.connect(self.copy_requested.emit)
+        lay.addWidget(self.btn_copy)
+
+        self.btn_export = self._mk(
+            "download", T("editor.export"), "edge_interpret")
+        self.btn_export.clicked.connect(self.export_requested.emit)
+        lay.addWidget(self.btn_export)
+
+        if kind == "origin":
+            self.btn_action = self._mk(
+                "reset", T("actions.origin.reextract"), "edge_reset")
+            self.btn_action.clicked.connect(self.reextract_requested.emit)
+        else:
+            self.btn_action = self._mk(
+                "reset", T("actions.translated.retranslate"), "edge_reset")
+            self.btn_action.clicked.connect(self.retranslate_requested.emit)
+        lay.addWidget(self.btn_action)
+
+        # CTA: Traduci pagina (origin) / Traduci la successiva (lingua) — lampeggia.
+        icon = "globe" if kind == "origin" else "arrow-right"
+        tip = (T("actions.origin.cta.tip") if kind == "origin"
+               else T("actions.translated.cta.tip"))
+        self.btn_translate = self._mk(icon, tip, "edge_extract")
+        self.btn_translate.setProperty("blink", True)
+        self.btn_translate.clicked.connect(self.translate_requested.emit)
+        lay.addWidget(self.btn_translate)
+
+        self._buttons = [
+            self.btn_copy, self.btn_export, self.btn_action, self.btn_translate,
+        ]
+        self.apply_theme()
+        self._refresh_pulse()
+
+    def apply_theme(self) -> None:
+        q = theme.color
+        self._style_panel(
+            "QFrame#tabActionsBar { background: %s; border: 1.5px solid %s;"
+            " border-radius: 22px; }"
+            "QFrame#tabActionsBar QLabel { color: %s; font-size: 10.5px; }"
+            % (q("bg_alt"), q("edge_extract"), q("text4"))
+        )
+        self._color_buttons()
+
+    def retranslate(self) -> None:
+        self.lbl_title.setText(T("tab_actions.title"))
+        self.btn_copy.setToolTip(T("toolbar.copy.tip"))
+        self.btn_export.setToolTip(T("editor.export"))
+        self.btn_action.setToolTip(
+            T("actions.origin.reextract") if self._kind == "origin"
+            else T("actions.translated.retranslate"))
+        self.btn_translate.setToolTip(
+            T("actions.origin.cta.tip") if self._kind == "origin"
+            else T("actions.translated.cta.tip"))
+
+
+class TypoBar(QFrame):
+    """Pannello "Typo": **ingrandimento** (A−/size/A+/↺), **carattere**
+    (Sans / Serif / Mono) e il toggle **MD/plain** della finestra di testo."""
+
+    md_toggled = pyqtSignal(bool)
+
+    def __init__(self, panel: "TextPanel", parent=None):
+        super().__init__(parent)
+        self.setObjectName("typoBar")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._panel = panel
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(10, 9, 10, 10)
+        outer.setSpacing(6)
+
+        self.lbl_title = QLabel(T("typo.title"))
+        self.lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        outer.addWidget(self.lbl_title)
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(4)
+        self.btn_dec = QPushButton("A−")
+        self.lbl_size = QLabel("")
+        self.lbl_size.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.btn_inc = QPushButton("A+")
+        self.btn_reset = QPushButton("↺")
+        for w in (self.btn_dec, self.lbl_size, self.btn_inc, self.btn_reset):
+            row.addWidget(w)
+        outer.addLayout(row)
+
+        fam = QHBoxLayout()
+        fam.setContentsMargins(0, 0, 0, 0)
+        fam.setSpacing(4)
+        self._fam_buttons: dict[str, QPushButton] = {}
+        for key, label in (("sans", "Sans"), ("serif", "Serif"), ("mono", "Mono")):
+            b = QPushButton(label)
+            b.setCheckable(True)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._fam_buttons[key] = b
+            fam.addWidget(b)
+        outer.addLayout(fam)
+
+        # Rendering Markdown / testo semplice (ex toggle in toolbar principale).
+        self.btn_md = QPushButton(T("toolbar.md.on"))
+        self.btn_md.setCheckable(True)
+        self.btn_md.setChecked(True)
+        self.btn_md.setToolTip(T("toolbar.md.tip"))
+        self.btn_md.setCursor(Qt.CursorShape.PointingHandCursor)
+        outer.addWidget(self.btn_md)
+        self.btn_md.toggled.connect(self.md_toggled.emit)
+
+        self.btn_dec.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_inc.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_reset.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_dec.clicked.connect(panel.zoom_out)
+        self.btn_inc.clicked.connect(panel.zoom_in)
+        self.btn_reset.clicked.connect(panel.reset_zoom)
+        for key, b in self._fam_buttons.items():
+            b.clicked.connect(lambda _=False, k=key: self._on_family(k))
+
+        panel.font_size_changed.connect(self._sync)
+        self._sync(panel.font_size())
+        self._sync_family(panel.font_family())
+        self.apply_theme()
+
+    def _on_family(self, key: str) -> None:
+        self._panel.set_font_family(key)
+        self._sync_family(key)
+
+    def _sync(self, px: int) -> None:
+        self.lbl_size.setText(f"{px} pt")
+        self.btn_dec.setEnabled(px > _MIN_FONT_SIZE)
+        self.btn_inc.setEnabled(px < _MAX_FONT_SIZE)
+
+    def _sync_family(self, key: str) -> None:
+        for k, b in self._fam_buttons.items():
+            b.setChecked(k == key)
+
+    def apply_theme(self) -> None:
+        q = theme.color
+        self.setStyleSheet(
+            "QFrame#typoBar { background: %s; border: 1.5px solid %s;"
+            " border-radius: 16px; }"
+            "QFrame#typoBar QLabel { color: %s; font-size: 11px; }"
+            "QFrame#typoBar QPushButton { background: %s; color: %s;"
+            " border: 1px solid %s; border-radius: 8px; padding: 3px 9px;"
+            " font-size: 12px; }"
+            "QFrame#typoBar QPushButton:hover { background: %s; }"
+            "QFrame#typoBar QPushButton:checked { background: %s; color: #fff;"
+            " border-color: %s; }"
+            "QFrame#typoBar QPushButton:disabled { color: %s; }"
+            % (q("bg_alt"), q("edge_reader"),
+               q("text4"),
+               q("bg_input"), q("text"), q("border2"),
+               q("bg_hover"),
+               q("edge_reader"), q("edge_reader"),
+               q("disabled_text"))
+        )
+        accent = QColor(q("edge_reader"))
+        accent.setAlpha(150)
+        eff = QGraphicsDropShadowEffect(self)
+        eff.setBlurRadius(38)
+        eff.setOffset(0, 0)
+        eff.setColor(accent)
+        self.setGraphicsEffect(eff)
+
+    def set_md(self, on: bool) -> None:
+        """Sync the MD/plain toggle without re-emitting."""
+        self.btn_md.blockSignals(True)
+        self.btn_md.setChecked(bool(on))
+        self.btn_md.setText(T("toolbar.md.on") if on else T("toolbar.md.plain"))
+        self.btn_md.blockSignals(False)
+
+    def retranslate(self) -> None:
+        self.lbl_title.setText(T("typo.title"))
+        self.btn_dec.setToolTip(T("editor.decrease"))
+        self.btn_inc.setToolTip(T("editor.increase"))
+        self.btn_reset.setToolTip(T("editor.reset"))
+        self.btn_md.setText(
+            T("toolbar.md.on") if self.btn_md.isChecked() else T("toolbar.md.plain"))
+        self.btn_md.setToolTip(T("toolbar.md.tip"))
+
+
 class TranslatablePanel(QWidget):
     """Wraps TextPanel with tabs: original, Italian translation, and images."""
 
@@ -4578,6 +4892,7 @@ class TranslatablePanel(QWidget):
     reextract_page_requested = pyqtSignal()
     retranslate_page_requested = pyqtSignal()
     translate_next_requested = pyqtSignal()
+    render_md_toggled = pyqtSignal(bool)  # toggle MD/plain dal pannello Typo
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -4618,36 +4933,51 @@ class TranslatablePanel(QWidget):
 
         tab_layout.addStretch()
 
-        # ── Engine radios (live engine switch), far right of the tab bar ──
-        self._radio_google = QRadioButton(T("engine.short.google"))
-        self._radio_microsoft = QRadioButton(T("engine.short.microsoft"))
-        radio_style = self._radio_style()
-        for rb in (self._radio_google, self._radio_microsoft):
-            rb.setStyleSheet(radio_style)
-            rb.setCursor(Qt.CursorShape.PointingHandCursor)
-            tab_layout.addWidget(rb)
-        self._engine_group = QButtonGroup(self)
-        self._engine_group.addButton(self._radio_google)
-        self._engine_group.addButton(self._radio_microsoft)
-        self._radio_google.setChecked(self._engine == "google")
-        self._radio_microsoft.setChecked(self._engine == "microsoft")
-        self._radio_google.toggled.connect(self._on_engine_radio)
-        self._radio_microsoft.toggled.connect(self._on_engine_radio)
+        # I radio Google/Microsoft vivono ora nella toolbar principale
+        # (allineati al bordo sinistro del pannello testo).
 
         # ── Text windows (Original / Translated) ───────────────────────
-        # Two independent editable windows, each with its own mini toolbar
-        # (A− / A+): stacked, the active tab's window is shown.
-        def _make_window(kind: str) -> tuple[QWidget, TextPanel, TextToolbar]:
+        # Ogni finestra ha controlli FLOTTANTI: pulsante "Azioni" in alto a
+        # destra (pannello a icone, con la CTA lampeggiante) e pulsante "Typo"
+        # in alto a sinistra (ingrandimento + carattere).
+        self._tab_controls: dict[str, dict] = {}
+
+        def _make_window(kind: str) -> tuple[QWidget, TextPanel, TabActionsBar]:
             win = QWidget()
             v = QVBoxLayout(win)
             v.setContentsMargins(0, 0, 0, 0)
             v.setSpacing(0)
             panel = TextPanel()
             panel.set_font_size(get_setting("font_size", 12))
-            toolbar = TextToolbar(panel, kind=kind)
-            v.addWidget(toolbar)
             v.addWidget(panel)
-            return win, panel, toolbar
+
+            actions = TabActionsBar(kind, win)
+            typo = TypoBar(panel, win)
+            btn_actions = QPushButton(win)
+            btn_typo = QPushButton(win)
+            for b, icon, kindp in ((btn_actions, "tool", "tabtools"),
+                                   (btn_typo, "type", "typo")):
+                b.setObjectName("edgeBtn")
+                b.setProperty("kind", kindp)
+                b.setCheckable(True)
+                b.setCursor(Qt.CursorShape.PointingHandCursor)
+                b.setFixedSize(40, 40)
+                b.setIcon(_edge_icon(icon, "#ffffff", 20))
+                b.setIconSize(QSize(20, 20))
+            btn_actions.setToolTip(T("tab_actions.tip"))
+            btn_typo.setToolTip(T("typo.tip"))
+            actions.hide()
+            typo.hide()
+            btn_actions.toggled.connect(
+                lambda on, k=kind: self._on_tab_actions(k, on))
+            btn_typo.toggled.connect(
+                lambda on, k=kind: self._on_typo(k, on))
+            typo.md_toggled.connect(self.render_md_toggled.emit)
+            self._tab_controls[kind] = {
+                "win": win, "panel": panel, "actions": actions, "typo": typo,
+                "btn_actions": btn_actions, "btn_typo": btn_typo,
+            }
+            return win, panel, actions
 
         (
             self._origin_window,
@@ -4791,6 +5121,11 @@ class TranslatablePanel(QWidget):
             self.reextract_page_requested.emit)
         self.translated_toolbar.retranslate_requested.connect(
             self.retranslate_page_requested.emit)
+        # CTA del pannello azioni (lampeggiante): stesso "passo successivo".
+        self.origin_toolbar.translate_requested.connect(
+            self.translate_page_requested.emit)
+        self.translated_toolbar.translate_requested.connect(
+            self.translate_next_requested.emit)
 
         # Applica i colori del tema prima di mostrare qualsiasi cosa.
         self.apply_theme()
@@ -4818,24 +5153,6 @@ class TranslatablePanel(QWidget):
             )
         )
 
-    def _radio_style(self) -> str:
-        """QSS dei radio del motore, dai token del tema attivo."""
-        q = theme.color
-        return (
-            "QRadioButton { color: %s; font-size: 12px;"
-            " background: transparent; spacing: 5px; }"
-            "QRadioButton:hover { color: %s; }"
-            "QRadioButton::indicator { width: 13px; height: 13px;"
-            " border: 1px solid %s; border-radius: 7px; background: %s; }"
-            "QRadioButton::indicator:checked { background: %s;"
-            " border-color: %s; }"
-            % (
-                q("text3"), q("text"),
-                q("radio_border"), q("radio_bg"),
-                q("accent"), q("accent"),
-            )
-        )
-
     def apply_theme(self) -> None:
         """Re-apply the active theme to the panel chrome and gallery."""
         q = theme.color
@@ -4849,9 +5166,6 @@ class TranslatablePanel(QWidget):
         self._lbl_spinner.setStyleSheet(
             "color: %s; font-size: 13px; padding: 4px 8px;" % q("text4")
         )
-        radio_style = self._radio_style()
-        for rb in (self._radio_google, self._radio_microsoft):
-            rb.setStyleSheet(radio_style)
         self.images_panel.setStyleSheet(
             "QScrollArea { background: %s; border: none; }" % q("doc_pre_bg")
         )
@@ -4869,6 +5183,8 @@ class TranslatablePanel(QWidget):
         self.translated_panel.apply_theme()
         self.origin_toolbar.apply_theme()
         self.translated_toolbar.apply_theme()
+        for ctl in self._tab_controls.values():
+            ctl["typo"].apply_theme()
         self._rebuild_images_panel()
 
     def _restore_initial_tab(self):
@@ -4890,19 +5206,27 @@ class TranslatablePanel(QWidget):
         self._btn_translated.setText(flag_endonym(self._target_lang))
         self._btn_images.setText(T("tab.objects"))
         self.objects_toolbar.retranslate()
-        self._radio_google.setText(T("engine.short.google"))
-        self._radio_microsoft.setText(T("engine.short.microsoft"))
         self._fab_origin.setText(T("actions.origin.translate"))
         self._fab_origin.setToolTip(T("actions.origin.cta.tip"))
         self._fab_translated.setText(T("actions.translated.next"))
         self._fab_translated.setToolTip(T("actions.translated.cta.tip"))
         self.origin_toolbar.retranslate()
         self.translated_toolbar.retranslate()
+        for ctl in self._tab_controls.values():
+            ctl["typo"].retranslate()
+            ctl["btn_actions"].setToolTip(T("tab_actions.tip"))
+            ctl["btn_typo"].setToolTip(T("typo.tip"))
 
     def set_font_size(self, px: int) -> None:
         """Apply the Settings font size as the base for both windows."""
         self.origin_panel.set_font_size(px)
         self.translated_panel.set_font_size(px)
+
+    def set_render_md(self, on: bool) -> None:
+        """Sync the MD/plain toggle shown in the Typo panels."""
+        self._render_md = bool(on)
+        for ctl in self._tab_controls.values():
+            ctl["typo"].set_md(on)
 
     def set_translation_languages(
         self, src: str, dst: str, engine: str | None = None
@@ -4920,35 +5244,19 @@ class TranslatablePanel(QWidget):
         self._target_lang = dst
         self._engine = engine
         self._btn_translated.setText(flag_endonym(self._target_lang))
-        # Keep the tab-bar engine radios in sync (Settings change → radios).
-        for rb, code in (
-            (self._radio_google, "google"),
-            (self._radio_microsoft, "microsoft"),
-        ):
-            rb.blockSignals(True)
-            rb.setChecked(engine == code)
-            rb.blockSignals(False)
         if changed and self._btn_translated.isChecked():
             self._schedule_translation()
 
-    def _on_engine_radio(self, checked: bool):
-        """Live engine switch from the tab-bar radios.
+    def set_engine(self, code: str) -> None:
+        """Switch translation engine (driven by the main-toolbar radios).
 
-        Persists the choice, shows a 2-second toast, and re-translates the
-        current page when the translated tab is active (cache is keyed by
-        engine, so switching engines naturally misses and re-translates).
+        The engine choice is persisted by the caller; here we recompose the
+        origin header (which shows the engine) and re-translate the current
+        page when the translated tab is active (cache is keyed by engine).
         """
-        if not checked:
-            return  # toggled fires for both radios; act on the checked one
-        code = "google" if self.sender() is self._radio_google else "microsoft"
         if code == self._engine:
             return
         self._engine = code
-        set_translation_engine(code)
-        save_config()
-        # The origin window also shows the engine in its header: recompose it
-        # so both windows agree after a live switch (same root cause as the
-        # stale translated header).
         if self._header_prefix and not self._btn_translated.isChecked():
             self._page_text = self._recomposed_header() + self._page_body
             self._show_panel(self.origin_panel, self._page_text, self._render_md)
@@ -5051,9 +5359,51 @@ class TranslatablePanel(QWidget):
             if obj in (self._origin_window, self._translated_window):
                 self._position_overlays()
                 self._reposition_fabs()
+                self._reposition_tab_controls()
             elif obj is self._tab_bar:
                 self._move_tab_indicator(self._active_tab_button(), animate=False)
         return super().eventFilter(obj, event)
+
+    # ── controlli flottanti della finestra di testo (Azioni + Typo) ────
+
+    def _on_tab_actions(self, kind: str, on: bool) -> None:
+        ctl = self._tab_controls[kind]
+        if on:
+            ctl["btn_typo"].setChecked(False)
+            self._position_tab_controls(kind)
+            ctl["actions"].show()
+            ctl["actions"].raise_()
+        else:
+            ctl["actions"].hide()
+
+    def _on_typo(self, kind: str, on: bool) -> None:
+        ctl = self._tab_controls[kind]
+        if on:
+            ctl["btn_actions"].setChecked(False)
+            self._position_tab_controls(kind)
+            ctl["typo"].show()
+            ctl["typo"].raise_()
+        else:
+            ctl["typo"].hide()
+
+    def _position_tab_controls(self, kind: str) -> None:
+        ctl = self._tab_controls.get(kind)
+        if not ctl:
+            return
+        win = ctl["win"]
+        w = win.width()
+        ba, bt = ctl["btn_actions"], ctl["btn_typo"]
+        ba.move(max(8, w - ba.width() - 12), 12)          # alto a destra
+        bt.move(12, 12)                                   # alto a sinistra
+        act, typ = ctl["actions"], ctl["typo"]
+        act.adjustSize()
+        act.move(max(8, w - act.width() - 12), ba.y() + ba.height() + 8)
+        typ.adjustSize()
+        typ.move(12, bt.y() + bt.height() + 8)
+
+    def _reposition_tab_controls(self) -> None:
+        for kind in self._tab_controls:
+            self._position_tab_controls(kind)
 
     # ── FAB azioni post-elaborazione ───────────────────────────────────
 
@@ -7557,6 +7907,8 @@ class MainWindow(QMainWindow):
         self.toc_dock.setMinimumWidth(220)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.toc_dock)
         self.toc_dock.visibilityChanged.connect(self.btn_toc.setChecked)
+        self.toc_dock.visibilityChanged.connect(
+            lambda *_: self._update_toolbar_align())
 
         # Splitter
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -7590,10 +7942,14 @@ class MainWindow(QMainWindow):
         self.text_panel.reextract_page_requested.connect(self._regenerate_page)
         self.text_panel.retranslate_page_requested.connect(self._retranslate_page)
         self.text_panel.translate_next_requested.connect(self._translate_next)
+        self.text_panel.render_md_toggled.connect(self._toggle_markdown)
+        self.text_panel.set_render_md(self._render_md)
 
         self.splitter.addWidget(left_panel)
         self.splitter.addWidget(self.text_panel)
         self.splitter.setSizes([700, 700])
+        self.splitter.splitterMoved.connect(
+            lambda *_: self._update_toolbar_align())
 
         root_layout.addWidget(self.splitter)
 
@@ -7623,6 +7979,7 @@ class MainWindow(QMainWindow):
     def apply_theme(self) -> None:
         """Re-apply the active theme to the window and all child widgets."""
         self.setStyleSheet(theme.main_qss())
+        self._style_export_button()
         self.text_panel.apply_theme()
         self.toc_panel.apply_theme()
         self.pdf_view.apply_theme()
@@ -7672,8 +8029,7 @@ class MainWindow(QMainWindow):
         self.btn_export_batch.setToolTip(T("toolbar.export.tip"))
         self.btn_export_batch.clicked.connect(self._on_export_batch)
 
-        bar.addWidget(
-            self._pill(self.btn_open, self.btn_toc, self.btn_export_batch))
+        bar.addWidget(self._pill(self.btn_open, self.btn_toc))
 
         # ── navigazione pagina: capsula unica ◀ [n / N] ▶ (V3) ──────────
         self.btn_prev = QPushButton("◀")
@@ -7712,14 +8068,31 @@ class MainWindow(QMainWindow):
             self.lbl_printed, self.btn_next,
         ))
 
-        # Markdown rendering toggle (il Reader è sul bordo sinistro del PDF).
-        self.btn_md_toggle = QPushButton(T("toolbar.md.on"))
-        self.btn_md_toggle.setToolTip(T("toolbar.md.tip"))
-        self.btn_md_toggle.setCheckable(True)
-        self.btn_md_toggle.setChecked(self._render_md)
-        self.btn_md_toggle.clicked.connect(self._toggle_markdown)
+        # Spacer allineato al bordo sinistro del pannello testo: Esporta e i
+        # radio motore iniziano esattamente al margine del testo estratto.
+        self._tb_align = QWidget()
+        self._tb_align.setFixedWidth(0)
+        bar.addWidget(self._tb_align)
 
-        bar.addWidget(self._pill(self.btn_md_toggle))
+        # Esporta batch — colorato (ambra) e allineato al testo estratto.
+        self.btn_export_batch.setObjectName("tbExport")
+        self._style_export_button()
+        bar.addWidget(self.btn_export_batch)
+
+        # Radio motore Google/Microsoft (spostati qui dal tab bar).
+        self.radio_google = QRadioButton(T("engine.short.google"))
+        self.radio_microsoft = QRadioButton(T("engine.short.microsoft"))
+        self.radio_google.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.radio_microsoft.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._engine_group = QButtonGroup(self)
+        self._engine_group.addButton(self.radio_google)
+        self._engine_group.addButton(self.radio_microsoft)
+        _eng = get_translation_engine()
+        self.radio_google.setChecked(_eng == "google")
+        self.radio_microsoft.setChecked(_eng == "microsoft")
+        self.radio_google.toggled.connect(self._on_engine_radio)
+        self.radio_microsoft.toggled.connect(self._on_engine_radio)
+        bar.addWidget(self._pill(self.radio_google, self.radio_microsoft))
 
         # Impostazioni (lingua UI, lingue traduzione, preferenze) — spinto a
         # destra da uno spacer espanso. Il cambio lingua UI avviene SOLO qui.
@@ -7738,6 +8111,71 @@ class MainWindow(QMainWindow):
         self.btn_help.clicked.connect(self._on_open_help)
 
         bar.addWidget(self._pill(self.btn_settings, self.btn_help))
+
+    def _style_export_button(self) -> None:
+        """Colora il pulsante Esporta (azzurro) con testo bianco, dal tema."""
+        btn = getattr(self, "btn_export_batch", None)
+        if btn is None:
+            return
+        base = theme.color("edge_capture")
+        btn.setStyleSheet(
+            "QPushButton { background: %s; color: #ffffff; border: none;"
+            " border-radius: 8px; padding: 3px 12px; font-size: 12px;"
+            " font-weight: 600; }"
+            "QPushButton:hover { background: %s; }"
+            % (base, _hover_color(base))
+        )
+
+    def _sync_engine_radios(self, engine: str) -> None:
+        """Allinea i radio della toolbar al motore attivo."""
+        for rb, code in ((self.radio_google, "google"),
+                         (self.radio_microsoft, "microsoft")):
+            rb.blockSignals(True)
+            rb.setChecked(engine == code)
+            rb.blockSignals(False)
+
+    def _on_engine_radio(self, checked: bool) -> None:
+        """Motore di traduzione scelto dai radio della toolbar principale."""
+        if not checked:
+            return
+        code = "google" if self.sender() is self.radio_google else "microsoft"
+        if code == get_translation_engine():
+            return
+        set_translation_engine(code)
+        save_config()
+        self.text_panel.set_engine(code)
+
+    def _update_toolbar_align(self) -> None:
+        """Allinea Esporta/radio al bordo sinistro del pannello testo."""
+        spacer = getattr(self, "_tb_align", None)
+        bar = getattr(self, "main_bar", None)
+        if spacer is None or bar is None:
+            return
+        try:
+            target = self.text_panel.mapTo(self, QPoint(0, 0)).x()
+            # Misura l'offset dopo aver azzerato lo spacer (il layout Qt non è
+            # sincrono): lo spacer a larghezza 0 finisce dove inizia Esporta.
+            spacer.setFixedWidth(0)
+            QTimer.singleShot(0, lambda t=target: self._finish_toolbar_align(t))
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _finish_toolbar_align(self, target: int) -> None:
+        spacer = getattr(self, "_tb_align", None)
+        bar = getattr(self, "main_bar", None)
+        if spacer is None or bar is None:
+            return
+        try:
+            x0 = bar.mapTo(self, QPoint(0, 0)).x() + spacer.x()
+            lay = bar.layout()
+            sp = lay.spacing() if lay is not None and lay.spacing() > 0 else 16
+            spacer.setFixedWidth(max(0, target - x0 - sp))
+        except Exception:  # noqa: BLE001
+            pass
+
+    def resizeEvent(self, event):  # noqa: N802 — API Qt
+        super().resizeEvent(event)
+        self._update_toolbar_align()
 
     def _pill(self, *widgets) -> QFrame:
         """Raggruppa widget della toolbar in una capsula."""
@@ -7852,17 +8290,17 @@ class MainWindow(QMainWindow):
             reader.move(12, max(8, (vh - reader.height()) // 2))
         right = getattr(self, "right_rail", None)
         panel = getattr(self, "tools_bar", None)
-        rx, ry, rw, rh = vw - 70, 8, 46, 46
+        rx, ry, rw, rh = vw - 70, 12, 46, 46
         if right is not None:
             right.adjustSize()
             rw, rh = right.width(), right.height()
             rx = max(8, vw - rw - 12)
-            ry = max(8, (vh - rh) // 2)
+            ry = 12                                  # in alto a destra
             right.move(rx, ry)
         if panel is not None:
             panel.adjustSize()
             px = max(8, rx + rw - panel.width())     # allineato a destra
-            py = ry + rh + 8                         # SOTTO il pulsante
+            py = ry + rh + 8                         # colonna SOTTO il pulsante
             if py + panel.height() > vh - 8:
                 py = max(8, vh - panel.height() - 8)
             panel.move(px, py)
@@ -8049,15 +8487,12 @@ class MainWindow(QMainWindow):
         # anche su pagina **cached**, dove l'estrazione non viene rifatta).
         self._load_page_figures(self._current_page)
 
-    def _toggle_markdown(self):
-        """Toggle Markdown rendering on/off and refresh display."""
-        self._render_md = not self._render_md
-        if self._render_md:
-            self.btn_md_toggle.setText(T("toolbar.md.on"))
-        else:
-            self.btn_md_toggle.setText(T("toolbar.md.plain"))
+    def _toggle_markdown(self, on: bool | None = None):
+        """Imposta il rendering Markdown (toggle nel pannello Typo) e ridisegna."""
+        self._render_md = (not self._render_md) if on is None else bool(on)
         set_setting("render_md", self._render_md)
         save_config()
+        self.text_panel.set_render_md(self._render_md)
         # Re-render current text (cache-aware: no re-OCR on a cached page)
         self._refresh_current_page_text()
 
@@ -8281,12 +8716,14 @@ class MainWindow(QMainWindow):
     def _set_select_mode(self, enabled: bool):
         """Update the capture mode (and turn off the other modes)."""
         self._capture_active = enabled
-        self.pdf_view.set_select_mode(enabled)
         if enabled:
+            # Spegni gli altri modi PRIMA: set_*_mode(False) azzera il cursore,
+            # quindi il cursore a croce va impostato per ultimo.
             self.btn_exclude.setChecked(False)
             self.pdf_view.set_exclude_mode(False)
             self.btn_include.setChecked(False)
             self.pdf_view.set_include_mode(False)
+        self.pdf_view.set_select_mode(enabled)
         self._update_zone_button()
         self._update_capture_button()
 
@@ -8297,12 +8734,12 @@ class MainWindow(QMainWindow):
     def _set_exclude_mode(self, enabled: bool):
         """Update the exclude-zone toggle (and turn off the other modes)."""
         self.btn_exclude.setChecked(enabled)
-        self.pdf_view.set_exclude_mode(enabled)
         if enabled:
             self._capture_active = False
             self.pdf_view.set_select_mode(False)
             self.btn_include.setChecked(False)
             self.pdf_view.set_include_mode(False)
+        self.pdf_view.set_exclude_mode(enabled)
         self._update_zone_button()
         self._update_capture_button()
 
@@ -8313,12 +8750,12 @@ class MainWindow(QMainWindow):
     def _set_include_mode(self, enabled: bool):
         """Update the include-zone toggle (and turn off the other modes)."""
         self.btn_include.setChecked(enabled)
-        self.pdf_view.set_include_mode(enabled)
         if enabled:
             self._capture_active = False
             self.pdf_view.set_select_mode(False)
             self.btn_exclude.setChecked(False)
             self.pdf_view.set_exclude_mode(False)
+        self.pdf_view.set_include_mode(enabled)
         self._update_zone_button()
         self._update_capture_button()
 
@@ -9042,10 +9479,8 @@ class MainWindow(QMainWindow):
             values.get("resume_last_page", self._resume_last_page)
         )
         self._remember_tab = bool(values.get("remember_tab", self._remember_tab))
-        self.btn_md_toggle.setChecked(self._render_md)
-        self.btn_md_toggle.setText(
-            T("toolbar.md.on") if self._render_md else T("toolbar.md.plain")
-        )
+        self.text_panel.set_render_md(self._render_md)
+        self._sync_engine_radios(engine)
         self.text_panel.set_font_size(int(values.get("font_size", 12)))
         self.text_panel.set_translation_languages(src, dst, engine)
         self.text_panel.set_save_edits(bool(values.get("save_edits", True)))
@@ -9099,10 +9534,8 @@ class MainWindow(QMainWindow):
         self.btn_reader.setToolTip(T("toolbar.reader.tip"))
         self.act_reader_internal.setText(T("toolbar.reader.internal"))
         self.act_reader_external.setText(T("toolbar.reader.external"))
-        self.btn_md_toggle.setText(
-            T("toolbar.md.on") if self._render_md else T("toolbar.md.plain")
-        )
-        self.btn_md_toggle.setToolTip(T("toolbar.md.tip"))
+        self.radio_google.setText(T("engine.short.google"))
+        self.radio_microsoft.setText(T("engine.short.microsoft"))
         self.btn_tools.setToolTip(T("page_toolbar.tools.tip"))
         self.tools_bar.retranslate()
         self._update_zone_button()

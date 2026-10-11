@@ -130,9 +130,9 @@
         <tr><th>Element</th><th>Function</th></tr>
         <tr><td>📂 Open PDF</td><td>Opens a PDF document</td></tr>
         <tr><td>📑 Index</td><td>Shows/hides the table of contents (TOC) on the left (right after <em>Open</em>)</td></tr>
-        <tr><td>💾 Export</td><td>Exports a group of pages (batch); <kbd>Ctrl</kbd>+<kbd>E</kbd></td></tr>
         <tr><td>◀ / ▶ + page no.</td><td>Page navigation (compact capsule)</td></tr>
-        <tr><td>📝 MD ✓</td><td>Toggles Markdown rendering of the text</td></tr>
+        <tr><td>💾 Export</td><td><strong>Light blue</strong>, aligned to the text left edge: exports a group of pages (batch); <kbd>Ctrl</kbd>+<kbd>E</kbd></td></tr>
+        <tr><td>Google / Microsoft</td><td>Translation engine (radio)</td></tr>
         <tr><td>⚙️ Settings</td><td>Languages, theme, preferences and behavior</td></tr>
         <tr><td>❓ Help</td><td>Opens this help in the browser</td></tr>
       </table>
@@ -164,16 +164,15 @@
       </ul>
       <p>The two text tabs (📄 Original and the translation) are editable
       windows: you can type, select, copy and paste freely (Ctrl+C / Ctrl+V
-      / Ctrl+X / Ctrl+Z). Each window has its own mini toolbar:
-      <strong>A−</strong> / <strong>A+</strong> / <strong>↺</strong> for the
-      text size, <strong>📋</strong> to copy, <strong>💾</strong> to export the
-      window text as <code>.md</code> or <code>.txt</code> (your edits
-      included, the header excluded) and <strong>🔁</strong> to re-extract the
-      page (Original tab) or re-translate it (language tab). While saving is
-      enabled, an orange <strong>●</strong> dot next to the buttons warns of
-      edits not yet written to disk. The two windows zoom independently. Once you edit a
-      text, it is shown as plain text. The changes are saved per page, in
-      the app's data folder, and come back when you reopen the document.</p>
+      / Ctrl+X / Ctrl+Z). Each window has two <strong>floating</strong> buttons:
+      <strong>🔧 Actions</strong> (top right) opens an icon capsule with copy,
+      export, re-extract/re-translate and the CTA <em>Translate</em> /
+      <em>Translate next</em> which <strong>blinks</strong>; <strong>T Typo</strong>
+      (top left) opens the text size (<strong>A− · n pt · A+ · ↺</strong>), the
+      typeface (<strong>Sans · Serif · Mono</strong>) and the <strong>📝 MD</strong>
+      toggle (Markdown rendering / plain text). While saving is enabled, edits
+      not yet written to disk are kept per page and come back when you reopen
+      the document.</p>
 
       <h3>Status bar</h3>
       <p>At the bottom it shows the current page, the document and the
@@ -219,7 +218,8 @@
 
       <h3>Markdown rendering</h3>
       <p>The text is shown as rendered Markdown (tables and formatting
-      included). With <strong>📝 MD ✓</strong> you can switch to plain text.
+      included). With the <strong>📝 MD</strong> toggle in the
+      <strong>Typo</strong> panel you can switch to plain text.
       Shortcut: <kbd>Ctrl</kbd>+<kbd>M</kbd>.</p>
 
       <div class="note"><strong>Note</strong> Extraction works on the
@@ -402,8 +402,8 @@
           next</strong>: goes to the next page and translates it.</li>
       </ul>
       <p>The other local actions (copy, export, re-extract/re-translate) are in
-      the mini toolbar above the text; the batch export is in the
-      <strong>💾 Export</strong> button at the top.</p>
+      the <strong>🔧 Actions</strong> panel of the text window; the batch export
+      is in the <strong>💾 Export</strong> button at the top (light blue).</p>
 
       <h2 id="reader">Built-in reader</h2>
       <p>From the <strong>📖 Reader</strong> button (viewport left edge) open a

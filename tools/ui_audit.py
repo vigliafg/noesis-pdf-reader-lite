@@ -103,22 +103,23 @@ def inventory_from_window(w) -> dict:
          "checked": tp._btn_images.isChecked()},
     ]
     inv["tab_bar_extras"] = {
-        "engine_radios": [rb.text() for rb in tp._tab_bar.findChildren(
-            QRadioButton)],
+        "engine_radios": [w.radio_google.text(), w.radio_microsoft.text()],
         "spinner_text": tp._lbl_spinner.text(),
     }
 
-    # ── mini toolbar per finestra di testo ──────────────────────────────
-    def _toolbar(tb) -> dict:
+    # ── pannello azioni per finestra di testo (icone + CTA lampeggiante) ─
+    def _actions_bar(bar) -> dict:
         return {
-            "buttons": _btn_inventory(tb.findChildren(QPushButton)),
-            "size_label": tb.lbl_size.text(),
-            "dirty_label": tb.lbl_dirty.text(),
+            "buttons": [
+                {"icon": b.property("ckey"), "tooltip": b.toolTip(),
+                 "blink": bool(b.property("blink"))}
+                for b in bar._buttons
+            ],
         }
 
     inv["text_toolbars"] = {
-        "original": _toolbar(tp.origin_toolbar),
-        "translated": _toolbar(tp.translated_toolbar),
+        "original": _actions_bar(tp.origin_toolbar),
+        "translated": _actions_bar(tp.translated_toolbar),
     }
 
     # ── FAB (post-estrazione / post-traduzione): CTA unica ──────────────
@@ -248,10 +249,12 @@ def _md(inv: dict) -> str:
     lines.append("## Extra della tab bar")
     lines.append(f"- radio motore: {', '.join(inv['tab_bar_extras']['engine_radios'])}")
     lines.append("")
-    lines.append("## Mini toolbar (finestre di testo)")
+    lines.append("## Pannello azioni (finestre di testo)")
     for name, tb in inv["text_toolbars"].items():
-        btns = ", ".join(f"`{b['text']}`" for b in tb["buttons"])
-        lines.append(f"- **{name}**: {btns}  (size: `{tb['size_label']}`)")
+        btns = ", ".join(
+            f"`{b['icon']}`" + (" ✨" if b.get("blink") else "")
+            for b in tb["buttons"])
+        lines.append(f"- **{name}**: {btns}")
     lines.append("")
     lines.append("## FAB (CTA unica)")
     for name, fab in inv["fab"].items():

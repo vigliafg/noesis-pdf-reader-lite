@@ -536,6 +536,28 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "🔁 Ritraduci", "en": "🔁 Retranslate", "fr": "🔁 Retraduire",
         "de": "🔁 Neu übersetzen", "es": "🔁 Retraducir",
     },
+    # Pulsanti flottanti della finestra di testo (Azioni + Typo).
+    "tab_actions.title": {
+        "it": "Azioni", "en": "Actions", "fr": "Actions",
+        "de": "Aktionen", "es": "Acciones",
+    },
+    "tab_actions.tip": {
+        "it": "Azioni della finestra di testo (copia, esporta, traduci…)",
+        "en": "Text window actions (copy, export, translate…)",
+        "fr": "Actions de la fenêtre de texte (copier, exporter, traduire…)",
+        "de": "Aktionen des Textfensters (kopieren, exportieren, übersetzen…)",
+        "es": "Acciones de la ventana de texto (copiar, exportar, traducir…)",
+    },
+    "typo.title": {
+        "it": "Typo", "en": "Typo", "fr": "Typo", "de": "Typo", "es": "Typo",
+    },
+    "typo.tip": {
+        "it": "Ingrandimento e carattere del testo",
+        "en": "Text size and typeface",
+        "fr": "Taille et police du texte",
+        "de": "Textgröße und Schriftart",
+        "es": "Tamaño y tipografía del texto",
+    },
     # Azioni locali della finestra (mini toolbar): copia.
     "toolbar.copy.tip": {
         "it": "Copia il testo", "en": "Copy the text",

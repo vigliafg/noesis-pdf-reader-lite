@@ -130,9 +130,9 @@
         <tr><th>Elemento</th><th>Funzione</th></tr>
         <tr><td>📂 Apri PDF</td><td>Apre un documento PDF</td></tr>
         <tr><td>📑 Indice</td><td>Mostra/nasconde l'indice (TOC) a sinistra (subito dopo <em>Apri</em>)</td></tr>
-        <tr><td>💾 Esporta</td><td>Esporta un gruppo di pagine (batch); <kbd>Ctrl</kbd>+<kbd>E</kbd></td></tr>
         <tr><td>◀ / ▶ + n. pagina</td><td>Navigazione tra le pagine (capsula compatta)</td></tr>
-        <tr><td>📝 MD ✓</td><td>Attiva/disattiva il rendering Markdown del testo</td></tr>
+        <tr><td>💾 Esporta</td><td><strong>Azzurro</strong>, allineato al bordo sinistro del testo: esporta un gruppo di pagine (batch); <kbd>Ctrl</kbd>+<kbd>E</kbd></td></tr>
+        <tr><td>Google / Microsoft</td><td>Motore di traduzione (radio)</td></tr>
         <tr><td>⚙️ Impostazioni</td><td>Lingue, tema, preferenze e comportamento</td></tr>
         <tr><td>❓ Guida</td><td>Apre questa guida nel browser</td></tr>
       </table>
@@ -164,19 +164,16 @@
       </ul>
       <p>Le due tab di testo (📄 Originale e la traduzione) sono finestre
       editabili: puoi digitare, selezionare, copiare e incollare liberamente
-      (Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+Z). Ogni finestra ha la sua mini
-      toolbar: <strong>A−</strong> / <strong>A+</strong> / <strong>↺</strong>
-      per la dimensione del testo, <strong>📋</strong> per copiare,
-      <strong>💾</strong> per esportare il testo della finestra come
-      <code>.md</code> o <code>.txt</code> (con le tue modifiche, senza
-      l'header) e <strong>🔁</strong> per ri-estrarre la pagina (tab Originale)
-      o ritradurla (tab lingua). Con il salvataggio attivo, un punto arancione
-      <strong>●</strong> accanto ai pulsanti avvisa di modifiche non ancora
-      scritte su disco.
-      Le due finestre si ingrandiscono in modo indipendente. Dopo una
-      modifica il testo è mostrato come testo semplice. Le modifiche vengono
-      salvate per pagina (cartella dati dell'app) e tornano alla riapertura
-      del documento.</p>
+      (Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+Z). Ogni finestra ha due pulsanti
+      <strong>flottanti</strong>: <strong>🔧 Azioni</strong> (in alto a destra)
+      apre una capsula a icone con copia, esporta, ri-estrai/ritraduci e la CTA
+      <em>Traduci</em> / <em>Traduci la successiva</em> che
+      <strong>lampeggia</strong>; <strong>T Typo</strong> (in alto a sinistra)
+      apre l'ingrandimento (<strong>A− · n pt · A+ · ↺</strong>), il carattere
+      (<strong>Sans · Serif · Mono</strong>) e il toggle <strong>📝 MD</strong>
+      (rendering Markdown / testo semplice). Con il salvataggio attivo, le
+      modifiche non ancora scritte su disco sono conservate per pagina e
+      tornano alla riapertura del documento.</p>
 
       <h3>Barra di stato</h3>
       <p>In basso mostra la pagina corrente, il documento e il tempo di
@@ -222,7 +219,8 @@
 
       <h3>Rendering Markdown</h3>
       <p>Il testo è mostrato come Markdown renderizzato (tabelle e formattazione
-      incluse). Con <strong>📝 MD ✓</strong> puoi passare al testo semplice.
+      incluse). Con il toggle <strong>📝 MD</strong> nel pannello
+      <strong>Typo</strong> puoi passare al testo semplice.
       Scorciatoia: <kbd>Ctrl</kbd>+<kbd>M</kbd>.</p>
 
       <div class="note"><strong>Nota</strong> L'estrazione lavora sul
@@ -407,9 +405,9 @@
         <li><strong>Tab Traduzione</strong> — <strong>▶ Traduci la
           successiva</strong>: va alla pagina successiva e la traduce.</li>
       </ul>
-      <p>Le altre azioni locali (copia, esporta, ri-estrai/ritraduci) sono nella
-      mini toolbar sopra il testo; l'esportazione batch è nel pulsante
-      <strong>💾 Esporta</strong> in alto.</p>
+      <p>Le altre azioni locali (copia, esporta, ri-estrai/ritraduci) sono nel
+      pannello <strong>🔧 Azioni</strong> della finestra di testo; l'esportazione
+      batch è nel pulsante <strong>💾 Esporta</strong> in alto (azzurro).</p>
 
       <h2 id="reader">Reader interno</h2>
       <p>Dal pulsante <strong>📖 Reader</strong> (bordo sinistro del viewport)

@@ -337,6 +337,9 @@ _MAIN_QSS = Template(
         background: $accent; color: $accent_text;
     }
     QFrame#tbGroup QLabel { color: $text3; font-size: 11.5px; }
+    QFrame#tbGroup QRadioButton {
+        color: $text; font-size: 11.5px; spacing: 4px; padding: 1px 8px;
+    }
     QToolBar QSpinBox {
         background: $bg_input; color: $text; border: 1px solid $border2;
         border-radius: 5px; padding: 1px 5px; font-size: 11.5px;
@@ -364,11 +367,14 @@ _MAIN_QSS = Template(
     }
     QPushButton#edgeBtn[kind="capture"] { background: $edge_capture; }
     QPushButton#edgeBtn[kind="edit"] { background: $edge_edit; }
+    QPushButton#edgeBtn[kind="tools"] { background: $edge_reader; }
+    QPushButton#edgeBtn[kind="tabtools"] { background: $edge_extract; }
+    QPushButton#edgeBtn[kind="typo"] { background: $edge_reader; }
     QPushButton#edgeBtn:hover, QToolButton#edgeBtn:hover {
         border: 2px solid rgba(255, 255, 255, 0.55);
     }
     QPushButton#edgeBtn:checked, QToolButton#edgeBtn:checked {
-        border: 2px solid rgba(255, 255, 255, 0.95);
+        border: 3px solid #ffffff;
     }
     QToolButton#edgeBtn::menu-indicator { image: none; }
     QStatusBar { background: $bg_alt; color: $text4; }

@@ -193,14 +193,15 @@ class UiInventoryTests(unittest.TestCase):
         self.assertEqual(
             inv["fab"]["origin"]["label"], main.T("actions.origin.translate"))
         self.assertTrue(inv["fab"]["translated"]["cta"])
-        # le due mini toolbar di testo (segmentate) hanno font + azioni
+        # pannello azioni di testo: icone + CTA lampeggiante
         for name in ("original", "translated"):
-            texts = [b["text"] for b in inv["text_toolbars"][name]["buttons"]]
-            self.assertIn("A−", texts)
-            self.assertIn("A+", texts)
-            self.assertIn("↺", texts)
-            self.assertIn(main.T("editor.copy"), texts)
-            self.assertIn(main.T("editor.export_short"), texts)
+            buttons = inv["text_toolbars"][name]["buttons"]
+            icons = [b["icon"] for b in buttons]
+            self.assertIn("edge_capture", icons)     # copia
+            self.assertIn("edge_interpret", icons)   # esporta
+            self.assertIn("edge_extract", icons)     # CTA
+            self.assertTrue(any(b["blink"] for b in buttons),
+                            "manca la CTA lampeggiante")
         # la tab Oggetti ha la sua mini toolbar (filtri + azioni bulk)
         tt = inv["images"]["tab_toolbar"]
         self.assertIn(main.T("objects.filter.all"), tt["filters"])

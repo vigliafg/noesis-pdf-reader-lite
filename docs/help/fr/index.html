@@ -133,9 +133,9 @@
         <tr><th>Élément</th><th>Fonction</th></tr>
         <tr><td>📂 Ouvrir un PDF</td><td>Ouvre un document PDF</td></tr>
         <tr><td>📑 Sommaire</td><td>Affiche/masque la table des matières (TOC) à gauche (juste après <em>Ouvrir</em>)</td></tr>
-        <tr><td>💾 Exporter</td><td>Exporte un groupe de pages (par lots) ; <kbd>Ctrl</kbd>+<kbd>E</kbd></td></tr>
         <tr><td>◀ / ▶ + n° page</td><td>Navigation entre les pages (capsule compacte)</td></tr>
-        <tr><td>📝 MD ✓</td><td>Active/désactive le rendu Markdown du texte</td></tr>
+        <tr><td>💾 Exporter</td><td><strong>Bleu clair</strong>, aligné au bord gauche du texte : exporte un groupe de pages (par lots) ; <kbd>Ctrl</kbd>+<kbd>E</kbd></td></tr>
+        <tr><td>Google / Microsoft</td><td>Moteur de traduction (radio)</td></tr>
         <tr><td>⚙️ Paramètres</td><td>Langues, thème, préférences et comportement</td></tr>
         <tr><td>❓ Aide</td><td>Ouvre cette aide dans le navigateur</td></tr>
       </table>
@@ -168,18 +168,16 @@
       </ul>
       <p>Les deux onglets de texte (📄 Original et la traduction) sont des
       fenêtres éditables : vous pouvez saisir, sélectionner, copier et coller
-      librement (Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+Z). Chaque fenêtre a sa
-      mini-barre d'outils : <strong>A−</strong> / <strong>A+</strong> /
-      <strong>↺</strong> pour la taille du texte, <strong>📋</strong> pour
-      copier, <strong>💾</strong> pour exporter le texte de la fenêtre en
-      <code>.md</code> ou <code>.txt</code> (avec vos modifications, sans
-      l'en-tête) et <strong>🔁</strong> pour ré-extraire la page (onglet
-      Original) ou la retraduire (onglet langue). Avec l'enregistrement activé,
-      un point orange <strong>●</strong> à côté des boutons signale des
-      modifications pas encore écrites sur le disque. Les deux
-      fenêtres zooment indépendamment. Après une modification, le texte est
-      affiché en texte brut. Les changements sont enregistrés par page (dossier
-      de données de l'application) et reviennent à la réouverture du document.</p>
+      librement (Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+Z). Chaque fenêtre a deux boutons
+      <strong>flottants</strong> : <strong>🔧 Actions</strong> (en haut à droite)
+      ouvre une capsule d'icônes avec copier, exporter, ré-extraire/retraduire et
+      la CTA <em>Traduire</em> / <em>Traduire la suivante</em> qui
+      <strong>clignote</strong> ; <strong>T Typo</strong> (en haut à gauche)
+      ouvre la taille du texte (<strong>A− · n pt · A+ · ↺</strong>), la police
+      (<strong>Sans · Serif · Mono</strong>) et le bouton <strong>📝 MD</strong>
+      (rendu Markdown / texte brut). Avec l'enregistrement activé, les
+      modifications non encore écrites sur le disque sont conservées par page et
+      reviennent à la réouverture du document.</p>
 
       <h3>Barre d'état</h3>
       <p>En bas, elle affiche la page courante, le document et le temps
@@ -226,8 +224,9 @@
 
       <h3>Rendu Markdown</h3>
       <p>Le texte est affiché en Markdown rendu (tableaux et mise en forme
-      inclus). Avec <strong>📝 MD ✓</strong> vous pouvez passer au texte
-      brut. Raccourci : <kbd>Ctrl</kbd>+<kbd>M</kbd>.</p>
+      inclus). Avec le bouton <strong>📝 MD</strong> dans le panneau
+      <strong>Typo</strong> vous pouvez passer au texte brut.
+      Raccourci : <kbd>Ctrl</kbd>+<kbd>M</kbd>.</p>
 
       <div class="note"><strong>Remarque</strong> L'extraction travaille sur le
         <em>texte</em> de la page. Les images contenant du texte peuvent
@@ -417,8 +416,9 @@
           suivante</strong> : va à la page suivante et la traduit.</li>
       </ul>
       <p>Les autres actions locales (copier, exporter, ré-extraire/retraduire)
-      sont dans la mini-barre au-dessus du texte ; l'export par lots est dans le
-      bouton <strong>💾 Exporter</strong> en haut.</p>
+      sont dans le panneau <strong>🔧 Actions</strong> de la fenêtre de texte ;
+      l'export par lots est dans le bouton <strong>💾 Exporter</strong> en haut
+      (bleu clair).</p>
 
       <h2 id="reader">Lecteur intégré</h2>
       <p>Depuis le bouton <strong>📖 Reader</strong> (bord gauche du viewport),
