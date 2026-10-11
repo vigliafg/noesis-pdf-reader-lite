@@ -375,7 +375,11 @@ class FullWorkflowTests(unittest.TestCase):
         self.assertTrue(dest.exists(), "output batch non scritto")
         body = dest.read_text(encoding="utf-8")
         self.assertIn("pagina 1", body)
-        self.assertIn("TRADOTTO", body)
+        # con "both" il merged produce due file: originale + tradotto
+        self.assertNotIn("TRADOTTO", body)
+        trans = out_dir / "batch-translated.md"
+        self.assertTrue(trans.exists(), "output tradotto non scritto")
+        self.assertIn("TRADOTTO", trans.read_text(encoding="utf-8"))
 
     # ── 13 · reader detached ───────────────────────────────────────────────
 
