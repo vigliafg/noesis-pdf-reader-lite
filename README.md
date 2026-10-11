@@ -90,7 +90,10 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   corrente, intervallo o lista libera (`1,3,7-9`, `all`); contenuto
   originale/traduzione/entrambi con opzione figure; lingue e motore con
   "traduci prima le pagine mancanti"; output come Markdown unico, ZIP di
-  pagine singole o cartella di pagine singole. Finestra di progresso
+  pagine singole o cartella di pagine singole. I file di contenuto **tradotti**
+  portano il suffisso <code>-translated</code> (`…_pagNNNN-translated.md`),
+  mentre con "Entrambi" si producono **due** file per pagina (originale +
+  traduzione). Finestra di progresso
   annullabile con anteprima animata; a fine export le pagine riempiono anche
   le cache dell'app. Rispetta le modifiche salvate e ignora le pagine con zone
   manuali.

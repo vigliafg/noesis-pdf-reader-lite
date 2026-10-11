@@ -6299,6 +6299,20 @@ def _batch_extract_page(path: str, page: int, ocr_lang: str, figures_dir):
     return text, label, raw, "current"
 
 
+def _batch_output_units(content: str) -> list[tuple[str, str]]:
+    """Coppie ``(suffisso nomefile, chiave contenuto)`` per il batch export.
+
+    ``original`` → un file per pagina senza suffisso; ``translated`` → un file
+    per pagina con suffisso ``-translated``; ``both`` → **due** file per pagina
+    (originale + traduzione). Il suffisso distingue i file tradotti.
+    """
+    if content == "original":
+        return [("", "original")]
+    if content == "translated":
+        return [("-translated", "translated")]
+    return [("", "original"), ("-translated", "translated")]
+
+
 class CaptureInterpretThread(QThread):
     """Interpreta una regione catturata (nativo/tabelle/OCR) in background.
 
@@ -8488,23 +8502,38 @@ class MainWindow(QMainWindow):
     def _write_batch_output(
         self, thread, pages, content, include_images, fmt, out_path, out_folder
     ) -> Path:
-        """Compose and write the batch output; return the created path."""
+        """Compose and write the batch output; return the created path.
+
+        I file di contenuto **tradotti** portano il suffisso ``-translated``;
+        con ``both`` si producono **due** file per pagina (originale +
+        traduzione). Nel formato ``merged`` il file unico segue la stessa
+        regola (``both`` → due file merged). L'archivio ZIP e la cartella
+        mantengono il nome scelto dall'utente: il suffisso è solo sui file di
+        contenuto.
+        """
         stem = self._pdf_path.stem if self._pdf_path else "documento"
+        units = _batch_output_units(content)
         if fmt == "merged":
-            chunks = []
-            for p in pages:
-                body = self._batch_page_content(
-                    thread.results.get(p, {}), content, include_images)
-                chunks.append(f"<!-- pagina {p + 1} -->\n\n{body}")
-            text = "\n\n---\n\n".join(chunks)
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text(text, encoding="utf-8")
-            return out_path
+            created: Path | None = None
+            for suffix, sub in units:
+                chunks = []
+                for p in pages:
+                    body = self._batch_page_content(
+                        thread.results.get(p, {}), sub, include_images)
+                    chunks.append(f"<!-- pagina {p + 1} -->\n\n{body}")
+                text = "\n\n---\n\n".join(chunks)
+                path = out_path.with_name(
+                    out_path.stem + suffix + out_path.suffix)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text, encoding="utf-8")
+                created = path
+            return created if created is not None else out_path
         files: dict[str, str] = {}
         for p in pages:
-            body = self._batch_page_content(
-                thread.results.get(p, {}), content, include_images)
-            files[f"{stem}_pag{p + 1:04d}.md"] = body
+            for suffix, sub in units:
+                body = self._batch_page_content(
+                    thread.results.get(p, {}), sub, include_images)
+                files[f"{stem}_pag{p + 1:04d}{suffix}.md"] = body
         if fmt == "zip":
             out_path.parent.mkdir(parents=True, exist_ok=True)
             with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
