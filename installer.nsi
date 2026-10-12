@@ -3,7 +3,7 @@
 ;
 ; Usage:
 ;   makensis installer.nsi
-;   makensis /DVERSION=0.25.0 installer.nsi
+;   makensis /DVERSION=0.30.0 installer.nsi
 ;
 ; Produces: NoesisPDFReaderLite-${VERSION}-setup.exe
 ; -------------------------------------------------------------------
@@ -15,7 +15,7 @@
 ; Configurable defines (override with /D on the command line)
 ; -------------------------------------------------------------------
 !ifndef VERSION
-  !define VERSION "0.24.0"
+  !define VERSION "0.30.0"
 !endif
 
 !define PRODUCT_NAME      "Noesis PDF Reader Lite"
