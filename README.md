@@ -96,8 +96,13 @@ pipeline, `layout_engine.py`). Nessun dropdown a runtime.
   passi per esportare un gruppo di pagine estratte e/o tradotte — pagina
   corrente, intervallo o lista libera (`1,3,7-9`, `all`); contenuto
   originale/traduzione/entrambi con opzione figure; lingue e motore con
-  "traduci prima le pagine mancanti"; output come Markdown unico, ZIP di
-  pagine singole o cartella di pagine singole. I file di contenuto **tradotti**
+  "traduci prima le pagine mancanti". L'output si sceglie su **due assi**:
+  il **formato del contenuto** (Markdown, HTML autonomo, testo semplice, EPUB,
+  e — via pandoc — Word/ODT/RTF/LaTeX) e l'**impacchettamento** (Markdown
+  unico, ZIP di pagine singole, cartella di pagine singole, **vault** con
+  `index.md` e front-matter). I formati **pandoc** vengono abilitati
+  automaticamente: se pandoc manca, l'app propone di **scaricarlo a runtime**
+  (~30 MB) la prima volta. I file di contenuto **tradotti**
   portano il suffisso <code>-translated</code> (`…_pagNNNN-translated.md`),
   mentre con "Entrambi" si producono **due** file per pagina (originale +
   traduzione). Finestra di progresso

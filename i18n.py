@@ -1408,6 +1408,98 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Einzelne Seiten in einem Ordner",
         "es": "Páginas sueltas en una carpeta",
     },
+    "export.format.vault": {
+        "it": "Vault con indice (cartella)",
+        "en": "Vault with index (folder)",
+        "fr": "Vault avec index (dossier)",
+        "de": "Vault mit Index (Ordner)",
+        "es": "Vault con índice (carpeta)",
+    },
+    # ── esportazione: formato del contenuto ─────────────────────────────
+    "export.output.content_format": {
+        "it": "Formato del contenuto",
+        "en": "Content format", "fr": "Format du contenu",
+        "de": "Inhaltsformat", "es": "Formato del contenido",
+    },
+    "export.output.packaging": {
+        "it": "Impacchettamento", "en": "Packaging",
+        "fr": "Conditionnement", "de": "Verpackung", "es": "Empaquetado",
+    },
+    "export.contentfmt.markdown": {
+        "it": "Markdown (.md)", "en": "Markdown (.md)",
+        "fr": "Markdown (.md)", "de": "Markdown (.md)", "es": "Markdown (.md)",
+    },
+    "export.contentfmt.html": {
+        "it": "HTML autonomo (.html)", "en": "Standalone HTML (.html)",
+        "fr": "HTML autonome (.html)", "de": "Eigenständiges HTML (.html)",
+        "es": "HTML autónomo (.html)",
+    },
+    "export.contentfmt.text": {
+        "it": "Testo semplice (.txt)", "en": "Plain text (.txt)",
+        "fr": "Texte brut (.txt)", "de": "Reiner Text (.txt)",
+        "es": "Texto simple (.txt)",
+    },
+    "export.contentfmt.epub": {
+        "it": "EPUB (.epub)", "en": "EPUB (.epub)",
+        "fr": "EPUB (.epub)", "de": "EPUB (.epub)", "es": "EPUB (.epub)",
+    },
+    "export.contentfmt.docx": {
+        "it": "Word (.docx)", "en": "Word (.docx)",
+        "fr": "Word (.docx)", "de": "Word (.docx)", "es": "Word (.docx)",
+    },
+    "export.contentfmt.odt": {
+        "it": "OpenDocument (.odt)", "en": "OpenDocument (.odt)",
+        "fr": "OpenDocument (.odt)", "de": "OpenDocument (.odt)",
+        "es": "OpenDocument (.odt)",
+    },
+    "export.contentfmt.rtf": {
+        "it": "RTF (.rtf)", "en": "RTF (.rtf)",
+        "fr": "RTF (.rtf)", "de": "RTF (.rtf)", "es": "RTF (.rtf)",
+    },
+    "export.contentfmt.latex": {
+        "it": "LaTeX (.tex)", "en": "LaTeX (.tex)",
+        "fr": "LaTeX (.tex)", "de": "LaTeX (.tex)", "es": "LaTeX (.tex)",
+    },
+    "export.contentfmt.pandoc_tip": {
+        "it": "Richiede pandoc (scaricabile al primo uso)",
+        "en": "Requires pandoc (downloadable on first use)",
+        "fr": "Nécessite pandoc (téléchargeable au premier usage)",
+        "de": "Erfordert pandoc (beim ersten Mal herunterladbar)",
+        "es": "Requiere pandoc (descargable en el primer uso)",
+    },
+    "export.contentfmt.pandoc_missing": {
+        "it": "I formati Word/ODT/RTF/LaTeX richiedono pandoc: verranno scaricati al primo uso.",
+        "en": "Word/ODT/RTF/LaTeX formats require pandoc: it will be downloaded on first use.",
+        "fr": "Les formats Word/ODT/RTF/LaTeX nécessitent pandoc : il sera téléchargé au premier usage.",
+        "de": "Word/ODT/RTF/LaTeX erfordern pandoc: es wird beim ersten Mal heruntergeladen.",
+        "es": "Los formatos Word/ODT/RTF/LaTeX requieren pandoc: se descargará en el primer uso.",
+    },
+    # ── pandoc: download a runtime ──────────────────────────────────────
+    "export.pandoc.title": {
+        "it": "Pandoc", "en": "Pandoc", "fr": "Pandoc",
+        "de": "Pandoc", "es": "Pandoc",
+    },
+    "export.pandoc.download_prompt": {
+        "it": "Pandoc non è installato. Scaricarlo ora (~30 MB) per esportare in Word/ODT/RTF/LaTeX?",
+        "en": "Pandoc is not installed. Download it now (~30 MB) to export to Word/ODT/RTF/LaTeX?",
+        "fr": "Pandoc n'est pas installé. Le télécharger maintenant (~30 Mo) pour exporter en Word/ODT/RTF/LaTeX ?",
+        "de": "Pandoc ist nicht installiert. Jetzt herunterladen (~30 MB), um nach Word/ODT/RTF/LaTeX zu exportieren?",
+        "es": "Pandoc no está instalado. ¿Descargarlo ahora (~30 MB) para exportar a Word/ODT/RTF/LaTeX?",
+    },
+    "export.pandoc.downloading": {
+        "it": "Download di pandoc in corso…",
+        "en": "Downloading pandoc…",
+        "fr": "Téléchargement de pandoc…",
+        "de": "pandoc wird heruntergeladen…",
+        "es": "Descargando pandoc…",
+    },
+    "export.pandoc.failed": {
+        "it": "Download di pandoc non riuscito.",
+        "en": "Pandoc download failed.",
+        "fr": "Échec du téléchargement de pandoc.",
+        "de": "pandoc-Download fehlgeschlagen.",
+        "es": "Falló la descarga de pandoc.",
+    },
     "export.translate_missing": {
         "it": "Traduci prima le pagine mancanti (attesa)",
         "en": "Translate missing pages first (wait)",

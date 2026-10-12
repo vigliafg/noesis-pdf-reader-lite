@@ -51,6 +51,16 @@ aggiorna `CORE_START` / `CORE_END` in `tools/sync_from_desktop.py` del repo CLI.
 
 - `tools/measure_page_model.py` — usato dai test di entrambi i repo (copiato nel
   repo CLI): se lo modifichi qui, ricopialo.
-- Le opzioni di esportazione batch (`_write_batch_output` / `_batch_page_content`
-  / `_batch_strip_images`) sono riprodotte in `export_core.py` del repo CLI:
-  se ne cambi la semantica qui, allinea anche `export_core.py`.
+- La composizione dell'export batch vive nel blocco Qt-free (`write_export`,
+  `render_bytes`, `build_epub`, `planned_export_paths`, `_batch_output_units`):
+  il desktop la usa da `_write_batch_output`, il CLI la usa da `export_core.py`.
+  Se ne cambi la semantica, allinea `export_core.py` e `cli.py` del repo CLI
+  (e i rispettivi test).
+- Il formato del contenuto e l'impacchettamento sono definiti da
+  `_CONTENT_FORMATS` / `_ALLOWED_PACKAGING` nel blocco Qt-free: aggiungere un
+  formato è una voce in `_CONTENT_FORMATS` + `_CONTENT_FORMAT_ORDER` + le chiavi
+  i18n `export.contentfmt.*` (in it/en/fr/de/es) e le label del CLI/wizard.
+- La risoluzione e il download **runtime** di pandoc (`_resolve_pandoc`,
+  `_download_pandoc`, `PandocDownloadThread`) stanno nella regione Qt (usano
+  `_app_data_base`/QThread) e **non** vengono sincronizzati: il CLI usa il solo
+  pandoc di sistema (`main.pandoc_path`).

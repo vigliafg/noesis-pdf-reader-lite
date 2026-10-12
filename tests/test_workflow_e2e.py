@@ -351,6 +351,12 @@ class FullWorkflowTests(unittest.TestCase):
             def chosen_format(self):
                 return "merged"
 
+            def chosen_packaging(self):
+                return "merged"
+
+            def chosen_content_format(self):
+                return "markdown"
+
             def chosen_path(self):
                 return dest
 
