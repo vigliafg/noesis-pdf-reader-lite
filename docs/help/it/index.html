@@ -79,8 +79,9 @@
         <div class="card"><h4>⚙️ Impostazioni</h4><p>Lingua interfaccia,
           lingue di traduzione, tema, font, header e comportamento di
           lettura.</p></div>
-        <div class="card"><h4>💾 Esportazione batch</h4><p>Esporta più pagine
-          estratte/tradotte come Markdown unico, ZIP o cartella.</p></div>
+        <div class="card"><h4>💾 Esportazione batch</h4><p>Più pagine come
+          Markdown, HTML, testo o EPUB — o Word/ODT/RTF/LaTeX via pandoc — come
+          file unico, ZIP, cartella o vault.</p></div>
         <div class="card"><h4>✓ Azione successiva</h4><p>Un pulsante flottante
           sull'area testo: traduci la pagina, poi traduci la successiva.</p></div>
         <div class="card"><h4>🎨 Tema</h4><p>Scuro, chiaro o come il sistema,
@@ -376,8 +377,11 @@
           opzione <em>Includi le figure</em>.</li>
         <li><strong>Lingue e motore</strong> — origine, destinazione e motore;
           <em>Traduci prima le pagine mancanti</em>.</li>
-        <li><strong>Output</strong> — un unico Markdown, pagine singole in un
-          ZIP, oppure pagine singole in una cartella; cartella e nome file.</li>
+        <li><strong>Output</strong> — su <strong>due assi</strong>: il
+          <em>formato del contenuto</em> (Markdown, HTML autonomo, testo
+          semplice, EPUB; Word/ODT/RTF/LaTeX con pandoc) e l'<em>impacchettamento</em>
+          (Markdown unico, ZIP, pagine in una cartella, o <em>vault</em> con
+          indice); cartella e nome file.</li>
         <li><strong>Riepilogo</strong> — controlla e avvia.</li>
       </ol>
       <p>Una finestra di progresso mostra la pagina in lavorazione (con
@@ -394,6 +398,14 @@
       pagina (originale + traduzione). Nel Markdown unico il suffisso
       <code>-translated</code> si applica al file tradotto; ZIP e cartella
       mantengono il nome scelto.</p>
+      <p>Formati: <strong>Markdown</strong>, <strong>HTML</strong> (figure
+      incluse, file autonomo), <strong>testo semplice</strong> ed
+      <strong>EPUB</strong> sono nativi. <strong>Word/ODT/RTF/LaTeX</strong>
+      usano <strong>pandoc</strong>: se non è installato, l'app propone di
+      scaricarlo (~30&nbsp;MB) la prima volta che scegli uno di questi formati.
+      Il <em>vault</em> crea una cartella con le pagine e un
+      <code>index.md</code> (più un front-matter YAML per pagina, pronto per
+      Obsidian/LogSeq).</p>
 
       <h2 id="page-actions">Azione successiva (FAB)</h2>
       <p>A elaborazione conclusa compare in basso a destra, sull'area del testo,

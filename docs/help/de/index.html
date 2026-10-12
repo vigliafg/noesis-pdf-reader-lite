@@ -81,9 +81,9 @@
         <div class="card"><h4>⚙️ Einstellungen</h4><p>Oberflächensprache,
           Übersetzungssprachen, Theme, Schriftart, Kopfzeile und
           Leseverhalten.</p></div>
-        <div class="card"><h4>💾 Batch-Export</h4><p>Mehrere
-          extrahierte/übersetzte Seiten als ein Markdown, ZIP oder Ordner
-          exportieren.</p></div>
+        <div class="card"><h4>💾 Batch-Export</h4><p>Mehrere Seiten als
+          Markdown, HTML, Text oder EPUB — oder Word/ODT/RTF/LaTeX via pandoc —
+          als einzelne Datei, ZIP, Ordner oder Vault.</p></div>
         <div class="card"><h4>✓ Nächste Aktion</h4><p>Eine schwebende
           Schaltfläche im Textbereich: Seite übersetzen, dann die nächste
           übersetzen.</p></div>
@@ -393,9 +393,11 @@
           <em>Abbildungen einbeziehen</em>.</li>
         <li><strong>Sprachen und Engine</strong> — Quelle, Ziel und Engine;
           <em>Fehlende Seiten zuerst übersetzen</em>.</li>
-        <li><strong>Ausgabe</strong> — ein einziges Markdown, einzelne Seiten in
-          einer ZIP, oder einzelne Seiten in einem Ordner; Ordner und
-          Dateiname.</li>
+        <li><strong>Ausgabe</strong> — auf <strong>zwei Achsen</strong>: das
+          <em>Inhaltsformat</em> (Markdown, eigenständiges HTML, reiner Text,
+          EPUB; Word/ODT/RTF/LaTeX mit pandoc) und die <em>Verpackung</em>
+          (einzelnes Markdown, ZIP, Seiten in einem Ordner, oder ein
+          <em>Vault</em> mit Index); Ordner und Dateiname.</li>
         <li><strong>Zusammenfassung</strong> — prüfen und starten.</li>
       </ol>
       <p>Ein Fortschrittsfenster zeigt die Seite in Bearbeitung (mit animierter
@@ -412,6 +414,14 @@
       (Original + Übersetzung). Im einzelnen Markdown gilt das Suffix
       <code>-translated</code> für die übersetzte Datei; ZIP und Ordner behalten
       den gewählten Namen.</p>
+      <p>Formate: <strong>Markdown</strong>, <strong>HTML</strong> (mit
+      Abbildungen, eigenständig), <strong>reiner Text</strong> und
+      <strong>EPUB</strong> sind nativ. <strong>Word/ODT/RTF/LaTeX</strong>
+      verwenden <strong>pandoc</strong>: ist es nicht installiert, bietet die
+      App an, es beim ersten Mal herunterzuladen (~30&nbsp;MB). Das
+      <em>Vault</em> erstellt einen Ordner mit den Seiten und einer
+      <code>index.md</code> (plus YAML-Front-Matter pro Seite, bereit für
+      Obsidian/LogSeq).</p>
 
       <h2 id="page-actions">Nächste Aktion (FAB)</h2>
       <p>Nach Abschluss erscheint unten rechts im Textbereich eine schwebende

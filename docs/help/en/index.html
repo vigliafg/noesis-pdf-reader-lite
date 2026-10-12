@@ -79,9 +79,9 @@
         <div class="card"><h4>⚙️ Settings</h4><p>Interface language,
           translation languages, theme, font, header and reading
           behavior.</p></div>
-        <div class="card"><h4>💾 Batch export</h4><p>Export several
-          extracted/translated pages as a single Markdown, ZIP or
-          folder.</p></div>
+        <div class="card"><h4>💾 Batch export</h4><p>Several pages as
+          Markdown, HTML, text or EPUB — or Word/ODT/RTF/LaTeX via pandoc — as a
+          single file, ZIP, folder or vault.</p></div>
         <div class="card"><h4>✓ Next action</h4><p>A floating button on the
           text area: translate the page, then translate the next one.</p></div>
         <div class="card"><h4>🎨 Theme</h4><p>Dark, light or follow the system,
@@ -373,8 +373,11 @@
           <em>Include figures</em>.</li>
         <li><strong>Languages and engine</strong> — source, target and engine;
           <em>Translate missing pages first</em>.</li>
-        <li><strong>Output</strong> — a single Markdown, single pages in a ZIP,
-          or single pages in a folder; folder and file name.</li>
+        <li><strong>Output</strong> — along <strong>two axes</strong>: the
+          <em>content format</em> (Markdown, standalone HTML, plain text, EPUB;
+          Word/ODT/RTF/LaTeX with pandoc) and the <em>packaging</em> (single
+          Markdown, ZIP, pages in a folder, or a <em>vault</em> with index);
+          folder and file name.</li>
         <li><strong>Summary</strong> — review and start.</li>
       </ol>
       <p>A progress window shows the page being processed (with an animated
@@ -390,6 +393,14 @@
       (original + translation). In the single Markdown the
       <code>-translated</code> suffix applies to the translated file; the ZIP
       and folder keep the chosen name.</p>
+      <p>Formats: <strong>Markdown</strong>, <strong>HTML</strong> (figures
+      included, self-contained), <strong>plain text</strong> and
+      <strong>EPUB</strong> are native. <strong>Word/ODT/RTF/LaTeX</strong> use
+      <strong>pandoc</strong>: if it is not installed, the app offers to
+      download it (~30&nbsp;MB) the first time you pick one of these formats.
+      The <em>vault</em> creates a folder with the pages and an
+      <code>index.md</code> (plus YAML front matter per page, ready for
+      Obsidian/LogSeq).</p>
 
       <h2 id="page-actions">Next action (FAB)</h2>
       <p>When processing finishes, a floating button appears at the bottom right
